@@ -1,0 +1,72 @@
+/* src/styles/pages/painel/painel.css */
+.painel-container {
+  padding: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.painel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.btn-nova-req {
+  background-color: var(--cor-secundaria);
+  color: var(--cor-branca);
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s;
+}
+
+.btn-nova-req:hover {
+  background-color: #6a2a85; /* Lilás ainda mais escuro no hover */
+}
+
+.tabela-requisicoes {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: var(--cor-branca);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tabela-requisicoes th {
+  background-color: #e8dff0; /* Lilás bem clarinho para o cabeçalho da tabela */
+  padding: 15px;
+  text-align: left;
+  color: var(--cor-secundaria);
+}
+
+.tabela-requisicoes td {
+  padding: 15px;
+  border-bottom: 1px solid #eeeeee;
+}
+
+.tabela-requisicoes tr:last-child td {
+  border-bottom: none;
+}
+
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85em;
+  font-weight: bold;
+}
+
+/* Cores de Status */
+.status-pendente { background-color: #ffeeba; color: #856404; }
+.status-atendida { background-color: #c3e6cb; color: #155724; }
+.status-separacao { background-color: #bee5eb; color: #0c5460; }
+.status-separado { background-color: #f8f5ca; color: #856304; }
+.status-faturado { background-color: #d1ecff; color: #0c5460; }
+.status-enviado { background-color: #e2e3e5; color: #1f2b36; }
+.status-recebido { background-color: #d4edda; color: #155724; }
+
+.linha-tabela-hover:hover { background-color: #f9f5fb; }

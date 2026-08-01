@@ -1,0 +1,78 @@
+.base-dados-container {
+  padding: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.base-dados-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.acoes-base {
+  background-color: var(--cor-branca);
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.btn-importar {
+  background-color: var(--cor-secundaria);
+  color: var(--cor-branca);
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1rem;
+  transition: background-color 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-importar:hover {
+  background-color: #6a2a85;
+}
+
+/* Escondemos o input original feio do HTML */
+.input-file-oculto {
+  display: none; 
+}
+
+.tabela-produtos {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: var(--cor-branca);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 20px;
+}
+
+.tabela-produtos th {
+  background-color: #e8dff0;
+  padding: 15px;
+  text-align: left;
+  color: var(--cor-secundaria);
+}
+
+.tabela-produtos td {
+  padding: 15px;
+  border-bottom: 1px solid #eeeeee;
+}
+
+.mensagem-vazia {
+  text-align: center;
+  color: #888;
+  padding: 30px;
+  font-style: italic;
+}
