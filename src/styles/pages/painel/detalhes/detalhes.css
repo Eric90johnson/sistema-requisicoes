@@ -67,3 +67,36 @@
   outline: none;
   cursor: pointer;
 }
+
+/* --- RESPONSIVIDADE DETALHES --- */
+@media (max-width: 768px) {
+  .detalhes-container {
+    padding: 15px;
+  }
+
+  .detalhes-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .btn-voltar {
+    width: 100%;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr; /* Quebra as 3 colunas em 1 só (uma embaixo da outra) */
+    gap: 10px;
+  }
+
+  .controle-status {
+    flex-direction: column;
+    align-items: stretch !important; /* Força os campos a ocuparem a tela toda */
+  }
+
+  .controle-status > * {
+    width: 100%;
+    margin-bottom: 10px;
+    min-width: unset !important;
+  }
+}

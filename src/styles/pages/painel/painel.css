@@ -4,6 +4,7 @@
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
+  overflow-x: auto;
 }
 
 .painel-header {
@@ -70,3 +71,21 @@
 .status-recebido { background-color: #d4edda; color: #155724; }
 
 .linha-tabela-hover:hover { background-color: #f9f5fb; }
+
+/* --- RESPONSIVIDADE PAINEL --- */
+@media (max-width: 768px) {
+  .painel-container {
+    padding: 15px; /* Reduz as margens laterais */
+  }
+  
+  .painel-header {
+    flex-direction: column; /* Empilha o título e o botão */
+    align-items: flex-start;
+    gap: 15px;
+  }
+  
+  .btn-nova-req {
+    width: 100%; /* Botão largo para facilitar o clique com o dedo */
+    text-align: center;
+  }
+}
