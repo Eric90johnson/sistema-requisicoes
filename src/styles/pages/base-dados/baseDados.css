@@ -48,31 +48,302 @@
   display: none; 
 }
 
-.tabela-produtos {
-  width: 100%;
-  border-collapse: collapse;
-  background-color: var(--cor-branca);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  border-radius: 8px;
-  overflow: hidden;
-  margin-top: 20px;
-}
-
-.tabela-produtos th {
-  background-color: #e8dff0;
-  padding: 15px;
-  text-align: left;
-  color: var(--cor-secundaria);
-}
-
-.tabela-produtos td {
-  padding: 15px;
-  border-bottom: 1px solid #eeeeee;
-}
-
 .mensagem-vazia {
   text-align: center;
   color: #888;
   padding: 30px;
   font-style: italic;
+}
+
+/* --- CONFIGURAÇÃO DA TABELA RESPONSIVA COM CABEÇALHO CONGELADO --- */
+
+.tabela-responsiva {
+  width: 100%;
+  overflow-x: auto; 
+  overflow-y: auto; 
+  height: 65vh; 
+  margin-top: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border: 1px solid #eee;
+}
+
+/* Tabela em si */
+.tabela-produtos {
+  border-collapse: collapse;
+  background-color: var(--cor-branca);
+  table-layout: fixed; /* Essencial para o redimensionamento manual funcionar */
+  /* As larguras da tabela agora serão totalmente controladas pelo JavaScript */
+}
+
+/* Congela o cabeçalho no topo do container */
+.tabela-produtos thead th {
+  position: sticky;
+  top: 0; 
+  background-color: #e8dff0; 
+  color: var(--cor-secundaria);
+  z-index: 10; 
+  box-shadow: 0 2px 4px -2px rgba(0,0,0,0.1);
+}
+
+.tabela-produtos th {
+  white-space: nowrap; 
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #eeeeee;
+}
+
+/* As linhas (td) */
+.tabela-produtos td {
+  white-space: nowrap; 
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #eeeeee;
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  max-width: 0; /* <-- A MÁGICA: Força as células a aceitarem ser esmagadas */
+}
+
+/* --- BARRA DE REDIMENSIONAMENTO DE COLUNA --- */
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px; 
+  cursor: col-resize; 
+  user-select: none; 
+  z-index: 15;
+}
+
+.resizer:hover, 
+.resizer:active {
+  background-color: var(--cor-secundaria); 
+  width: 6px;
+}
+
+/* --- FILTROS ESTILO EXCEL NO CABEÇALHO --- */
+.th-excel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative; 
+  gap: 10px;
+  width: 100%; 
+}
+
+.th-titulo-texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1; 
+  min-width: 0; 
+}
+
+.btn-filtro-excel {
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0; 
+}
+
+.btn-filtro-excel:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  border-color: #ccc;
+}
+
+.backdrop-excel {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 99;
+}
+
+.menu-excel-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+  border-radius: 6px;
+  padding: 12px;
+  z-index: 100;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #333;
+  font-weight: normal; 
+  font-size: 0.9rem;
+}
+
+.menu-excel-btn-ordem {
+  background: #f4f6f8;
+  border: 1px solid #eee;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.menu-excel-btn-ordem:hover {
+  background: #e8dff0;
+  border-color: #d8cce3;
+}
+
+.divisor-excel {
+  height: 1px;
+  background-color: #eee;
+  margin: 2px 0;
+}
+
+.input-busca-excel {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.menu-excel-lista {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  padding: 5px;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-excel-lista label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.menu-excel-lista label:hover {
+  background: #f4f6f8;
+}
+
+.menu-excel-acoes {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 5px;
+}
+
+.btn-excel-limpar {
+  background: none;
+  border: none;
+  color: #e74c3c;
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-decoration: underline;
+}
+
+.btn-excel-aplicar {
+  background: #27ae60;
+  color: white;
+  border: none;
+  padding: 6px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.btn-excel-aplicar:hover { background: #219150; }
+
+/* --- POPUP DE SUCESSO CENTRALIZADO --- */
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6); 
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999; 
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.popup-content {
+  background-color: var(--cor-branca, #ffffff);
+  padding: 40px 30px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  animation: slideUp 0.3s ease-out;
+}
+
+.popup-icone {
+  font-size: 4rem;
+  margin-bottom: 15px;
+  display: block;
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.popup-mensagem {
+  font-size: 1.15rem;
+  color: #333;
+  margin-bottom: 30px;
+  line-height: 1.5;
+}
+
+.popup-mensagem strong {
+  color: var(--cor-secundaria, #8e44ad);
+  font-size: 1.3rem;
+  display: block;
+  margin-bottom: 5px;
+}
+
+.popup-btn {
+  background-color: var(--cor-secundaria, #8e44ad);
+  color: white;
+  border: none;
+  padding: 12px 35px;
+  font-size: 1.05rem;
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.popup-btn:hover {
+  background-color: #6a2a85;
+}
+
+.popup-btn:active {
+  transform: scale(0.95);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes popIn {
+  0% { transform: scale(0); }
+  80% { transform: scale(1.1); }
+  100% { transform: scale(1); }
 }
