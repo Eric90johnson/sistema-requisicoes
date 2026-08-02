@@ -10,8 +10,17 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [numReqExterna, setNumReqExterna] = useState('');
   const [notaFiscal, setNotaFiscal] = useState('');
 
-  const [itens, setItens] = useState(req.listaItens || []);
+  // INICIALIZA OS ITENS E OS BIPS BUSCANDO DA MEMÓRIA LOCAL (Simulando Banco de Dados)
+  const [itens, setItens] = useState(() => {
+    const itensSalvos = localStorage.getItem(`itens_req_${req.id}`);
+    return itensSalvos ? JSON.parse(itensSalvos) : (req.listaItens || []);
+  });
   
+  const [bips, setBips] = useState(() => {
+    const bipsSalvos = localStorage.getItem(`bips_req_${req.id}`);
+    return bipsSalvos ? JSON.parse(bipsSalvos) : {};
+  }); 
+
   // ESTADOS DE INTERAÇÃO DA LINHA
   const [linhaExpandida, setLinhaExpandida] = useState(null);
   const [modoExpansao, setModoExpansao] = useState('resumo'); // Pode ser: 'resumo', 'camera', 'edicao'
@@ -20,11 +29,20 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [novaQuantidade, setNovaQuantidade] = useState('');
   const [motivoAlteracao, setMotivoAlteracao] = useState('');
 
-  // ESTADO DE ARMAZENAMENTO DOS BIPS
-  const [bips, setBips] = useState({}); 
-  
+  // REFERÊNCIAS
   const ultimoBipTempo = useRef(0);
   const ultimoBipTexto = useRef("");
+  const cameraRef = useRef(null); // Ref para fazer o scroll automático
+
+  // EFEITO PARA CENTRALIZAR A CÂMERA AUTOMATICAMENTE
+  useEffect(() => {
+    if (modoExpansao === 'camera' && cameraRef.current) {
+      // Pequeno atraso para dar tempo da câmera abrir e ocupar espaço na tela
+      setTimeout(() => {
+        cameraRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
+  }, [modoExpansao]);
 
   // FUNÇÕES DE ÁUDIO NATIVO (Beep)
   const tocarBipSucesso = () => {
@@ -51,7 +69,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     } catch(e) {}
   };
 
-  // INICIALIZAÇÃO DA CÂMERA (Somente quando o modo for 'camera')
+  // INICIALIZAÇÃO DA CÂMERA
   useEffect(() => {
     let scanner = null;
 
@@ -75,7 +93,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       ).catch(err => {
         console.error("Erro na câmera", err);
         alert("Não foi possível acessar a câmera do dispositivo.");
-        setModoExpansao('resumo'); // Volta pro resumo se falhar a câmera
+        setModoExpansao('resumo'); 
       });
     }
 
@@ -125,8 +143,11 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     }
   };
 
+  // SALVA TUDO NO LOCALSTORAGE (Simula o Banco de Dados)
   const salvarProgresso = () => {
-    alert("Progresso salvo com sucesso!\nOs dados da separação foram registrados no sistema.");
+    localStorage.setItem(`bips_req_${req.id}`, JSON.stringify(bips));
+    localStorage.setItem(`itens_req_${req.id}`, JSON.stringify(itens));
+    alert("Progresso salvo com sucesso!\nOs dados da separação foram registrados no sistema (Memória Local).");
   };
 
   const confirmarMudanca = () => {
@@ -164,6 +185,10 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     dadosExtras.listaItensAtualizada = itens; 
     dadosExtras.progressoBips = bips; 
 
+    // Salva automaticamente o progresso ao confirmar
+    localStorage.setItem(`bips_req_${req.id}`, JSON.stringify(bips));
+    localStorage.setItem(`itens_req_${req.id}`, JSON.stringify(itens));
+
     aoMudarStatus(req.id, novoStatus, responsavel, dadosExtras);
     
     setResponsavel('');
@@ -177,7 +202,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       setModoExpansao('resumo');
     } else {
       setLinhaExpandida(index);
-      setModoExpansao('resumo'); // Sempre abre no modo resumo primeiro
+      setModoExpansao('resumo'); 
       setNovaQuantidade(itens[index].quantidade);
       setMotivoAlteracao(itens[index].observacao || '');
     }
@@ -201,7 +226,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       aoAtualizarItens(req.id, itensAtualizados);
     }
     
-    setModoExpansao('resumo'); // Retorna pro resumo após salvar
+    setModoExpansao('resumo'); 
   };
 
   const getStatusClass = (status) => {
@@ -319,7 +344,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
                 return (
                   <React.Fragment key={index}>
-                    {/* LINHA PRINCIPAL CLICÁVEL */}
                     <tr 
                       className="tr-clicavel"
                       onClick={() => alternarExpansao(index)}
@@ -336,13 +360,11 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                       </td>
                     </tr>
 
-                    {/* BLOCO EXPANSÍVEL (GAVETA DE AÇÕES) */}
                     {estaExpandido && (
                       <tr className="linha-expandida">
                         <td colSpan="3">
                           <div className="detalhes-produto-expandido">
 
-                            {/* 1. MODO RESUMO (Padrão ao clicar na linha) */}
                             {modoExpansao === 'resumo' && (
                               <div className="info-bipagem-resumo">
                                 <span className="qtd-destaque" style={{ color: completo ? '#27ae60' : '#333' }}>
@@ -372,9 +394,9 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                               </div>
                             )}
 
-                            {/* 2. MODO CÂMERA */}
                             {modoExpansao === 'camera' && (
-                              <div className="leitor-container">
+                              // O RECURSO DE AUTO-SCROLL É ANCORADO AQUI NA div "leitor-container"
+                              <div className="leitor-container" ref={cameraRef}>
                                 <div id={`leitor-camera-${index}`} className="camera-box"></div>
                                 
                                 <div className="info-bipagem">
@@ -404,7 +426,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                               </div>
                             )}
 
-                            {/* 3. MODO EDIÇÃO MANUAL */}
                             {modoExpansao === 'edicao' && (
                               <div className="edicao-container">
                                 <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>Ajuste de Quantidade Física</p>
