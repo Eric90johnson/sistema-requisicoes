@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import '../../../styles/pages/painel/detalhes/detalhes.css';
 
-export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
+// 1. Recebemos a nova função aoAtualizarItens aqui
+export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtualizarItens }) {
   if (!req) return null;
 
   const [novoStatus, setNovoStatus] = useState(req.status);
   const [responsavel, setResponsavel] = useState('');
-  
-  // Novos estados para os campos condicionais
   const [numReqExterna, setNumReqExterna] = useState('');
   const [notaFiscal, setNotaFiscal] = useState('');
+
+  const [itens, setItens] = useState(req.listaItens || []);
+  const [editandoIndex, setEditandoIndex] = useState(null);
+  const [novaQuantidade, setNovaQuantidade] = useState('');
+  const [motivoAlteracao, setMotivoAlteracao] = useState('');
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -29,7 +33,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
       return;
     }
     
-    // Validações condicionais
     if (novoStatus === 'Separado' && !numReqExterna.trim()) {
       alert("Por favor, insira o Número da Requisição gerado pelo sistema da loja!");
       return;
@@ -40,18 +43,53 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
       return;
     }
 
-    // Prepara os dados extras
     const dadosExtras = {};
     if (novoStatus === 'Separado') dadosExtras.numeroRequisicaoExterna = numReqExterna;
     if (novoStatus === 'Faturado') dadosExtras.notaFiscal = notaFiscal;
+    
+    // Na confirmação de status, mandamos a lista atual também por segurança
+    dadosExtras.listaItensAtualizada = itens; 
 
-    // Envia tudo para o App.jsx salvar
     aoMudarStatus(req.id, novoStatus, responsavel, dadosExtras);
     
-    // Limpa os campos após salvar
     setResponsavel('');
     setNumReqExterna('');
     setNotaFiscal('');
+  };
+
+  const iniciarEdicao = (index, qtdAtual, obsAtual) => {
+    setEditandoIndex(index);
+    setNovaQuantidade(qtdAtual);
+    setMotivoAlteracao(obsAtual || '');
+  };
+
+  const cancelarEdicao = () => {
+    setEditandoIndex(null);
+    setNovaQuantidade('');
+    setMotivoAlteracao('');
+  };
+
+  const salvarEdicao = (index) => {
+    if (motivoAlteracao.trim().length < 10) {
+      alert('Atenção: O motivo da alteração deve conter no mínimo 10 caracteres para justificar a mudança.');
+      return;
+    }
+
+    const itensAtualizados = [...itens];
+    itensAtualizados[index] = {
+      ...itensAtualizados[index],
+      quantidade: novaQuantidade,
+      observacao: motivoAlteracao
+    };
+
+    setItens(itensAtualizados); // Atualiza a tela na hora
+    
+    // 2. A MÁGICA ACONTECE AQUI: Salva na memória global (App.jsx) imediatamente
+    if (aoAtualizarItens) {
+      aoAtualizarItens(req.id, itensAtualizados);
+    }
+    
+    cancelarEdicao();
   };
 
   return (
@@ -61,6 +99,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
         <button className="btn-voltar" onClick={aoVoltar}>← Voltar ao Painel</button>
       </div>
 
+      {/* CARD 1: INFORMAÇÕES E STATUS (Seu código intacto) */}
       <div className="card-info">
         <div className="info-grid">
           <div className="info-item"><label>Solicitante</label><span>{req.solicitante}</span></div>
@@ -71,7 +110,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
             <div><span className={`status-badge ${getStatusClass(req.status)}`}>{req.status}</span></div>
           </div>
           
-          {/* Exibe os números gravados anteriormente, se existirem */}
           {req.numeroRequisicaoExterna && (
             <div className="info-item">
               <label>Nº Req. Sistema</label>
@@ -86,7 +124,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
           )}
         </div>
 
-        {/* Adicionado flexWrap para não quebrar a tela com os novos campos */}
         <div className="controle-status" style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
           <strong>Atualizar Status:</strong>
           <select className="select-status" value={novoStatus} onChange={(e) => setNovoStatus(e.target.value)}>
@@ -106,7 +143,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
             onChange={(e) => setResponsavel(e.target.value)}
           />
 
-          {/* Campo condicional para Separado */}
           {novoStatus === 'Separado' && (
             <input 
               type="text" 
@@ -117,7 +153,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
             />
           )}
 
-          {/* Campo condicional para Faturado */}
           {novoStatus === 'Faturado' && (
             <input 
               type="text" 
@@ -137,6 +172,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
         </div>
       </div>
 
+      {/* CARD 2: LISTA DE PRODUTOS MESCLADA COM A NOVA FUNÇÃO E NOVO LAYOUT */}
       <div className="card-info">
         <h3>Lista de Produtos ({req.itens} itens)</h3>
         <table className="tabela-itens" style={{ marginTop: '15px', width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
@@ -144,15 +180,63 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus }) {
             <tr style={{ borderBottom: '2px solid #eee' }}>
               <th style={{ padding: '10px' }}>Código</th>
               <th style={{ padding: '10px' }}>Descrição</th>
-              <th style={{ padding: '10px' }}>Qtd</th>
+              <th style={{ padding: '10px', textAlign: 'center' }}>Qtd. Solicitada / Separada</th>
             </tr>
           </thead>
           <tbody>
-            {req.listaItens && req.listaItens.map((item, index) => (
+            {itens.map((item, index) => (
               <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
                 <td style={{ padding: '10px' }}><strong>{item.cod}</strong></td>
                 <td style={{ padding: '10px' }}>{item.descricao}</td>
-                <td style={{ padding: '10px' }}>{item.quantidade} un</td>
+                <td style={{ padding: '10px', textAlign: 'center' }}>
+                  {editandoIndex === index ? (
+                    // MODO EDIÇÃO INLINE
+                    <div className="edicao-container">
+                      <div className="edicao-linha">
+                        <input 
+                          type="number" 
+                          className="input-qtd-edit" 
+                          value={novaQuantidade} 
+                          onChange={(e) => setNovaQuantidade(e.target.value)} 
+                        />
+                        <input 
+                          type="text" 
+                          className="input-obs-edit" 
+                          placeholder="Motivo da alteração..." 
+                          value={motivoAlteracao} 
+                          onChange={(e) => setMotivoAlteracao(e.target.value)} 
+                        />
+                        <button className="btn-acao-edit" onClick={() => salvarEdicao(index)} title="Salvar">✔️</button>
+                        <button className="btn-acao-edit" onClick={cancelarEdicao} title="Cancelar">❌</button>
+                      </div>
+                    </div>
+                  ) : (
+                    // MODO DE VISUALIZAÇÃO COM LÁPIS E NOVO CONTAINER
+                    <div>
+                      <div className="quantidade-container">
+                        <span>{item.quantidade} un</span>
+                        
+                        {/* O lápis só aparece se a requisição estiver 'Em Separação' */}
+                        {req.status === 'Em Separação' && (
+                          <button 
+                            className="btn-editar-item" 
+                            onClick={() => iniciarEdicao(index, item.quantidade, item.observacao)}
+                            title="Ajustar quantidade física"
+                          >
+                            ✏️
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Exibe o motivo da quebra caso exista */}
+                      {item.observacao && (
+                        <span className="texto-observacao">
+                          Obs: {item.observacao}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

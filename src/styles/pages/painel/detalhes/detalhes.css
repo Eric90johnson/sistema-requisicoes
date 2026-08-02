@@ -100,3 +100,79 @@
     min-width: unset !important;
   }
 }
+
+/* Estilos para a edição de itens na separação */
+/* Nova classe para centralizar e dar espaço */
+.quantidade-container {
+  display: flex;
+  align-items: center;
+  justify-content: center; /* Centraliza tudo dentro da coluna */
+  gap: 15px; /* Define o espaço exato entre o número e o lápis */
+}
+
+/* O botão do lápis atualizado (removemos o margin-left antigo) */
+.btn-editar-item {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: transform 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-editar-item:hover {
+  transform: scale(1.2);
+}
+
+.edicao-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: #fcf8ff;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px dashed var(--cor-primaria);
+}
+
+.edicao-linha {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-qtd-edit {
+  width: 70px;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.input-obs-edit {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.btn-acao-edit {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: transform 0.2s;
+}
+
+.btn-acao-edit:hover {
+  transform: scale(1.2);
+}
+
+.texto-observacao {
+  display: block;
+  font-size: 0.85rem;
+  color: #d35400; /* Um tom de laranja/avermelhado para destacar */
+  margin-top: 5px;
+  font-style: italic;
+}

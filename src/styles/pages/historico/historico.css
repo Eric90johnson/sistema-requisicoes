@@ -1,0 +1,110 @@
+.historico-container {
+  padding: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.historico-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.card-historico {
+  background-color: var(--cor-branca);
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  overflow-x: auto;
+}
+
+/* --- RESPONSIVIDADE --- */
+@media (max-width: 768px) {
+  .historico-container {
+    padding: 15px;
+  }
+
+  .historico-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .btn-voltar {
+    width: 100%;
+  }
+}
+
+/* --- ÁREA DE FILTROS --- */
+.filtros-container {
+  background-color: #f9f5fb;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 25px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  border: 1px solid #eee;
+}
+
+.filtro-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filtro-item label {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #555;
+}
+
+.input-filtro {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 0.95rem;
+}
+
+.btn-limpar {
+  padding: 10px;
+  background-color: #95a5a6;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  height: 40px;
+  align-self: flex-end;
+}
+
+.btn-limpar:hover {
+  background-color: #7f8c8d;
+}
+
+/* --- ÁREA DO BOTÃO EXPORTAR --- */
+.acoes-rodape {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-exportar {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  padding: 12px 25px;
+  border-radius: 5px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-exportar:hover {
+  background-color: #219150;
+}

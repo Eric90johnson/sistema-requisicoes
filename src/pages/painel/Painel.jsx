@@ -4,8 +4,12 @@ export default function Painel({ aoClicarNovo, requisicoes, aoAbrirDetalhes }) {
   
   const ordemProcesso = ['Em Separação', 'Separado', 'Faturado', 'Enviado', 'Recebido'];
   
+  // NOVA LÓGICA: Filtra a lista principal para remover as requisições concluídas
+  const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebido');
+  
+  // Agora as colunas dinâmicas são calculadas baseadas apenas nas requisições ativas
   const colunasDinamicas = ordemProcesso.filter(etapa => 
-    requisicoes.some(req => req.historico && req.historico[etapa])
+    requisicoesAtivas.some(req => req.historico && req.historico[etapa])
   );
 
   const getStatusClass = (status) => {
@@ -44,9 +48,9 @@ export default function Painel({ aoClicarNovo, requisicoes, aoAbrirDetalhes }) {
             </tr>
           </thead>
           <tbody>
-            {/* Verifica se a lista está vazia */}
-            {requisicoes.length > 0 ? (
-              requisicoes.map((req) => (
+            {/* LÓGICA DE EXIBIÇÃO: Agora utiliza a lista "requisicoesAtivas" */}
+            {requisicoesAtivas.length > 0 ? (
+              requisicoesAtivas.map((req) => (
                 <tr key={req.id} onClick={() => aoAbrirDetalhes(req)} style={{ cursor: 'pointer' }} className="linha-tabela-hover">
                   <td>{req.id}</td>
                   <td>{req.data}</td>
@@ -67,13 +71,13 @@ export default function Painel({ aoClicarNovo, requisicoes, aoAbrirDetalhes }) {
                 </tr>
               ))
             ) : (
-              /* Mensagem de tela vazia caso não tenha pedidos */
+              /* Mensagem de tela vazia atualizada */
               <tr>
                 <td 
                   colSpan={6 + colunasDinamicas.length} 
                   style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}
                 >
-                  Nenhuma requisição criada no momento. Clique em "+ Nova Requisição" para começar!
+                  Parabéns equipe de estoque! Nenhuma requisição de transferência pendente no momento. A operação está limpa!
                 </td>
               </tr>
             )}
