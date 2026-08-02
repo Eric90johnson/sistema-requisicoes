@@ -176,3 +176,95 @@
   margin-top: 5px;
   font-style: italic;
 }
+
+/* --- ESTILOS DO LEITOR DE CÓDIGO DE BARRAS --- */
+
+.btn-camera {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.3rem;
+  transition: transform 0.2s;
+  color: #2c3e50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-camera:hover {
+  transform: scale(1.1);
+  color: #2980b9;
+}
+
+.linha-expandida td {
+  background-color: #f4f6f8;
+  padding: 15px;
+  border-bottom: 2px solid #ddd;
+}
+
+.leitor-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.camera-box {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--cor-secundaria);
+  background-color: #000;
+}
+
+.info-bipagem {
+  width: 100%;
+  background-color: #fff;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.progresso-texto {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.barra-progresso-bg {
+  width: 100%;
+  height: 12px;
+  background-color: #eee;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.barra-progresso-fill {
+  height: 100%;
+  background-color: #27ae60;
+  transition: width 0.3s ease;
+}
+
+.codigo-referencia {
+  font-size: 0.85rem;
+  color: #7f8c8d;
+  margin-top: 10px;
+  display: block;
+}
+
+.btn-fechar-camera {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 10px;
+}

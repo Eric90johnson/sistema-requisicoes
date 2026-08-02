@@ -17,6 +17,9 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
   // Estado do Popup
   const [popup, setPopup] = useState({ visivel: false, quantidade: 0 });
 
+  // Estado para a Renderização Progressiva (Lazy Load)
+  const [itensVisiveis, setItensVisiveis] = useState(50);
+
   // Estado para armazenar a largura individual de cada coluna
   const [larguras, setLarguras] = useState({
     codigo: 180,
@@ -30,15 +33,12 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
     precoCusto: 140
   });
 
-  // Calcula a largura total da tabela baseada nas colunas
   const larguraTotalTabela = Object.values(larguras).reduce((acc, curr) => acc + curr, 0);
-
-  // Referências usadas para a matemática de arrastar a coluna
   const arrastandoCol = useRef(null);
   const startX = useRef(0);
   const startLargura = useRef(0);
 
-  // 1. Funções de Redimensionamento das Colunas (SUPER PERFORMANCE)
+  // 1. Funções de Redimensionamento das Colunas
   const iniciarRedimensionamento = (e, coluna) => {
     arrastandoCol.current = coluna;
     startX.current = e.pageX;
@@ -52,17 +52,14 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
     if (!arrastandoCol.current) return;
     const delta = e.pageX - startX.current;
     
-    // Limite mínimo agora é 45px para permitir um esmagamento extremo
     const novaLargura = Math.max(45, startLargura.current + delta); 
     
-    // Ajusta a largura do cabeçalho em tempo real
     const thElement = document.getElementById(`th-${arrastandoCol.current}`);
     if (thElement) {
       thElement.style.width = `${novaLargura}px`;
       thElement.style.minWidth = `${novaLargura}px`;
     }
 
-    // MÁGICA: Ajusta a largura total da tabela em tempo real para permitir o encolhimento livre
     const tabelaElement = document.getElementById('tabela-dados');
     if (tabelaElement) {
       let somaOutrasColunas = 0;
@@ -128,6 +125,7 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
       }
       setProdutos(novosProdutos);
       setFiltrosAtivos({}); 
+      setItensVisiveis(50); 
       setPopup({ visivel: true, quantidade: novosProdutos.length });
       evento.target.value = null; 
     };
@@ -162,6 +160,7 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
 
   const aplicarOrdem = (coluna, direcao) => {
     setOrdenacao({ coluna, direcao });
+    setItensVisiveis(50); 
     fecharMenu();
   };
 
@@ -173,6 +172,7 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
     } else {
       setFiltrosAtivos({ ...filtrosAtivos, [coluna]: filtroTemporario });
     }
+    setItensVisiveis(50); 
     fecharMenu();
   };
 
@@ -180,6 +180,7 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
     const novosFiltros = { ...filtrosAtivos };
     delete novosFiltros[coluna];
     setFiltrosAtivos(novosFiltros);
+    setItensVisiveis(50); 
     fecharMenu();
   };
 
@@ -230,6 +231,17 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
       return 0;
     });
   }
+
+  // Criação do array final cortado para a Rolagem Infinita
+  const produtosParaExibir = produtosFiltrados.slice(0, itensVisiveis);
+
+  // Função que detecta se o usuário rolou a tabela até o final
+  const handleScroll = (e) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.target;
+    if (scrollHeight - scrollTop <= clientHeight + 150) {
+      setItensVisiveis(prev => prev + 50);
+    }
+  };
 
   // Componente do Cabeçalho Excel com Resizer
   const renderCabecalho = (titulo, chave) => {
@@ -300,8 +312,7 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
       </div>
 
       {produtos.length > 0 ? (
-        <div className="tabela-responsiva">
-          {/* Adicionado o ID e calculando a largura total da tabela de forma exata */}
+        <div className="tabela-responsiva" onScroll={handleScroll}>
           <table id="tabela-dados" className="tabela-produtos" style={{ width: `${larguraTotalTabela}px` }}>
             <thead>
               <tr>
@@ -317,8 +328,8 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
               </tr>
             </thead>
             <tbody>
-              {produtosFiltrados.length > 0 ? (
-                produtosFiltrados.map((prod, index) => (
+              {produtosParaExibir.length > 0 ? (
+                produtosParaExibir.map((prod, index) => (
                   <tr key={index}>
                     <td title={prod.codigo}><strong>{prod.codigo}</strong></td>
                     <td title={prod.descricao}>{prod.descricao}</td> 
