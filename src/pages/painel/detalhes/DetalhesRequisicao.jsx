@@ -25,7 +25,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [linhaExpandida, setLinhaExpandida] = useState(null);
   const [modoExpansao, setModoExpansao] = useState('resumo'); // Pode ser: 'resumo' ou 'edicao'
   
-  // NOVO: ESTADO DO MODAL DA CÂMERA (TELA CHEIA)
+  // ESTADO DO MODAL DA CÂMERA (TELA CHEIA)
   const [itemCameraAtiva, setItemCameraAtiva] = useState(null);
 
   // ESTADOS DE EDIÇÃO MANUAL
@@ -101,9 +101,28 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     const qtdDesejada = Number(itens[index].quantidade);
 
     setBips((prevBips) => {
+      // --- 1. TRAVA DE SEGURANÇA CONTRA PRODUTOS CRUZADOS ---
+      const itemConflitoIndex = Object.keys(prevBips).find(
+        (key) => prevBips[key].referencia === decodedText && Number(key) !== index
+      );
+
+      if (itemConflitoIndex !== undefined) {
+        tocarBipErro();
+        const nomeProdutoConflito = itens[itemConflitoIndex].descricao;
+        alert(`🚨 TRAVA DE SEGURANÇA 🚨\n\nEste código de barras já pertence a outro item desta requisição:\n👉 ${nomeProdutoConflito}\n\nVocê está tentando bipar no produto errado!`);
+        return prevBips; 
+      }
+      // ---------------------------------------------------------
+
       const atual = prevBips[index] || { contagem: 0, referencia: null };
 
-      if (atual.contagem >= qtdDesejada) return prevBips;
+      // --- 2. TRAVA DE QUANTIDADE MÁXIMA ---
+      if (atual.contagem >= qtdDesejada) {
+        tocarBipErro();
+        alert(`LIMITE ATINGIDO!\nVocê já separou a quantidade total (${qtdDesejada} un) para este produto.`);
+        return prevBips;
+      }
+      // -------------------------------------
 
       if (atual.contagem === 0) {
         tocarBipSucesso();
@@ -135,7 +154,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     }
   };
 
-  // SALVA TUDO NO LOCALSTORAGE (Simula o Banco de Dados)
+  // SALVA TUDO NO LOCALSTORAGE
   const salvarProgresso = () => {
     localStorage.setItem(`bips_req_${req.id}`, JSON.stringify(bips));
     localStorage.setItem(`itens_req_${req.id}`, JSON.stringify(itens));
@@ -367,7 +386,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
                                 {req.status === 'Em Separação' && !completo && (
                                   <div className="acoes-linha-expandida">
-                                    {/* BOTAO ATIVA O MODAL OVERLAY */}
                                     <button className="btn-acao-expandida btn-acao-camera" onClick={() => setItemCameraAtiva(index)}>
                                       📷 Bipar Código
                                     </button>
@@ -433,8 +451,9 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         return (
           <div className="camera-modal-overlay">
             <div className="camera-modal-content">
+              {/* NOVO: Cabeçalho do modal atualizado com código e descrição */}
               <div className="camera-modal-header">
-                Lendo: {itemAtivo.cod}
+                Lendo: {itemAtivo.cod} - {itemAtivo.descricao}
               </div>
               <div className="camera-modal-body">
                 
