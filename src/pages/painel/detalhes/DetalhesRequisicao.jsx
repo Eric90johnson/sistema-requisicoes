@@ -21,6 +21,12 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     return bipsSalvos ? JSON.parse(bipsSalvos) : {};
   }); 
 
+  // Referência para garantir acesso aos dados mais recentes sem conflito de renderização
+  const bipsRef = useRef(bips);
+  useEffect(() => {
+    bipsRef.current = bips;
+  }, [bips]);
+
   // ESTADOS DE INTERAÇÃO DA LINHA
   const [linhaExpandida, setLinhaExpandida] = useState(null);
   const [modoExpansao, setModoExpansao] = useState('resumo'); // Pode ser: 'resumo' ou 'edicao'
@@ -32,9 +38,28 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [novaQuantidade, setNovaQuantidade] = useState('');
   const [motivoAlteracao, setMotivoAlteracao] = useState('');
 
-  // REFERÊNCIAS
+  // ESTADO DO POPUP CUSTOMIZADO
+  const [popupCustom, setPopupCustom] = useState({
+    visivel: false,
+    tipo: 'info', // 'sucesso', 'erro', 'aviso'
+    titulo: '',
+    mensagem: '',
+    onConfirm: null,
+    onCancel: null
+  });
+
+  // REFERÊNCIAS DE TEMPO
   const ultimoBipTempo = useRef(0);
   const ultimoBipTexto = useRef("");
+
+  // FUNÇÕES AUXILIARES DO POPUP CUSTOMIZADO
+  const exibirPopup = (tipo, titulo, mensagem, onConfirm = null, onCancel = null) => {
+    setPopupCustom({ visivel: true, tipo, titulo, mensagem, onConfirm, onCancel });
+  };
+
+  const fecharPopupCustom = () => {
+    setPopupCustom({ ...popupCustom, visivel: false });
+  };
 
   // FUNÇÕES DE ÁUDIO NATIVO (Beep)
   const tocarBipSucesso = () => {
@@ -84,7 +109,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         (err) => { /* Ignora erros de frame vazio */ }
       ).catch(err => {
         console.error("Erro na câmera", err);
-        alert("Não foi possível acessar a câmera do dispositivo.");
+        exibirPopup('erro', 'Câmera Indisponível', 'Não foi possível acessar a câmera do dispositivo.');
         setItemCameraAtiva(null); 
       });
     }
@@ -96,74 +121,86 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     };
   }, [itemCameraAtiva]);
 
-  // PROCESSA A REGRA DE NEGÓCIO DA SEPARAÇÃO
+  // PROCESSA A REGRA DE NEGÓCIO DA SEPARAÇÃO (Agora usando bipsRef para evitar bloqueio de state)
   const processarBipagem = (index, decodedText) => {
+    const atual = bipsRef.current[index] || { contagem: 0, referencia: null };
     const qtdDesejada = Number(itens[index].quantidade);
 
-    setBips((prevBips) => {
-      // --- 1. TRAVA DE SEGURANÇA CONTRA PRODUTOS CRUZADOS ---
-      const itemConflitoIndex = Object.keys(prevBips).find(
-        (key) => prevBips[key].referencia === decodedText && Number(key) !== index
+    // --- 1. TRAVA DE SEGURANÇA CONTRA PRODUTOS CRUZADOS ---
+    const itemConflitoIndex = Object.keys(bipsRef.current).find(
+      (key) => bipsRef.current[key].referencia === decodedText && Number(key) !== index
+    );
+
+    if (itemConflitoIndex !== undefined) {
+      tocarBipErro();
+      const nomeProdutoConflito = itens[itemConflitoIndex].descricao;
+      exibirPopup(
+        'erro', 
+        'Trava de Segurança', 
+        `Este código de barras já pertence a outro item:\n\n👉 ${nomeProdutoConflito}\n\nVocê está tentando bipar no produto errado!`
       );
+      return; 
+    }
 
-      if (itemConflitoIndex !== undefined) {
-        tocarBipErro();
-        const nomeProdutoConflito = itens[itemConflitoIndex].descricao;
-        alert(`🚨 TRAVA DE SEGURANÇA 🚨\n\nEste código de barras já pertence a outro item desta requisição:\n👉 ${nomeProdutoConflito}\n\nVocê está tentando bipar no produto errado!`);
-        return prevBips; 
-      }
-      // ---------------------------------------------------------
+    // --- 2. TRAVA DE QUANTIDADE MÁXIMA ---
+    if (atual.contagem >= qtdDesejada) {
+      tocarBipErro();
+      exibirPopup(
+        'aviso', 
+        'Limite Atingido!', 
+        `Você já separou a quantidade total (${qtdDesejada} un) para este produto.`
+      );
+      return;
+    }
 
-      const atual = prevBips[index] || { contagem: 0, referencia: null };
-
-      // --- 2. TRAVA DE QUANTIDADE MÁXIMA ---
-      if (atual.contagem >= qtdDesejada) {
-        tocarBipErro();
-        alert(`LIMITE ATINGIDO!\nVocê já separou a quantidade total (${qtdDesejada} un) para este produto.`);
-        return prevBips;
-      }
-      // -------------------------------------
-
-      if (atual.contagem === 0) {
+    // --- 3. VALIDAÇÃO DE REFERÊNCIA ---
+    if (atual.contagem === 0) {
+      tocarBipSucesso();
+      setBips(prev => ({ ...prev, [index]: { contagem: 1, referencia: decodedText } }));
+    } 
+    else {
+      if (atual.referencia === decodedText) {
         tocarBipSucesso();
-        return { ...prevBips, [index]: { contagem: 1, referencia: decodedText } };
-      } 
-      else {
-        if (atual.referencia === decodedText) {
-          tocarBipSucesso();
-          return { ...prevBips, [index]: { ...atual, contagem: atual.contagem + 1 } };
-        } else {
-          tocarBipErro();
-          alert(`PRODUTO INCORRETO!\nVocê escaneou o código: ${decodedText}\nMas o código de referência deste lote é: ${atual.referencia}`);
-          return prevBips;
-        }
+        setBips(prev => ({ ...prev, [index]: { ...atual, contagem: atual.contagem + 1 } }));
+      } else {
+        tocarBipErro();
+        exibirPopup(
+          'erro', 
+          'Produto Incorreto!', 
+          `Você escaneou o código: ${decodedText}\nMas a referência esperada é: ${atual.referencia}`
+        );
       }
-    });
+    }
   };
 
   const resetarBipagem = (index) => {
-    const confirmacao = window.confirm("Tem certeza que deseja ZERAR a leitura deste item?\nO código de referência atual será apagado.");
-    
-    if (confirmacao) {
-      setBips((prevBips) => {
-        const novosBips = { ...prevBips };
-        delete novosBips[index]; 
-        return novosBips;
-      });
-      ultimoBipTexto.current = ""; 
-    }
+    exibirPopup(
+      'aviso',
+      'Zerar Leitura?',
+      'Tem certeza que deseja ZERAR a leitura deste item?\nO código de referência atual será apagado.',
+      () => {
+        setBips((prevBips) => {
+          const novosBips = { ...prevBips };
+          delete novosBips[index]; 
+          return novosBips;
+        });
+        ultimoBipTexto.current = ""; 
+        fecharPopupCustom();
+      },
+      () => fecharPopupCustom()
+    );
   };
 
   // SALVA TUDO NO LOCALSTORAGE
   const salvarProgresso = () => {
     localStorage.setItem(`bips_req_${req.id}`, JSON.stringify(bips));
     localStorage.setItem(`itens_req_${req.id}`, JSON.stringify(itens));
-    alert("Progresso salvo com sucesso!\nOs dados da separação foram registrados no sistema (Memória Local).");
+    exibirPopup('sucesso', 'Sucesso!', 'Progresso salvo com sucesso!\nOs dados da separação foram registrados (Memória Local).');
   };
 
   const confirmarMudanca = () => {
     if (!responsavel.trim()) {
-      alert("Por favor, insira seu nome para assumir a responsabilidade!");
+      exibirPopup('aviso', 'Atenção', 'Por favor, insira seu nome para assumir a responsabilidade!');
       return;
     }
     
@@ -174,18 +211,18 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       });
 
       if (!todosBipados) {
-        alert("TRAVA DE SEGURANÇA:\nVocê não pode finalizar a separação sem bipar a quantidade exata de TODOS os produtos solicitados!");
+        exibirPopup('erro', 'Trava de Segurança', 'Você não pode finalizar a separação sem bipar a quantidade exata de TODOS os produtos solicitados!');
         return;
       }
 
       if (!numReqExterna.trim()) {
-        alert("Por favor, insira o Número da Requisição gerado pelo sistema da loja!");
+        exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Requisição gerado pelo sistema da loja!');
         return;
       }
     }
     
     if (novoStatus === 'Faturado' && !notaFiscal.trim()) {
-      alert("Por favor, insira o Número da Nota Fiscal de transferência!");
+      exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Nota Fiscal de transferência!');
       return;
     }
 
@@ -204,6 +241,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     setResponsavel('');
     setNumReqExterna('');
     setNotaFiscal('');
+    exibirPopup('sucesso', 'Status Atualizado', 'O status da requisição foi alterado com sucesso!');
   };
 
   const alternarExpansao = (index) => {
@@ -220,7 +258,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
   const salvarEdicao = (index) => {
     if (motivoAlteracao.trim().length < 10) {
-      alert('Atenção: O motivo da alteração deve conter no mínimo 10 caracteres para justificar a mudança.');
+      exibirPopup('aviso', 'Atenção', 'O motivo da alteração deve conter no mínimo 10 caracteres para justificar a mudança.');
       return;
     }
 
@@ -451,7 +489,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         return (
           <div className="camera-modal-overlay">
             <div className="camera-modal-content">
-              {/* NOVO: Cabeçalho do modal atualizado com código e descrição */}
               <div className="camera-modal-header">
                 Lendo: {itemAtivo.cod} - {itemAtivo.descricao}
               </div>
@@ -488,6 +525,44 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           </div>
         );
       })()}
+
+      {/* --- RENDERIZA O POPUP CUSTOMIZADO GLOBAL --- */}
+      {popupCustom.visivel && (
+        <div className="popup-custom-overlay">
+          <div className={`popup-custom-content ${popupCustom.tipo}`}>
+            <div className="popup-custom-header">
+              {popupCustom.tipo === 'sucesso' && '✅ '}
+              {popupCustom.tipo === 'erro' && '🚨 '}
+              {popupCustom.tipo === 'aviso' && '⚠️ '}
+              {popupCustom.titulo}
+            </div>
+            
+            <div className="popup-custom-body">
+              {/* O split permite quebrar a linha (\n) igual o alert() nativo fazia */}
+              {popupCustom.mensagem.split('\n').map((linha, i) => (
+                <p key={i}>{linha}</p>
+              ))}
+            </div>
+            
+            <div className="popup-custom-footer">
+              {popupCustom.onCancel && (
+                <button className="btn-popup btn-popup-cancelar" onClick={popupCustom.onCancel}>
+                  Cancelar
+                </button>
+              )}
+              <button 
+                className="btn-popup btn-popup-confirmar" 
+                onClick={() => {
+                  if (popupCustom.onConfirm) popupCustom.onConfirm();
+                  else fecharPopupCustom();
+                }}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

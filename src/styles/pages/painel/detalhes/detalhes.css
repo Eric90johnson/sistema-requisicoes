@@ -375,6 +375,93 @@
 .btn-salvar-progresso:hover { background-color: #6a2a85; }
 .btn-salvar-progresso:active { transform: scale(0.98); }
 
+/* --- NOVO: POPUP CUSTOMIZADO DE ALERTAS --- */
+.popup-custom-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 999999; /* Por cima de absolutamente tudo */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.popup-custom-content {
+  background-color: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 400px;
+  overflow: hidden;
+  box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+  animation: popInModal 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+.popup-custom-header {
+  padding: 15px 20px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: white;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Cores dinâmicas para o cabeçalho do popup */
+.popup-custom-content.sucesso .popup-custom-header { background-color: #27ae60; }
+.popup-custom-content.erro .popup-custom-header { background-color: #e74c3c; }
+.popup-custom-content.aviso .popup-custom-header { background-color: #f39c12; }
+
+.popup-custom-body {
+  padding: 25px 20px;
+  font-size: 1.05rem;
+  color: #333;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.popup-custom-body p {
+  margin-bottom: 10px;
+}
+.popup-custom-body p:last-child {
+  margin-bottom: 0;
+}
+
+.popup-custom-footer {
+  padding: 15px 20px;
+  background-color: #f9f9f9;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.btn-popup {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.1s, filter 0.2s;
+  flex: 1;
+}
+.btn-popup:hover { filter: brightness(0.9); }
+.btn-popup:active { transform: scale(0.95); }
+
+.btn-popup-cancelar {
+  background-color: #e0e0e0;
+  color: #333;
+}
+.btn-popup-confirmar {
+  background-color: var(--cor-secundaria);
+  color: white;
+}
+
 /* Animações do Modal */
 @keyframes fadeIn {
   from { opacity: 0; }
