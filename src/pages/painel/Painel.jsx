@@ -36,11 +36,11 @@ export default function Painel({ aoClicarNovo, requisicoes, aoAbrirDetalhes }) {
           <thead>
             <tr>
               <th>ID</th>
+              <th>Status</th>
               <th>Data</th>
               <th>Solicitante</th>
               <th>Loja Destino</th>
               <th>Itens</th>
-              <th>Status</th>
               
               {colunasDinamicas.map(coluna => (
                 <th key={coluna}>Resp. {coluna}</th>
@@ -53,15 +53,15 @@ export default function Painel({ aoClicarNovo, requisicoes, aoAbrirDetalhes }) {
               requisicoesAtivas.map((req) => (
                 <tr key={req.id} onClick={() => aoAbrirDetalhes(req)} style={{ cursor: 'pointer' }} className="linha-tabela-hover">
                   <td>{req.id}</td>
-                  <td>{req.data}</td>
-                  <td><strong>{req.solicitante}</strong></td>
-                  <td>{req.destino}</td>
-                  <td>{req.itens}</td>
                   <td>
                     <span className={`status-badge ${getStatusClass(req.status)}`}>
                       {req.status}
                     </span>
                   </td>
+                  <td>{req.data}</td>
+                  <td><strong>{req.solicitante}</strong></td>
+                  <td>{req.destino}</td>
+                  <td>{req.itens}</td>
                   
                   {colunasDinamicas.map(coluna => (
                     <td key={coluna} style={{ color: '#666', fontSize: '0.9em' }}>
