@@ -36,56 +36,44 @@
   margin-bottom: 20px;
 }
 
-.grupo-lojas {
+/* --- NOVA ESTRUTURA DO FORMULÁRIO (Lado a Lado e Espaçado) --- */
+.form-secao {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  margin-bottom: 30px;
+  padding-bottom: 25px;
+  border-bottom: 1px solid #eeeeee;
+}
+
+.linha-dupla {
   display: flex;
   gap: 20px;
-  margin-bottom: 30px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid #eeeeee;
+  width: 100%;
 }
 
 .campo-loja {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .campo-loja label {
   font-weight: bold;
   color: var(--cor-secundaria);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
-.campo-loja select {
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 1rem;
-  outline-color: var(--cor-primaria);
-}
-
-.tabela-itens {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.tabela-itens th {
-  text-align: left;
-  padding: 10px;
-  color: var(--cor-secundaria);
-  border-bottom: 2px solid #eeeeee;
-}
-
-.tabela-itens td {
-  padding: 10px;
-}
-
+.campo-loja select,
 .input-item {
   width: 100%;
-  padding: 8px;
+  padding: 14px 12px;
   border: 1px solid #ccc;
-  border-radius: 4px;
+  border-radius: 6px;
+  font-size: 1rem;
+  outline-color: var(--cor-primaria);
+  background-color: #fff;
 }
 
 .input-item:disabled {
@@ -94,93 +82,17 @@
   cursor: not-allowed;
 }
 
-.rodape-formulario {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.btn-salvar {
-  background-color: #27ae60;
-  color: white;
-  border: none;
-  padding: 12px 30px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: bold;
-  font-size: 1rem;
-}
-
-.linha-insercao {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-  background-color: #f4f4f4;
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 25px;
-}
-
-.btn-adicionar {
-  background-color: var(--cor-secundaria);
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: bold;
-  height: 100%;
-  transition: 0.3s;
-}
-
-.btn-adicionar:hover {
-  background-color: #6a2a85;
-}
-
-/* --- RESPONSIVIDADE DETALHES --- */
+/* Responsividade do Formulário */
 @media (max-width: 768px) {
-  .detalhes-container {
-    padding: 15px;
-  }
-
-  .detalhes-header {
+  .linha-dupla {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 15px;
-  }
-
-  .btn-voltar {
-    width: 100%;
-  }
-
-  .info-grid {
-    grid-template-columns: 1fr; /* Quebra as 3 colunas em 1 só (uma embaixo da outra) */
-    gap: 10px;
-  }
-
-  .controle-status {
-    flex-direction: column;
-    align-items: stretch !important; /* Força os campos a ocuparem a tela toda */
-  }
-
-  .controle-status > * {
-    width: 100%;
-    margin-bottom: 10px;
-    min-width: unset !important;
+    gap: 25px;
   }
 }
+/* ----------------------------------------------------------- */
 
-/* --- NOVAS CLASSES (Campos, Botões e Layout Limpo) --- */
 
-.campo-motivo {
-  margin-bottom: 30px;
-}
-
-.input-motivo {
-  width: 100%;
-  border-color: #ccc;
-}
-
+/* --- INSERÇÃO E IMPORTAÇÃO --- */
 .cabecalho-insercao {
   display: flex;
   justify-content: space-between;
@@ -206,7 +118,6 @@
   background-color: #1c5980;
 }
 
-/* Limpeza das classes da linha de inserção que estavam no JSX */
 .linha-insercao {
   display: flex;
   gap: 10px;
@@ -233,12 +144,14 @@
   cursor: pointer;
   font-weight: bold;
   transition: background-color 0.2s;
+  height: 100%;
 }
 
 .btn-adicionar:hover {
   background-color: #8e44ad;
 }
 
+/* --- TABELA DE ITENS --- */
 .tabela-wrapper {
   overflow-x: auto;
   margin-bottom: 20px;
@@ -258,6 +171,7 @@
 
 .tabela-itens th {
   border-bottom: 2px solid #eee;
+  color: var(--cor-secundaria);
 }
 
 .texto-erro {
@@ -266,11 +180,11 @@
 
 /* --- ALERTA DE ESTOQUE --- */
 .linha-alerta-estoque {
-  background-color: #fdedec; /* Fundo vermelho bem clarinho */
+  background-color: #fdedec; 
 }
 
 .linha-alerta-estoque td {
-  color: #c0392b; /* Texto em vermelho escuro */
+  color: #c0392b; 
 }
 
 .badge-estoque {
@@ -334,4 +248,106 @@
 
 .btn-acao-edit-nova:hover {
   transform: scale(1.2);
+}
+
+/* --- RODAPÉ DO FORMULÁRIO (BOTAO GRAVAR) --- */
+.rodape-formulario {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.btn-salvar {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  padding: 12px 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+
+/* --- MODAL DE ALERTA PERSONALIZADO --- */
+.alerta-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 99999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 15px;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.alerta-modal-box {
+  background-color: #fff;
+  width: 100%;
+  max-width: 420px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  animation: popInModal 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+.alerta-modal-header {
+  padding: 15px 20px;
+  color: white;
+  font-weight: bold;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.alerta-modal-header.tipo-erro { background-color: #e74c3c; }
+.alerta-modal-header.tipo-sucesso { background-color: #27ae60; }
+.alerta-modal-header.tipo-aviso { background-color: #f39c12; }
+
+.alerta-modal-body {
+  padding: 25px 20px;
+  font-size: 1.05rem;
+  color: #444;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.alerta-modal-footer {
+  padding: 15px 20px;
+  background-color: #f9f9f9;
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid #eee;
+}
+
+.btn-fechar-alerta {
+  padding: 10px 40px;
+  background-color: var(--cor-secundaria);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.btn-fechar-alerta:hover { background-color: #6a2a85; }
+.btn-fechar-alerta:active { transform: scale(0.95); }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popInModal {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }

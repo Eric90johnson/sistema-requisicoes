@@ -22,8 +22,23 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
   const [editandoIndex, setEditandoIndex] = useState(null);
   const [novaQuantidadeEdit, setNovaQuantidadeEdit] = useState('');
 
+  // ESTADO DO ALERTA PERSONALIZADO
+  const [alerta, setAlerta] = useState({ visivel: false, tipo: '', titulo: '', mensagem: '', acao: null });
+
   const inputCodigoRef = useRef(null);
   const inputArquivoRef = useRef(null);
+
+  // FUNÇÃO PARA CHAMAR O ALERTA
+  const mostrarAlerta = (tipo, titulo, mensagem, acao = null) => {
+    setAlerta({ visivel: true, tipo, titulo, mensagem, acao });
+  };
+
+  const fecharAlerta = () => {
+    if (alerta.acao) {
+      alerta.acao(); // Executa a ação pendente (se houver) ao fechar
+    }
+    setAlerta({ ...alerta, visivel: false });
+  };
 
   const handleMudancaCodigo = (valorDigitado) => {
     setCodigo(valorDigitado);
@@ -36,7 +51,10 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
   };
 
   const adicionarNaLista = () => {
-    if (!codigo || !quantidade) { alert('Preencha o código e a quantidade!'); return; }
+    if (!codigo || !quantidade) { 
+      mostrarAlerta('erro', 'Campos Obrigatórios', 'Preencha o código do produto e a quantidade desejada!');
+      return; 
+    }
     
     const produto = baseProdutos.find((p) => p.codigo === codigo);
     const temEstoqueDefinido = produto && produto.quantidade !== undefined && produto.quantidade !== null;
@@ -46,7 +64,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     const isInsuficiente = temEstoqueDefinido && (qtdSolicitada > estoqueAtual);
 
     if (isInsuficiente) {
-      alert(`Aviso: Você está solicitando ${qtdSolicitada} un, mas o estoque atual na base é de apenas ${estoqueAtual} un! O item será adicionado em vermelho para revisão.`);
+      mostrarAlerta('aviso', 'Atenção ao Estoque', `Você está solicitando ${qtdSolicitada} un, mas o estoque atual na base é de apenas ${estoqueAtual} un!\n\nO item será adicionado em vermelho para revisão.`);
     }
 
     setItensAdicionados([
@@ -64,7 +82,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     if (inputCodigoRef.current) inputCodigoRef.current.focus();
   };
 
-  // Funções de Edição Inline
   const iniciarEdicao = (index, qtdAtual) => {
     setEditandoIndex(index);
     setNovaQuantidadeEdit(qtdAtual);
@@ -77,7 +94,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
 
   const salvarEdicao = (index) => {
     if (!novaQuantidadeEdit || Number(novaQuantidadeEdit) <= 0) {
-      alert('Insira uma quantidade válida!');
+      mostrarAlerta('erro', 'Quantidade Inválida', 'Insira uma quantidade maior que zero para o produto!');
       return;
     }
 
@@ -85,7 +102,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     const itemAtual = itensAtualizados[index];
     const novaQtd = Number(novaQuantidadeEdit);
     
-    // Recalcula se a nova quantidade bate com o estoque
     const isInsuficiente = itemAtual.estoque !== null && novaQtd > itemAtual.estoque;
 
     itensAtualizados[index] = {
@@ -142,12 +158,12 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
         
         const qtdAlertas = novosItens.filter(item => item.insuficiente).length;
         if (qtdAlertas > 0) {
-          alert(`${novosItens.length} produtos importados! ATENÇÃO: ${qtdAlertas} produto(s) excedem o estoque atual e foram marcados em vermelho na lista.`);
+          mostrarAlerta('aviso', 'Importação Parcial', `${novosItens.length} produtos importados.\n\nATENÇÃO: ${qtdAlertas} produto(s) excedem o estoque atual e foram marcados em vermelho na lista.`);
         } else {
-          alert(`${novosItens.length} produtos importados com sucesso!`);
+          mostrarAlerta('sucesso', 'Importação Concluída', `${novosItens.length} produtos importados com sucesso!`);
         }
       } else {
-        alert('Nenhum produto válido encontrado no arquivo. O formato deve ser: Código;Quantidade');
+        mostrarAlerta('erro', 'Falha na Importação', 'Nenhum produto válido encontrado no arquivo.\n\nLembre-se: O formato do CSV deve ser:\nCódigo;Quantidade');
       }
       
       e.target.value = null; 
@@ -157,15 +173,23 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
   };
 
   const finalizarRequisicao = () => {
-    if (!solicitante.trim()) { alert('Preencha o nome do Solicitante!'); return; }
-    if (!motivo.trim()) { alert('Preencha o motivo da transferência!'); return; }
-    if (itensAdicionados.length === 0) { alert('Adicione pelo menos um item!'); return; }
+    if (!solicitante.trim()) { 
+      mostrarAlerta('erro', 'Campo Obrigatório', 'Preencha o nome do Solicitante antes de prosseguir.'); 
+      return; 
+    }
+    if (!motivo.trim()) { 
+      mostrarAlerta('erro', 'Campo Obrigatório', 'Preencha o motivo da transferência antes de prosseguir.'); 
+      return; 
+    }
+    if (itensAdicionados.length === 0) { 
+      mostrarAlerta('erro', 'Lista Vazia', 'Adicione pelo menos um produto na lista antes de gravar a requisição.'); 
+      return; 
+    }
 
-    // Trava de segurança: Bloqueia a gravação se houver algum item vermelho
     const temErroDeEstoque = itensAdicionados.some(item => item.insuficiente);
     if (temErroDeEstoque) {
-      alert('Existem produtos solicitados com quantidades superiores ao que há na base de dados atuais. Solicite a alteração da base de dados do sistema ou edite a quantidade desejada.');
-      return; // O 'return' impede que o código continue e grave a requisição
+      mostrarAlerta('erro', 'Estoque Insuficiente', 'Existem produtos solicitados com quantidades superiores ao que há na base de dados.\n\nSolicite a alteração da base de dados do sistema ou edite a quantidade em vermelho para continuar.');
+      return; 
     }
 
     const novaRequisicao = {
@@ -180,8 +204,10 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
       historico: {} 
     };
 
-    aoSalvar(novaRequisicao);
-    alert('Requisição gravada com sucesso!');
+    // Alerta de sucesso que, ao ser fechado, salva e muda a tela
+    mostrarAlerta('sucesso', 'Requisição Concluída!', 'A requisição foi gravada e já está disponível no painel.', () => {
+      aoSalvar(novaRequisicao);
+    });
   };
 
   return (
@@ -193,34 +219,40 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
 
       <div className="card-formulario">
         
-        <div className="grupo-lojas-grid">
+        <div className="form-secao">
+          
           <div className="campo-loja">
             <label>Solicitante (Seu Nome):</label>
             <input type="text" className="input-item" placeholder="Ex: Maria" value={solicitante} onChange={(e) => setSolicitante(e.target.value)} />
           </div>
-          <div className="campo-loja">
-            <label>Loja Solicitante (De):</label>
-            <select value={lojaDe} onChange={(e) => setLojaDe(e.target.value)}>
-              {lojas.map(loja => <option key={`de-${loja}`} value={loja}>{loja}</option>)}
-            </select>
-          </div>
-          <div className="campo-loja">
-            <label>Loja Atendente (Para):</label>
-            <select value={lojaPara} onChange={(e) => setLojaPara(e.target.value)}>
-              {lojas.map(loja => <option key={`para-${loja}`} value={loja}>{loja}</option>)}
-            </select>
-          </div>
-        </div>
 
-        <div className="campo-loja campo-motivo">
-          <label>Motivo da Transferência:</label>
-          <input 
-            type="text" 
-            className="input-item input-motivo" 
-            placeholder="Ex: Reposição de estoque, Transferência de mostruário, Pedido especial..." 
-            value={motivo} 
-            onChange={(e) => setMotivo(e.target.value)} 
-          />
+          <div className="linha-dupla">
+            <div className="campo-loja">
+              <label>Loja Solicitante (De):</label>
+              <select value={lojaDe} onChange={(e) => setLojaDe(e.target.value)}>
+                {lojas.map(loja => <option key={`de-${loja}`} value={loja}>{loja}</option>)}
+              </select>
+            </div>
+            
+            <div className="campo-loja">
+              <label>Loja Atendente (Para):</label>
+              <select value={lojaPara} onChange={(e) => setLojaPara(e.target.value)}>
+                {lojas.map(loja => <option key={`para-${loja}`} value={loja}>{loja}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="campo-loja">
+            <label>Motivo da Transferência:</label>
+            <input 
+              type="text" 
+              className="input-item" 
+              placeholder="Ex: Reposição de estoque, Transferência de mostruário, Pedido especial..." 
+              value={motivo} 
+              onChange={(e) => setMotivo(e.target.value)} 
+            />
+          </div>
+          
         </div>
 
         <div className="cabecalho-insercao">
@@ -286,7 +318,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
                     </td>
                     <td>
                       {editandoIndex === index ? (
-                        // MODO DE EDIÇÃO
                         <div className="edicao-container-nova">
                           <input 
                             type="number" 
@@ -298,7 +329,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
                           <button className="btn-acao-edit-nova" onClick={cancelarEdicao} title="Cancelar">❌</button>
                         </div>
                       ) : (
-                        // MODO DE VISUALIZAÇÃO COM LÁPIS
                         <div className="quantidade-container-nova">
                           <strong>{item.quantidade} un</strong>
                           <button 
@@ -322,6 +352,39 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
           <button className="btn-salvar" onClick={finalizarRequisicao}>Gravar Requisição</button>
         </div>
       </div>
+
+      {/* --- RENDERIZAÇÃO DO MODAL DE ALERTA --- */}
+      {alerta.visivel && (
+        <div className="alerta-modal-overlay">
+          <div className="alerta-modal-box">
+            
+            <div className={`alerta-modal-header tipo-${alerta.tipo}`}>
+              {alerta.tipo === 'erro' && '🚨'}
+              {alerta.tipo === 'sucesso' && '✅'}
+              {alerta.tipo === 'aviso' && '⚠️'}
+              {alerta.titulo}
+            </div>
+
+            <div className="alerta-modal-body">
+              {/* O map ajuda a pular linha caso enviemos o texto com "\n" */}
+              {alerta.mensagem.split('\n').map((linha, i) => (
+                <span key={i}>
+                  {linha}
+                  <br/>
+                </span>
+              ))}
+            </div>
+
+            <div className="alerta-modal-footer">
+              <button className="btn-fechar-alerta" onClick={fecharAlerta}>
+                Entendi
+              </button>
+            </div>
+            
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
