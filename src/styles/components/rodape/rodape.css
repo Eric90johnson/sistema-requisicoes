@@ -1,9 +1,10 @@
 .rodape-container {
-  background-color: var(--cor-secundaria, #2c3e50); /* Usa a cor secundária do seu sistema */
+  background-color: var(--cor-secundaria, #2c3e50);
   color: #ecf0f1;
   padding: 30px 20px 15px;
-  margin-top: auto; /* Garante que o rodapé fique sempre no final da página */
+  margin-top: auto; 
   border-top: 4px solid var(--cor-primaria, #8e44ad);
+  transition: all 0.3s ease;
 }
 
 .rodape-conteudo {
@@ -78,15 +79,55 @@
   letter-spacing: 0.5px;
 }
 
+/* Elementos exclusivos da interatividade mobile */
+.titulo-com-icone {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.icone-expandir {
+  display: none; /* Escondido no computador */
+  font-size: 1.2rem;
+  color: #3498db;
+  transition: transform 0.3s;
+}
+
 /* Responsividade do Rodapé */
 @media (max-width: 768px) {
+  .rodape-container {
+    padding: 20px 15px 15px;
+  }
+
   .rodape-conteudo {
     grid-template-columns: 1fr;
-    text-align: center;
+    gap: 0; /* Tiramos o gap para controlar melhor as margens internas */
   }
   
+  .rodape-header-mobile {
+    cursor: pointer;
+    /* Adiciona uma área de toque maior para facilitar no dedo */
+    padding: 5px 0; 
+  }
+
+  .icone-expandir {
+    display: block; /* Mostra a setinha no celular */
+  }
+
+  /* Classes de controle (Colapsável) */
+  .rodape-container:not(.expandido) .conteudo-colapsavel {
+    display: none !important;
+  }
+
+  .rodape-container.expandido .conteudo-colapsavel {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.2);
+  }
+
   .rodape-bottom {
     flex-direction: column;
     text-align: center;
+    border-top: none; /* Evita borda dupla com o conteúdo colapsavel */
   }
 }
