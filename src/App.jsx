@@ -1,3 +1,4 @@
+import Rodape from './components/rodape/Rodape';
 import { useState } from 'react';
 import './styles/global.css';
 import Painel from './pages/painel/Painel';
@@ -98,6 +99,10 @@ function App() {
           <BaseDados aoVoltar={() => setTelaAtual('painel')} produtos={baseProdutos} setProdutos={setBaseProdutos} />
         )}
       </main>
+
+      {/* RODAPÉ GLOBAL INSERIDO AQUI */}
+      <Rodape />
+      
     </div>
   );
 }
