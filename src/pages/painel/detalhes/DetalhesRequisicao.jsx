@@ -10,7 +10,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [numReqExterna, setNumReqExterna] = useState('');
   const [notaFiscal, setNotaFiscal] = useState('');
 
-  // INICIALIZA OS ITENS E OS BIPS BUSCANDO DA MEMÓRIA LOCAL (Simulando Banco de Dados)
+  // INICIALIZA OS ITENS E OS BIPS BUSCANDO DA MEMÓRIA LOCAL
   const [itens, setItens] = useState(() => {
     const itensSalvos = localStorage.getItem(`itens_req_${req.id}`);
     return itensSalvos ? JSON.parse(itensSalvos) : (req.listaItens || []);
@@ -23,8 +23,11 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
   // ESTADOS DE INTERAÇÃO DA LINHA
   const [linhaExpandida, setLinhaExpandida] = useState(null);
-  const [modoExpansao, setModoExpansao] = useState('resumo'); // Pode ser: 'resumo', 'camera', 'edicao'
+  const [modoExpansao, setModoExpansao] = useState('resumo'); // Pode ser: 'resumo' ou 'edicao'
   
+  // NOVO: ESTADO DO MODAL DA CÂMERA (TELA CHEIA)
+  const [itemCameraAtiva, setItemCameraAtiva] = useState(null);
+
   // ESTADOS DE EDIÇÃO MANUAL
   const [novaQuantidade, setNovaQuantidade] = useState('');
   const [motivoAlteracao, setMotivoAlteracao] = useState('');
@@ -32,17 +35,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   // REFERÊNCIAS
   const ultimoBipTempo = useRef(0);
   const ultimoBipTexto = useRef("");
-  const cameraRef = useRef(null); // Ref para fazer o scroll automático
-
-  // EFEITO PARA CENTRALIZAR A CÂMERA AUTOMATICAMENTE
-  useEffect(() => {
-    if (modoExpansao === 'camera' && cameraRef.current) {
-      // Pequeno atraso para dar tempo da câmera abrir e ocupar espaço na tela
-      setTimeout(() => {
-        cameraRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
-    }
-  }, [modoExpansao]);
 
   // FUNÇÕES DE ÁUDIO NATIVO (Beep)
   const tocarBipSucesso = () => {
@@ -69,12 +61,12 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     } catch(e) {}
   };
 
-  // INICIALIZAÇÃO DA CÂMERA
+  // INICIALIZAÇÃO DA CÂMERA NO MODAL
   useEffect(() => {
     let scanner = null;
 
-    if (linhaExpandida !== null && modoExpansao === 'camera') {
-      scanner = new Html5Qrcode(`leitor-camera-${linhaExpandida}`);
+    if (itemCameraAtiva !== null) {
+      scanner = new Html5Qrcode('leitor-camera-modal');
       
       scanner.start(
         { facingMode: "environment" }, 
@@ -87,13 +79,13 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           ultimoBipTexto.current = decodedText;
           ultimoBipTempo.current = agora;
 
-          processarBipagem(linhaExpandida, decodedText);
+          processarBipagem(itemCameraAtiva, decodedText);
         },
         (err) => { /* Ignora erros de frame vazio */ }
       ).catch(err => {
         console.error("Erro na câmera", err);
         alert("Não foi possível acessar a câmera do dispositivo.");
-        setModoExpansao('resumo'); 
+        setItemCameraAtiva(null); 
       });
     }
 
@@ -102,7 +94,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         scanner.stop().catch(console.error);
       }
     };
-  }, [linhaExpandida, modoExpansao]);
+  }, [itemCameraAtiva]);
 
   // PROCESSA A REGRA DE NEGÓCIO DA SEPARAÇÃO
   const processarBipagem = (index, decodedText) => {
@@ -185,7 +177,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     dadosExtras.listaItensAtualizada = itens; 
     dadosExtras.progressoBips = bips; 
 
-    // Salva automaticamente o progresso ao confirmar
     localStorage.setItem(`bips_req_${req.id}`, JSON.stringify(bips));
     localStorage.setItem(`itens_req_${req.id}`, JSON.stringify(itens));
 
@@ -338,7 +329,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             <tbody>
               {itens.map((item, index) => {
                 const infoBip = bips[index] || { contagem: 0, referencia: null };
-                const porcentagem = Math.min((infoBip.contagem / Number(item.quantidade)) * 100, 100);
                 const completo = infoBip.contagem >= Number(item.quantidade);
                 const estaExpandido = linhaExpandida === index;
 
@@ -377,7 +367,8 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
                                 {req.status === 'Em Separação' && !completo && (
                                   <div className="acoes-linha-expandida">
-                                    <button className="btn-acao-expandida btn-acao-camera" onClick={() => setModoExpansao('camera')}>
+                                    {/* BOTAO ATIVA O MODAL OVERLAY */}
+                                    <button className="btn-acao-expandida btn-acao-camera" onClick={() => setItemCameraAtiva(index)}>
                                       📷 Bipar Código
                                     </button>
                                     <button className="btn-acao-expandida btn-acao-editar" onClick={() => setModoExpansao('edicao')}>
@@ -391,38 +382,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                                     Zerar Leitura Deste Item
                                   </button>
                                 )}
-                              </div>
-                            )}
-
-                            {modoExpansao === 'camera' && (
-                              // O RECURSO DE AUTO-SCROLL É ANCORADO AQUI NA div "leitor-container"
-                              <div className="leitor-container" ref={cameraRef}>
-                                <div id={`leitor-camera-${index}`} className="camera-box"></div>
-                                
-                                <div className="info-bipagem">
-                                  <div className="progresso-texto">
-                                    Bipados: {infoBip.contagem} de {item.quantidade}
-                                  </div>
-                                  
-                                  <div className="barra-progresso-bg">
-                                    <div className="barra-progresso-fill" style={{ width: `${porcentagem}%` }}></div>
-                                  </div>
-                                  
-                                  {infoBip.referencia && (
-                                    <span className="codigo-referencia">
-                                      Cód. Referência: <strong>{infoBip.referencia}</strong>
-                                    </span>
-                                  )}
-
-                                  <div className="botoes-camera">
-                                    <button className="btn-resetar-bip" onClick={() => resetarBipagem(index)}>
-                                      Zerar
-                                    </button>
-                                    <button className="btn-fechar-camera" onClick={() => setModoExpansao('resumo')}>
-                                      Ocultar Câmera
-                                    </button>
-                                  </div>
-                                </div>
                               </div>
                             )}
 
@@ -464,6 +423,52 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       <button className="btn-salvar-progresso" onClick={salvarProgresso}>
         💾 Salvar Progresso
       </button>
+
+      {/* --- MODAL OVERLAY DA CÂMERA (TELA CHEIA) --- */}
+      {itemCameraAtiva !== null && (() => {
+        const itemAtivo = itens[itemCameraAtiva];
+        const infoBipAtivo = bips[itemCameraAtiva] || { contagem: 0, referencia: null };
+        const porcentagemAtiva = Math.min((infoBipAtivo.contagem / Number(itemAtivo.quantidade)) * 100, 100);
+
+        return (
+          <div className="camera-modal-overlay">
+            <div className="camera-modal-content">
+              <div className="camera-modal-header">
+                Lendo: {itemAtivo.cod}
+              </div>
+              <div className="camera-modal-body">
+                
+                <div id="leitor-camera-modal" className="camera-box-modal"></div>
+                
+                <div className="info-bipagem">
+                  <div className="progresso-texto">
+                    Bipados: {infoBipAtivo.contagem} de {itemAtivo.quantidade}
+                  </div>
+                  
+                  <div className="barra-progresso-bg">
+                    <div className="barra-progresso-fill" style={{ width: `${porcentagemAtiva}%` }}></div>
+                  </div>
+                  
+                  {infoBipAtivo.referencia && (
+                    <span className="codigo-referencia">
+                      Cód. Referência: <strong>{infoBipAtivo.referencia}</strong>
+                    </span>
+                  )}
+
+                  <div className="botoes-camera">
+                    <button className="btn-resetar-bip" onClick={() => resetarBipagem(itemCameraAtiva)}>
+                      Zerar Leitura
+                    </button>
+                    <button className="btn-fechar-camera" onClick={() => setItemCameraAtiva(null)}>
+                      Fechar Câmera
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
