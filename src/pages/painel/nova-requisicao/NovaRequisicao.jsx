@@ -1,6 +1,23 @@
 import { useState, useRef } from 'react';
 import '../../../styles/pages/painel/nova-requisicao/novaRequisicao.css';
 
+// Função para tratar valores monetários que vêm sujos da base de dados (Ex: "R$ 493,78" ou "493.78")
+const parseValorMoeda = (valorStr) => {
+  if (!valorStr) return 0;
+  if (typeof valorStr === 'number') return valorStr;
+  
+  let limpo = valorStr.toString().replace(/[^\d.,-]/g, '');
+  
+  // Se o número tiver ponto (milhar) e vírgula (decimal), ex: 1.493,78
+  if (limpo.includes('.') && limpo.includes(',')) {
+    limpo = limpo.replace(/\./g, '');
+  }
+  
+  // Troca a vírgula final por ponto para o JavaScript conseguir somar
+  limpo = limpo.replace(',', '.');
+  return Number(limpo) || 0;
+};
+
 export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
   const lojas = [
     'Loja Neta Dantas Araturi (matriz)', 
@@ -11,32 +28,37 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
   const [lojaDe, setLojaDe] = useState(lojas[0]);
   const [lojaPara, setLojaPara] = useState(lojas[1]);
   const [solicitante, setSolicitante] = useState('');
+  
   const [motivo, setMotivo] = useState('');
+  const [motivoOutro, setMotivoOutro] = useState('');
 
   const [codigo, setCodigo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [quantidade, setQuantidade] = useState('');
   const [itensAdicionados, setItensAdicionados] = useState([]);
   
-  // Estados para edição inline
   const [editandoIndex, setEditandoIndex] = useState(null);
   const [novaQuantidadeEdit, setNovaQuantidadeEdit] = useState('');
 
-  // ESTADO DO ALERTA PERSONALIZADO
-  const [alerta, setAlerta] = useState({ visivel: false, tipo: '', titulo: '', mensagem: '', acao: null });
+  const [alerta, setAlerta] = useState({ 
+    visivel: false, 
+    tipo: '', 
+    titulo: '', 
+    mensagem: '', 
+    onConfirm: null, 
+    onCancel: null,
+    textoConfirmar: 'Entendi',
+    textoCancelar: 'Cancelar'
+  });
 
   const inputCodigoRef = useRef(null);
   const inputArquivoRef = useRef(null);
 
-  // FUNÇÃO PARA CHAMAR O ALERTA
-  const mostrarAlerta = (tipo, titulo, mensagem, acao = null) => {
-    setAlerta({ visivel: true, tipo, titulo, mensagem, acao });
+  const mostrarAlerta = (tipo, titulo, mensagem, onConfirm = null, onCancel = null, textoConfirmar = 'Entendi', textoCancelar = 'Cancelar') => {
+    setAlerta({ visivel: true, tipo, titulo, mensagem, onConfirm, onCancel, textoConfirmar, textoCancelar });
   };
 
   const fecharAlerta = () => {
-    if (alerta.acao) {
-      alerta.acao(); // Executa a ação pendente (se houver) ao fechar
-    }
     setAlerta({ ...alerta, visivel: false });
   };
 
@@ -60,24 +82,48 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     const temEstoqueDefinido = produto && produto.quantidade !== undefined && produto.quantidade !== null;
     const estoqueAtual = temEstoqueDefinido ? Number(produto.quantidade.toString().replace(',', '.')) : null;
     const qtdSolicitada = Number(quantidade);
-    
     const isInsuficiente = temEstoqueDefinido && (qtdSolicitada > estoqueAtual);
 
-    if (isInsuficiente) {
-      mostrarAlerta('aviso', 'Atenção ao Estoque', `Você está solicitando ${qtdSolicitada} un, mas o estoque atual na base é de apenas ${estoqueAtual} un!\n\nO item será adicionado em vermelho para revisão.`);
+    // LÓGICA DE CUSTO UNITÁRIO
+    let custoUnit = 0;
+    const campoCustoTotal = produto ? (produto.custo || produto.precoCusto || produto.preco_custo) : null;
+    
+    if (campoCustoTotal && estoqueAtual > 0) {
+      const custoTotalLimpo = parseValorMoeda(campoCustoTotal);
+      custoUnit = custoTotalLimpo / estoqueAtual;
     }
 
-    setItensAdicionados([
-      ...itensAdicionados, 
-      { 
-        cod: codigo, 
-        descricao: descricao || 'Produto não encontrado', 
-        quantidade: qtdSolicitada,
-        estoque: estoqueAtual,
-        insuficiente: isInsuficiente
-      }
-    ]);
-    
+    const itemNovo = { 
+      cod: codigo, 
+      descricao: descricao || 'Produto não encontrado', 
+      quantidade: qtdSolicitada,
+      estoque: estoqueAtual,
+      custoUnitario: custoUnit, // Salva o custo unitário desmembrado
+      insuficiente: isInsuficiente
+    };
+
+    if (isInsuficiente) {
+      mostrarAlerta(
+        'aviso', 
+        'Estoque Insuficiente', 
+        `Você está solicitando ${qtdSolicitada} un, mas o estoque atual na base é de apenas ${estoqueAtual} un!\n\nDeseja adicionar este produto mesmo assim?`,
+        () => { 
+          setItensAdicionados([...itensAdicionados, itemNovo]);
+          setCodigo(''); setDescricao(''); setQuantidade('');
+          if (inputCodigoRef.current) inputCodigoRef.current.focus();
+          fecharAlerta();
+        },
+        () => { 
+          fecharAlerta();
+          if (inputCodigoRef.current) inputCodigoRef.current.focus();
+        },
+        'Sim, Adicionar',
+        'Não, Inserir Novo'
+      );
+      return; 
+    }
+
+    setItensAdicionados([...itensAdicionados, itemNovo]);
     setCodigo(''); setDescricao(''); setQuantidade('');
     if (inputCodigoRef.current) inputCodigoRef.current.focus();
   };
@@ -101,17 +147,46 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     const itensAtualizados = [...itensAdicionados];
     const itemAtual = itensAtualizados[index];
     const novaQtd = Number(novaQuantidadeEdit);
-    
     const isInsuficiente = itemAtual.estoque !== null && novaQtd > itemAtual.estoque;
 
-    itensAtualizados[index] = {
-      ...itemAtual,
-      quantidade: novaQtd,
-      insuficiente: isInsuficiente
-    };
+    if (isInsuficiente) {
+      mostrarAlerta(
+        'aviso', 
+        'Estoque Insuficiente', 
+        `A nova quantidade solicitada (${novaQtd} un) ultrapassa o estoque atual (${itemAtual.estoque} un)!\n\nDeseja salvar a edição mesmo assim?`,
+        () => { 
+          itensAtualizados[index] = { ...itemAtual, quantidade: novaQtd, insuficiente: true };
+          setItensAdicionados(itensAtualizados);
+          cancelarEdicao();
+          fecharAlerta();
+        },
+        () => fecharAlerta(),
+        'Sim, Salvar',
+        'Cancelar'
+      );
+      return; 
+    }
 
+    itensAtualizados[index] = { ...itemAtual, quantidade: novaQtd, insuficiente: false };
     setItensAdicionados(itensAtualizados);
     cancelarEdicao();
+  };
+
+  const removerDaLista = (index) => {
+    mostrarAlerta(
+      'aviso',
+      'Remover Produto',
+      'Tem certeza que deseja excluir este item da requisição?',
+      () => {
+        const novaLista = [...itensAdicionados];
+        novaLista.splice(index, 1);
+        setItensAdicionados(novaLista);
+        fecharAlerta();
+      },
+      () => fecharAlerta(),
+      'Sim, Excluir',
+      'Cancelar'
+    );
   };
 
   const handleImportarCSV = (e) => {
@@ -126,9 +201,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
 
       linhas.forEach((linha, index) => {
         if (!linha.trim()) return;
-
         const colunas = linha.split(/,|;/); 
-
         if (colunas.length >= 2) {
           const codFormatado = colunas[0].trim();
           const qtdFormatada = colunas[1].trim();
@@ -137,17 +210,25 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
 
           const produto = baseProdutos.find((p) => p.codigo === codFormatado);
           const descFinal = produto ? produto.descricao : 'Produto não encontrado';
-          
           const temEstoqueDefinido = produto && produto.quantidade !== undefined && produto.quantidade !== null;
           const estoqueAtual = temEstoqueDefinido ? Number(produto.quantidade.toString().replace(',', '.')) : null;
           const qtdSolicitada = Number(qtdFormatada);
           const isInsuficiente = temEstoqueDefinido && (qtdSolicitada > estoqueAtual);
+
+          // CÁLCULO DE CUSTO UNITÁRIO NA IMPORTAÇÃO
+          let custoUnit = 0;
+          const campoCustoTotal = produto ? (produto.custo || produto.precoCusto || produto.preco_custo) : null;
+          if (campoCustoTotal && estoqueAtual > 0) {
+            const custoTotalLimpo = parseValorMoeda(campoCustoTotal);
+            custoUnit = custoTotalLimpo / estoqueAtual;
+          }
 
           novosItens.push({
             cod: codFormatado,
             descricao: descFinal,
             quantidade: qtdSolicitada,
             estoque: estoqueAtual,
+            custoUnitario: custoUnit,
             insuficiente: isInsuficiente
           });
         }
@@ -155,7 +236,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
 
       if (novosItens.length > 0) {
         setItensAdicionados(prev => [...prev, ...novosItens]);
-        
         const qtdAlertas = novosItens.filter(item => item.insuficiente).length;
         if (qtdAlertas > 0) {
           mostrarAlerta('aviso', 'Importação Parcial', `${novosItens.length} produtos importados.\n\nATENÇÃO: ${qtdAlertas} produto(s) excedem o estoque atual e foram marcados em vermelho na lista.`);
@@ -165,10 +245,8 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
       } else {
         mostrarAlerta('erro', 'Falha na Importação', 'Nenhum produto válido encontrado no arquivo.\n\nLembre-se: O formato do CSV deve ser:\nCódigo;Quantidade');
       }
-      
       e.target.value = null; 
     };
-    
     reader.readAsText(file);
   };
 
@@ -177,18 +255,32 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
       mostrarAlerta('erro', 'Campo Obrigatório', 'Preencha o nome do Solicitante antes de prosseguir.'); 
       return; 
     }
-    if (!motivo.trim()) { 
-      mostrarAlerta('erro', 'Campo Obrigatório', 'Preencha o motivo da transferência antes de prosseguir.'); 
+
+    let motivoFinal = motivo;
+    if (!motivo) { 
+      mostrarAlerta('erro', 'Campo Obrigatório', 'Selecione o motivo da transferência antes de prosseguir.'); 
       return; 
     }
+    if (motivo === 'Outros') {
+      if (!motivoOutro.trim()) {
+        mostrarAlerta('erro', 'Campo Obrigatório', 'Você selecionou "Outros". Por favor, especifique o motivo escrevendo na caixa abaixo.'); 
+        return; 
+      }
+      motivoFinal = motivoOutro;
+    }
+
     if (itensAdicionados.length === 0) { 
       mostrarAlerta('erro', 'Lista Vazia', 'Adicione pelo menos um produto na lista antes de gravar a requisição.'); 
       return; 
     }
 
-    const temErroDeEstoque = itensAdicionados.some(item => item.insuficiente);
-    if (temErroDeEstoque) {
-      mostrarAlerta('erro', 'Estoque Insuficiente', 'Existem produtos solicitados com quantidades superiores ao que há na base de dados.\n\nSolicite a alteração da base de dados do sistema ou edite a quantidade em vermelho para continuar.');
+    const itensComProblema = itensAdicionados.filter(item => item.insuficiente);
+    if (itensComProblema.length > 0) {
+      mostrarAlerta(
+        'erro', 
+        'Estoque Insuficiente', 
+        `Você não pode salvar a requisição com produtos excedendo o estoque disponível.\n\nExistem ${itensComProblema.length} item(ns) destacado(s) em vermelho. Por favor, clique no ícone do lápis (✏️) para ajustar ou na lixeira (🗑️) para remover o item.`
+      );
       return; 
     }
 
@@ -197,18 +289,23 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
       data: new Date().toLocaleDateString('pt-BR'),
       destino: lojaPara,
       solicitante: solicitante,
-      motivo: motivo,
+      motivo: motivoFinal,
       itens: itensAdicionados.length,
       status: 'Pendente',
       listaItens: itensAdicionados,
       historico: {} 
     };
 
-    // Alerta de sucesso que, ao ser fechado, salva e muda a tela
     mostrarAlerta('sucesso', 'Requisição Concluída!', 'A requisição foi gravada e já está disponível no painel.', () => {
+      fecharAlerta();
       aoSalvar(novaRequisicao);
     });
   };
+
+  // CÁLCULO DINÂMICO DO VALOR TOTAL DA REQUISIÇÃO
+  const valorTotalRequisicao = itensAdicionados.reduce((total, item) => {
+    return total + ((item.custoUnitario || 0) * item.quantidade);
+  }, 0);
 
   return (
     <div className="nova-req-container">
@@ -228,14 +325,14 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
 
           <div className="linha-dupla">
             <div className="campo-loja">
-              <label>Loja Solicitante (De):</label>
+              <label>Loja Atendente (De):</label>
               <select value={lojaDe} onChange={(e) => setLojaDe(e.target.value)}>
                 {lojas.map(loja => <option key={`de-${loja}`} value={loja}>{loja}</option>)}
               </select>
             </div>
             
             <div className="campo-loja">
-              <label>Loja Atendente (Para):</label>
+              <label>Loja Solicitante (Para):</label>
               <select value={lojaPara} onChange={(e) => setLojaPara(e.target.value)}>
                 {lojas.map(loja => <option key={`para-${loja}`} value={loja}>{loja}</option>)}
               </select>
@@ -244,13 +341,24 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
 
           <div className="campo-loja">
             <label>Motivo da Transferência:</label>
-            <input 
-              type="text" 
-              className="input-item" 
-              placeholder="Ex: Reposição de estoque, Transferência de mostruário, Pedido especial..." 
-              value={motivo} 
-              onChange={(e) => setMotivo(e.target.value)} 
-            />
+            <select className="input-item" value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+              <option value="">Selecione um motivo...</option>
+              <option value="Reposição de estoque">Reposição de estoque</option>
+              <option value="Produtos para provadores">Produtos para provadores</option>
+              <option value="Rota para clientes">Rota para clientes</option>
+              <option value="Outros">Outros (Especificar)</option>
+            </select>
+            
+            {motivo === 'Outros' && (
+              <input 
+                type="text" 
+                className="input-item" 
+                style={{ marginTop: '5px' }}
+                placeholder="Especifique o motivo da requisição..." 
+                value={motivoOutro} 
+                onChange={(e) => setMotivoOutro(e.target.value)} 
+              />
+            )}
           </div>
           
         </div>
@@ -292,60 +400,81 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
         </div>
 
         {itensAdicionados.length > 0 && (
-          <div className="tabela-wrapper">
-            <table className="tabela-itens">
-              <thead>
-                <tr>
-                  <th>Cód. Produto</th>
-                  <th>Descrição</th>
-                  <th>Qtd. Solicitada</th>
-                </tr>
-              </thead>
-              <tbody>
-                {itensAdicionados.map((item, index) => (
-                  <tr key={index} className={item.insuficiente ? 'linha-alerta-estoque' : ''}>
-                    <td><strong>{item.cod}</strong></td>
-                    <td className={item.descricao === 'Produto não encontrado' ? 'texto-erro' : ''}>
-                      {item.descricao}
-                      
-                      {item.insuficiente && item.descricao !== 'Produto não encontrado' && (
-                        <div>
-                          <span className="badge-estoque">
-                            Estoque atual: {item.estoque} un
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      {editandoIndex === index ? (
-                        <div className="edicao-container-nova">
-                          <input 
-                            type="number" 
-                            className="input-qtd-edit-nova" 
-                            value={novaQuantidadeEdit} 
-                            onChange={(e) => setNovaQuantidadeEdit(e.target.value)} 
-                          />
-                          <button className="btn-acao-edit-nova" onClick={() => salvarEdicao(index)} title="Salvar">✔️</button>
-                          <button className="btn-acao-edit-nova" onClick={cancelarEdicao} title="Cancelar">❌</button>
-                        </div>
-                      ) : (
-                        <div className="quantidade-container-nova">
-                          <strong>{item.quantidade} un</strong>
-                          <button 
-                            className="btn-editar-item-nova" 
-                            onClick={() => iniciarEdicao(index, item.quantidade)}
-                            title="Editar quantidade"
-                          >
-                            ✏️
-                          </button>
-                        </div>
-                      )}
-                    </td>
+          <>
+            <div className="tabela-wrapper">
+              <table className="tabela-itens">
+                <thead>
+                  <tr>
+                    <th>Cód. Produto</th>
+                    <th>Descrição</th>
+                    <th>Qtd. Solicitada</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {itensAdicionados.map((item, index) => (
+                    <tr key={index} className={item.insuficiente ? 'linha-alerta-estoque' : ''}>
+                      <td><strong>{item.cod}</strong></td>
+                      <td className={item.descricao === 'Produto não encontrado' ? 'texto-erro' : ''}>
+                        {item.descricao}
+                        
+                        {item.insuficiente && item.descricao !== 'Produto não encontrado' && (
+                          <div>
+                            <span className="badge-estoque">
+                              Estoque atual: {item.estoque} un
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {editandoIndex === index ? (
+                          <div className="edicao-container-nova">
+                            <input 
+                              type="number" 
+                              className="input-qtd-edit-nova" 
+                              value={novaQuantidadeEdit} 
+                              onChange={(e) => setNovaQuantidadeEdit(e.target.value)} 
+                            />
+                            <button className="btn-acao-edit-nova" onClick={() => salvarEdicao(index)} title="Salvar">✔️</button>
+                            <button className="btn-acao-edit-nova" onClick={cancelarEdicao} title="Cancelar">❌</button>
+                          </div>
+                        ) : (
+                          <div className="quantidade-container-nova">
+                            <strong>{item.quantidade} un</strong>
+                            
+                            <button 
+                              className="btn-editar-item-nova" 
+                              onClick={() => iniciarEdicao(index, item.quantidade)}
+                              title="Editar quantidade"
+                            >
+                              ✏️
+                            </button>
+                            <button 
+                              className="btn-remover-item-nova" 
+                              onClick={() => removerDaLista(index)}
+                              title="Remover item"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* NOVO: PAINEL DE RESUMO DE VALORES */}
+            <div className="resumo-valores">
+              <div className="resumo-valores-texto">
+                <strong>Atenção:</strong> Esta transferência movimenta produtos físicos. 
+                O valor total estimado (a preço de custo) desta operação é de:
+              </div>
+              <div className="resumo-valores-total">
+                {valorTotalRequisicao.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </div>
+            </div>
+          </>
         )}
         
         <div className="rodape-formulario">
@@ -353,7 +482,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
         </div>
       </div>
 
-      {/* --- RENDERIZAÇÃO DO MODAL DE ALERTA --- */}
       {alerta.visivel && (
         <div className="alerta-modal-overlay">
           <div className="alerta-modal-box">
@@ -366,7 +494,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
             </div>
 
             <div className="alerta-modal-body">
-              {/* O map ajuda a pular linha caso enviemos o texto com "\n" */}
               {alerta.mensagem.split('\n').map((linha, i) => (
                 <span key={i}>
                   {linha}
@@ -376,8 +503,20 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
             </div>
 
             <div className="alerta-modal-footer">
-              <button className="btn-fechar-alerta" onClick={fecharAlerta}>
-                Entendi
+              {alerta.onCancel && (
+                <button className="btn-alerta btn-alerta-cancelar" onClick={alerta.onCancel}>
+                  {alerta.textoCancelar}
+                </button>
+              )}
+              
+              <button 
+                className={`btn-alerta btn-alerta-confirmar tipo-${alerta.tipo}`} 
+                onClick={() => {
+                  if (alerta.onConfirm) alerta.onConfirm();
+                  else fecharAlerta();
+                }}
+              >
+                {alerta.textoConfirmar}
               </button>
             </div>
             

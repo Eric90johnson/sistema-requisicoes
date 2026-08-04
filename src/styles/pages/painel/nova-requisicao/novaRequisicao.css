@@ -36,7 +36,7 @@
   margin-bottom: 20px;
 }
 
-/* --- NOVA ESTRUTURA DO FORMULÁRIO (Lado a Lado e Espaçado) --- */
+/* --- NOVA ESTRUTURA DO FORMULÁRIO --- */
 .form-secao {
   display: flex;
   flex-direction: column;
@@ -82,15 +82,12 @@
   cursor: not-allowed;
 }
 
-/* Responsividade do Formulário */
 @media (max-width: 768px) {
   .linha-dupla {
     flex-direction: column;
     gap: 25px;
   }
 }
-/* ----------------------------------------------------------- */
-
 
 /* --- INSERÇÃO E IMPORTAÇÃO --- */
 .cabecalho-insercao {
@@ -178,7 +175,6 @@
   color: #e74c3c;
 }
 
-/* --- ALERTA DE ESTOQUE --- */
 .linha-alerta-estoque {
   background-color: #fdedec; 
 }
@@ -198,14 +194,14 @@
   font-weight: bold;
 }
 
-/* --- EDIÇÃO DE ITENS (NOVA REQUISIÇÃO) --- */
+/* --- EDIÇÃO E EXCLUSÃO DE ITENS --- */
 .quantidade-container-nova {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
 }
 
-.btn-editar-item-nova {
+.btn-editar-item-nova, .btn-remover-item-nova {
   background: none;
   border: none;
   cursor: pointer;
@@ -216,7 +212,7 @@
   justify-content: center;
 }
 
-.btn-editar-item-nova:hover {
+.btn-editar-item-nova:hover, .btn-remover-item-nova:hover {
   transform: scale(1.2);
 }
 
@@ -250,23 +246,76 @@
   transform: scale(1.2);
 }
 
+/* --- RESUMO DE VALORES FINANCEIROS --- */
+.resumo-valores {
+  background-color: #fff9f0;
+  border: 1px solid #fce8cc;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 25px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-left: 5px solid #f39c12;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.resumo-valores-texto {
+  font-size: 0.95rem;
+  color: #7f8c8d;
+  max-width: 65%;
+  line-height: 1.5;
+}
+
+.resumo-valores-texto strong {
+  color: #d35400;
+}
+
+.resumo-valores-total {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #27ae60;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .resumo-valores {
+    flex-direction: column;
+    gap: 15px;
+    align-items: flex-start;
+  }
+  .resumo-valores-texto {
+    max-width: 100%;
+  }
+  .resumo-valores-total {
+    width: 100%;
+    text-align: left;
+  }
+}
+
 /* --- RODAPÉ DO FORMULÁRIO (BOTAO GRAVAR) --- */
 .rodape-formulario {
   display: flex;
   justify-content: flex-end;
-  margin-top: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
 }
 
 .btn-salvar {
   background-color: #27ae60;
   color: white;
   border: none;
-  padding: 12px 30px;
+  padding: 14px 40px;
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
-  font-size: 1rem;
+  font-size: 1.1rem;
+  box-shadow: 0 4px 6px rgba(39, 174, 96, 0.2);
+  transition: transform 0.1s;
 }
+
+.btn-salvar:active { transform: scale(0.98); }
 
 
 /* --- MODAL DE ALERTA PERSONALIZADO --- */
@@ -324,23 +373,33 @@
   background-color: #f9f9f9;
   display: flex;
   justify-content: center;
+  gap: 10px;
   border-top: 1px solid #eee;
 }
 
-.btn-fechar-alerta {
-  padding: 10px 40px;
-  background-color: var(--cor-secundaria);
-  color: white;
+.btn-alerta {
+  padding: 10px 20px;
   border: none;
   border-radius: 6px;
   font-weight: bold;
   font-size: 1rem;
   cursor: pointer;
-  transition: transform 0.1s, background-color 0.2s;
+  transition: transform 0.1s, filter 0.2s;
+  flex: 1;
 }
 
-.btn-fechar-alerta:hover { background-color: #6a2a85; }
-.btn-fechar-alerta:active { transform: scale(0.95); }
+.btn-alerta:hover { filter: brightness(0.9); }
+.btn-alerta:active { transform: scale(0.95); }
+
+.btn-alerta-cancelar {
+  background-color: #e0e0e0;
+  color: #333;
+}
+
+.btn-alerta-confirmar { background-color: var(--cor-secundaria); color: white; }
+.btn-alerta-confirmar.tipo-erro { background-color: #e74c3c; }
+.btn-alerta-confirmar.tipo-sucesso { background-color: #27ae60; }
+.btn-alerta-confirmar.tipo-aviso { background-color: #f39c12; }
 
 @keyframes fadeIn {
   from { opacity: 0; }
