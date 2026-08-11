@@ -4,8 +4,73 @@
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
-  overflow-x: auto;
 }
+
+/* --- NOVO: SISTEMA DE ABAS --- */
+.abas-container {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #eeeeee;
+  padding-bottom: 5px;
+  overflow-x: auto; /* Permite rolar no celular se faltar espaço */
+  scrollbar-width: none; /* Esconde a barra de rolagem no Firefox */
+}
+
+.abas-container::-webkit-scrollbar {
+  display: none; /* Esconde a barra de rolagem no Chrome/Safari */
+}
+
+.aba-btn {
+  background: none;
+  border: none;
+  padding: 10px 25px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #7f8c8d;
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.aba-btn:hover {
+  color: var(--cor-primaria);
+  background-color: #f9f5fb;
+}
+
+.aba-btn.ativa {
+  color: var(--cor-secundaria);
+  background-color: #e8dff0;
+  border-bottom: 3px solid var(--cor-secundaria);
+}
+
+/* --- NOVO: ALERTA PISCANTE --- */
+@keyframes piscar {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+  50% { transform: scale(1.1); box-shadow: 0 0 10px 5px rgba(231, 76, 60, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+}
+
+.alerta-pisca {
+  background-color: #e74c3c;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: bold;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  animation: piscar 1.5s infinite;
+}
+
+/* -------------------------------- */
 
 .painel-header {
   display: flex;
@@ -26,23 +91,43 @@
 }
 
 .btn-nova-req:hover {
-  background-color: #6a2a85; /* Lilás ainda mais escuro no hover */
+  background-color: #6a2a85; 
+}
+
+/* Botão Azul para o Marketplace */
+.btn-novo-pedido {
+  background-color: #2980b9;
+}
+.btn-novo-pedido:hover {
+  background-color: #1c5980;
+}
+
+/* Envolve a tabela para permitir rolagem horizontal sem quebrar a tela */
+.tabela-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .tabela-requisicoes {
   width: 100%;
+  min-width: 800px; /* Garante que a tabela não esmague em telas pequenas */
   border-collapse: collapse;
   background-color: var(--cor-branca);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  border-radius: 8px;
-  overflow: hidden;
 }
 
 .tabela-requisicoes th {
-  background-color: #e8dff0; /* Lilás bem clarinho para o cabeçalho da tabela */
+  background-color: #e8dff0; 
   padding: 15px;
   text-align: left;
   color: var(--cor-secundaria);
+}
+
+/* Cor do cabeçalho da tabela do marketplace para diferenciar */
+.tabela-marketplace th {
+  background-color: #eaf2f8; 
+  color: #2980b9;
 }
 
 .tabela-requisicoes td {
@@ -71,21 +156,22 @@
 .status-recebido { background-color: #d4edda; color: #155724; }
 
 .linha-tabela-hover:hover { background-color: #f9f5fb; }
+.tabela-marketplace .linha-tabela-hover:hover { background-color: #f4f9fc; } /* Hover azulado para o marketplace */
 
 /* --- RESPONSIVIDADE PAINEL --- */
 @media (max-width: 768px) {
   .painel-container {
-    padding: 15px; /* Reduz as margens laterais */
+    padding: 15px; 
   }
   
   .painel-header {
-    flex-direction: column; /* Empilha o título e o botão */
+    flex-direction: column; 
     align-items: flex-start;
     gap: 15px;
   }
   
   .btn-nova-req {
-    width: 100%; /* Botão largo para facilitar o clique com o dedo */
+    width: 100%; 
     text-align: center;
   }
 }

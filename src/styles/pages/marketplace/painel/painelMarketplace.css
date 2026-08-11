@@ -1,0 +1,29 @@
+.painel-marketplace-container {
+  width: 100%;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Cor do cabeçalho da tabela do marketplace para diferenciar (Azul) */
+.tabela-marketplace th {
+  background-color: #eaf2f8 !important; 
+  color: #2980b9 !important;
+}
+
+/* Efeito de passar o mouse na linha (Azul bem claro) */
+.tabela-marketplace .linha-tabela-hover:hover { 
+  background-color: #f4f9fc !important; 
+}
+
+/* Botão Azul para inserir pedidos no Marketplace */
+.btn-novo-pedido {
+  background-color: #2980b9 !important;
+}
+
+.btn-novo-pedido:hover {
+  background-color: #1c5980 !important;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}

@@ -1,19 +1,50 @@
 import Rodape from './components/rodape/Rodape';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './styles/global.css';
 import Painel from './pages/painel/Painel';
 import NovaRequisicao from './pages/painel/nova-requisicao/NovaRequisicao';
 import DetalhesRequisicao from './pages/painel/detalhes/DetalhesRequisicao';
 import BaseDados from './pages/base-dados/BaseDados';
-import Historico from './pages/historico/Historico'; // <-- Importamos a nova tela
+import Historico from './pages/historico/Historico'; 
 import Menu from './components/menu/Menu';
+import InserirPedido from './pages/marketplace/inserir-pedido/InserirPedido';
 
 function App() {
   const [telaAtual, setTelaAtual] = useState('painel');
-  const [baseProdutos, setBaseProdutos] = useState([]);
   const [reqSelecionada, setReqSelecionada] = useState(null);
-  const [requisicoes, setRequisicoes] = useState([]);
 
+  // --- LÓGICA DE LOCALSTORAGE (Cache do Navegador) ---
+  // Tenta puxar os dados salvos; se não tiver, começa vazio.
+  const [baseProdutos, setBaseProdutos] = useState(() => {
+    const salvo = localStorage.getItem('estoqueBaseProdutos');
+    return salvo ? JSON.parse(salvo) : [];
+  });
+
+  const [requisicoes, setRequisicoes] = useState(() => {
+    const salvo = localStorage.getItem('estoqueRequisicoes');
+    return salvo ? JSON.parse(salvo) : [];
+  });
+
+  const [pedidosMarketplace, setPedidosMarketplace] = useState(() => {
+    const salvo = localStorage.getItem('estoquePedidosMarketplace');
+    return salvo ? JSON.parse(salvo) : [];
+  });
+
+  // Sempre que as listas mudarem, salva automaticamente no LocalStorage
+  useEffect(() => {
+    localStorage.setItem('estoqueBaseProdutos', JSON.stringify(baseProdutos));
+  }, [baseProdutos]);
+
+  useEffect(() => {
+    localStorage.setItem('estoqueRequisicoes', JSON.stringify(requisicoes));
+  }, [requisicoes]);
+
+  useEffect(() => {
+    localStorage.setItem('estoquePedidosMarketplace', JSON.stringify(pedidosMarketplace));
+  }, [pedidosMarketplace]);
+  // --------------------------------------------------
+
+  // --- LÓGICA DE TRANSFERÊNCIAS INTERNAS ---
   const handleSalvarRequisicao = (novaReq) => {
     setRequisicoes([novaReq, ...requisicoes]);
     setTelaAtual('painel');
@@ -44,7 +75,6 @@ function App() {
       }
       return req;
     });
-    
     setRequisicoes(listaAtualizada);
     
     const reqAtualizada = listaAtualizada.find(r => r.id === id);
@@ -56,12 +86,17 @@ function App() {
     setTelaAtual('detalhes');
   };
 
+  // --- LÓGICA DO MARKETPLACE ---
+  const handleSalvarPedidosMarketplace = (novosPedidos) => {
+    setPedidosMarketplace([...novosPedidos, ...pedidosMarketplace]);
+    setTelaAtual('painel');
+  };
+
   return (
     <div className="layout-container">
       <header className="cabecalho-global">
         <div className="espaco-logo">Logo</div>
         <h1 className="titulo-cabecalho">Painel de Requisição Interna de Produtos</h1>
-        {/* Adicionamos as 3 rotas no Menu */}
         <Menu 
           aoClicarPainel={() => setTelaAtual('painel')}
           aoClicarHistorico={() => setTelaAtual('historico')}
@@ -71,7 +106,13 @@ function App() {
 
       <main>
         {telaAtual === 'painel' && (
-          <Painel aoClicarNovo={() => setTelaAtual('nova')} requisicoes={requisicoes} aoAbrirDetalhes={abrirDetalhes} />
+          <Painel 
+            aoClicarNovo={() => setTelaAtual('nova')} 
+            aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')}
+            requisicoes={requisicoes} 
+            pedidosMarketplace={pedidosMarketplace}
+            aoAbrirDetalhes={abrirDetalhes} 
+          />
         )}
         
         {telaAtual === 'nova' && (
@@ -87,7 +128,14 @@ function App() {
           />
         )}
 
-        {/* NOVA TELA DE HISTÓRICO */}
+        {telaAtual === 'inserir-marketplace' && (
+          <InserirPedido 
+            aoVoltar={() => setTelaAtual('painel')} 
+            baseProdutos={baseProdutos} 
+            aoSalvar={handleSalvarPedidosMarketplace} 
+          />
+        )}
+
         {telaAtual === 'historico' && (
           <Historico 
             requisicoes={requisicoes} 
@@ -100,7 +148,6 @@ function App() {
         )}
       </main>
 
-      {/* RODAPÉ GLOBAL INSERIDO AQUI */}
       <Rodape />
       
     </div>
