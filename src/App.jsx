@@ -28,19 +28,17 @@ function App() {
     return salvo ? JSON.parse(salvo) : [];
   });
 
-  useEffect(() => {
-    localStorage.setItem('estoqueBaseProdutos', JSON.stringify(baseProdutos));
-  }, [baseProdutos]);
+  // --- NOVO: BANCO DE RECORDES GLOBAL ---
+  const [recordesGlobais, setRecordesGlobais] = useState(() => {
+    const salvo = localStorage.getItem('estoqueRecordesGlobais');
+    return salvo ? JSON.parse(salvo) : {};
+  });
 
-  useEffect(() => {
-    localStorage.setItem('estoqueRequisicoes', JSON.stringify(requisicoes));
-  }, [requisicoes]);
+  useEffect(() => { localStorage.setItem('estoqueBaseProdutos', JSON.stringify(baseProdutos)); }, [baseProdutos]);
+  useEffect(() => { localStorage.setItem('estoqueRequisicoes', JSON.stringify(requisicoes)); }, [requisicoes]);
+  useEffect(() => { localStorage.setItem('estoquePedidosMarketplace', JSON.stringify(pedidosMarketplace)); }, [pedidosMarketplace]);
+  useEffect(() => { localStorage.setItem('estoqueRecordesGlobais', JSON.stringify(recordesGlobais)); }, [recordesGlobais]);
 
-  useEffect(() => {
-    localStorage.setItem('estoquePedidosMarketplace', JSON.stringify(pedidosMarketplace));
-  }, [pedidosMarketplace]);
-
-  // --- LÓGICA DE TRANSFERÊNCIAS INTERNAS ---
   const handleSalvarRequisicao = (novaReq) => {
     setRequisicoes([novaReq, ...requisicoes]);
     setTelaAtual('painel');
@@ -59,33 +57,22 @@ function App() {
       return req;
     });
     setRequisicoes(listaAtualizada);
-    
     const reqAtualizada = listaAtualizada.find(r => r.id === id);
     setReqSelecionada(reqAtualizada);
   };
 
-  // NOVO: Função para adicionar ajudante na mesma etapa
   const handleAdicionarResponsavel = (id, novoResponsavel) => {
     const listaAtualizada = requisicoes.map(req => {
       if (req.id === id) {
         const statusAtual = req.status; 
         const responsavelAtual = req.historico && req.historico[statusAtual] ? req.historico[statusAtual] : '';
-        
-        // Evita duplicar o mesmo nome caso a pessoa clique duas vezes
         if (responsavelAtual.includes(novoResponsavel)) return req;
-
-        // Concatena os nomes
         const responsavelConcatenado = responsavelAtual ? `${responsavelAtual} + ${novoResponsavel}` : novoResponsavel;
-
-        return { 
-          ...req, 
-          historico: { ...req.historico, [statusAtual]: responsavelConcatenado }
-        };
+        return { ...req, historico: { ...req.historico, [statusAtual]: responsavelConcatenado } };
       }
       return req;
     });
     setRequisicoes(listaAtualizada);
-    
     const reqAtualizada = listaAtualizada.find(r => r.id === id);
     setReqSelecionada(reqAtualizada);
   };
@@ -98,9 +85,56 @@ function App() {
       return req;
     });
     setRequisicoes(listaAtualizada);
-    
     const reqAtualizada = listaAtualizada.find(r => r.id === id);
     setReqSelecionada(reqAtualizada);
+  };
+
+  // --- NOVO: FUNÇÃO PARA REGISTRAR O FIM DA SEPARAÇÃO (TEMPO E EFICIÊNCIA) ---
+  const handleFinalizarSeparacao = (id, tempoSegundos, responsavelSeparacao) => {
+    const listaAtualizada = requisicoes.map(req => {
+      if (req.id === id) {
+        // Cálculo do Índice de Eficiência: Consideramos que o tempo ideal é de 12 segundos por item físico total.
+        const totalItensFisicos = req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0);
+        const tempoSlaEsperado = totalItensFisicos * 12; // Ex: 100 itens = 1200 segundos (20 min)
+        
+        let percentualEficiencia = 0;
+        if (tempoSegundos > 0) {
+          // Se o SLA era 1200 e ele fez em 900 -> (1200 / 900) * 100 = 133% (-100 = +33% de eficiência)
+          percentualEficiencia = Math.round(((tempoSlaEsperado / tempoSegundos) * 100) - 100);
+        }
+
+        // Verifica e atualiza o recorde para essa quantidade EXATA de itens
+        const chaveRecorde = `qtd_${totalItensFisicos}`;
+        const recordeAtual = recordesGlobais[chaveRecorde];
+        let bateuRecorde = false;
+
+        if (!recordeAtual || tempoSegundos < recordeAtual.tempoSegundos) {
+          bateuRecorde = true;
+          setRecordesGlobais(prev => ({
+            ...prev,
+            [chaveRecorde]: { tempoSegundos: tempoSegundos, responsavel: responsavelSeparacao, data: new Date().toLocaleDateString() }
+          }));
+        }
+
+        return { 
+          ...req, 
+          metricasSeparacao: {
+            tempoTotalSegundos: tempoSegundos,
+            eficienciaPercentual: percentualEficiencia,
+            bateuRecorde: bateuRecorde,
+            responsavel: responsavelSeparacao,
+            finalizadoEm: new Date().toISOString()
+          }
+        };
+      }
+      return req;
+    });
+    setRequisicoes(listaAtualizada);
+    const reqAtualizada = listaAtualizada.find(r => r.id === id);
+    setReqSelecionada(reqAtualizada);
+    
+    // Retorna os dados para disparar o popup de festa na tela de detalhes
+    return listaAtualizada.find(r => r.id === id).metricasSeparacao;
   };
 
   const abrirDetalhes = (req) => {
@@ -108,7 +142,6 @@ function App() {
     setTelaAtual('detalhes');
   };
 
-  // --- LÓGICA DO MARKETPLACE ---
   const handleSalvarPedidosMarketplace = (novosPedidos) => {
     setPedidosMarketplace([...novosPedidos, ...pedidosMarketplace]);
     setTelaAtual('painel');
@@ -125,7 +158,6 @@ function App() {
           aoClicarBaseDados={() => setTelaAtual('base-dados')} 
         />
       </header>
-
       <main>
         {telaAtual === 'painel' && (
           <Painel 
@@ -136,43 +168,23 @@ function App() {
             aoAbrirDetalhes={abrirDetalhes} 
           />
         )}
-        
-        {telaAtual === 'nova' && (
-          <NovaRequisicao aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} />
-        )}
-
+        {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} />}
         {telaAtual === 'detalhes' && (
           <DetalhesRequisicao 
             req={reqSelecionada} 
             aoVoltar={() => setTelaAtual('painel')} 
             aoMudarStatus={handleAlterarStatus} 
             aoAtualizarItens={handleAtualizarItens}
-            aoAdicionarResponsavel={handleAdicionarResponsavel} // Passando a nova função
+            aoAdicionarResponsavel={handleAdicionarResponsavel}
+            aoFinalizarSeparacao={handleFinalizarSeparacao} // Passando a prop do game
+            recordesGlobais={recordesGlobais}
           />
         )}
-
-        {telaAtual === 'inserir-marketplace' && (
-          <InserirPedido 
-            aoVoltar={() => setTelaAtual('painel')} 
-            baseProdutos={baseProdutos} 
-            aoSalvar={handleSalvarPedidosMarketplace} 
-          />
-        )}
-
-        {telaAtual === 'historico' && (
-          <Historico 
-            requisicoes={requisicoes} 
-            aoVoltar={() => setTelaAtual('painel')} 
-          />
-        )}
-
-        {telaAtual === 'base-dados' && (
-          <BaseDados aoVoltar={() => setTelaAtual('painel')} produtos={baseProdutos} setProdutos={setBaseProdutos} />
-        )}
+        {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
+        {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
+        {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => setTelaAtual('painel')} produtos={baseProdutos} setProdutos={setBaseProdutos} />}
       </main>
-
       <Rodape />
-      
     </div>
   );
 }
