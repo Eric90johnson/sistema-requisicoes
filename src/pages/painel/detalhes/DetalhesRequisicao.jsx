@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import '../../../styles/pages/painel/detalhes/detalhes.css';
 
-export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtualizarItens }) {
+export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel }) {
   if (!req) return null;
 
   const [novoStatus, setNovoStatus] = useState(req.status);
@@ -10,7 +10,9 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [numReqExterna, setNumReqExterna] = useState('');
   const [notaFiscal, setNotaFiscal] = useState('');
 
-  // INICIALIZA OS ITENS E OS BIPS BUSCANDO DA MEMÓRIA LOCAL
+  const [nomeAssumir, setNomeAssumir] = useState('');
+  const [modoAssumir, setModoAssumir] = useState(false);
+
   const [itens, setItens] = useState(() => {
     const itensSalvos = localStorage.getItem(`itens_req_${req.id}`);
     return itensSalvos ? JSON.parse(itensSalvos) : (req.listaItens || []);
@@ -21,38 +23,31 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     return bipsSalvos ? JSON.parse(bipsSalvos) : {};
   }); 
 
-  // Referência para garantir acesso aos dados mais recentes sem conflito de renderização
   const bipsRef = useRef(bips);
   useEffect(() => {
     bipsRef.current = bips;
   }, [bips]);
 
-  // ESTADOS DE INTERAÇÃO DA LINHA
   const [linhaExpandida, setLinhaExpandida] = useState(null);
-  const [modoExpansao, setModoExpansao] = useState('resumo'); // Pode ser: 'resumo' ou 'edicao'
+  const [modoExpansao, setModoExpansao] = useState('resumo'); 
   
-  // ESTADO DO MODAL DA CÂMERA (TELA CHEIA)
   const [itemCameraAtiva, setItemCameraAtiva] = useState(null);
 
-  // ESTADOS DE EDIÇÃO MANUAL
   const [novaQuantidade, setNovaQuantidade] = useState('');
   const [motivoAlteracao, setMotivoAlteracao] = useState('');
 
-  // ESTADO DO POPUP CUSTOMIZADO
   const [popupCustom, setPopupCustom] = useState({
     visivel: false,
-    tipo: 'info', // 'sucesso', 'erro', 'aviso'
+    tipo: 'info', 
     titulo: '',
     mensagem: '',
     onConfirm: null,
     onCancel: null
   });
 
-  // REFERÊNCIAS DE TEMPO
   const ultimoBipTempo = useRef(0);
   const ultimoBipTexto = useRef("");
 
-  // FUNÇÕES AUXILIARES DO POPUP CUSTOMIZADO
   const exibirPopup = (tipo, titulo, mensagem, onConfirm = null, onCancel = null) => {
     setPopupCustom({ visivel: true, tipo, titulo, mensagem, onConfirm, onCancel });
   };
@@ -61,7 +56,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     setPopupCustom({ ...popupCustom, visivel: false });
   };
 
-  // FUNÇÕES DE ÁUDIO NATIVO (Beep)
   const tocarBipSucesso = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -86,7 +80,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     } catch(e) {}
   };
 
-  // INICIALIZAÇÃO DA CÂMERA NO MODAL
   useEffect(() => {
     let scanner = null;
 
@@ -106,7 +99,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
           processarBipagem(itemCameraAtiva, decodedText);
         },
-        (err) => { /* Ignora erros de frame vazio */ }
+        (err) => { }
       ).catch(err => {
         console.error("Erro na câmera", err);
         exibirPopup('erro', 'Câmera Indisponível', 'Não foi possível acessar a câmera do dispositivo.');
@@ -121,12 +114,10 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     };
   }, [itemCameraAtiva]);
 
-  // PROCESSA A REGRA DE NEGÓCIO DA SEPARAÇÃO (Agora usando bipsRef para evitar bloqueio de state)
   const processarBipagem = (index, decodedText) => {
     const atual = bipsRef.current[index] || { contagem: 0, referencia: null };
     const qtdDesejada = Number(itens[index].quantidade);
 
-    // --- 1. TRAVA DE SEGURANÇA CONTRA PRODUTOS CRUZADOS ---
     const itemConflitoIndex = Object.keys(bipsRef.current).find(
       (key) => bipsRef.current[key].referencia === decodedText && Number(key) !== index
     );
@@ -134,41 +125,26 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     if (itemConflitoIndex !== undefined) {
       tocarBipErro();
       const nomeProdutoConflito = itens[itemConflitoIndex].descricao;
-      exibirPopup(
-        'erro', 
-        'Trava de Segurança', 
-        `Este código de barras já pertence a outro item:\n\n👉 ${nomeProdutoConflito}\n\nVocê está tentando bipar no produto errado!`
-      );
+      exibirPopup('erro', 'Trava de Segurança', `Este código de barras já pertence a outro item:\n\n👉 ${nomeProdutoConflito}\n\nVocê está tentando bipar no produto errado!`);
       return; 
     }
 
-    // --- 2. TRAVA DE QUANTIDADE MÁXIMA ---
     if (atual.contagem >= qtdDesejada) {
       tocarBipErro();
-      exibirPopup(
-        'aviso', 
-        'Limite Atingido!', 
-        `Você já separou a quantidade total (${qtdDesejada} un) para este produto.`
-      );
+      exibirPopup('aviso', 'Limite Atingido!', `Você já separou a quantidade total (${qtdDesejada} un) para este produto.`);
       return;
     }
 
-    // --- 3. VALIDAÇÃO DE REFERÊNCIA ---
     if (atual.contagem === 0) {
       tocarBipSucesso();
       setBips(prev => ({ ...prev, [index]: { contagem: 1, referencia: decodedText } }));
-    } 
-    else {
+    } else {
       if (atual.referencia === decodedText) {
         tocarBipSucesso();
         setBips(prev => ({ ...prev, [index]: { ...atual, contagem: atual.contagem + 1 } }));
       } else {
         tocarBipErro();
-        exibirPopup(
-          'erro', 
-          'Produto Incorreto!', 
-          `Você escaneou o código: ${decodedText}\nMas a referência esperada é: ${atual.referencia}`
-        );
+        exibirPopup('erro', 'Produto Incorreto!', `Você escaneou o código: ${decodedText}\nMas a referência esperada é: ${atual.referencia}`);
       }
     }
   };
@@ -191,11 +167,23 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     );
   };
 
-  // SALVA TUDO NO LOCALSTORAGE
   const salvarProgresso = () => {
     localStorage.setItem(`bips_req_${req.id}`, JSON.stringify(bips));
     localStorage.setItem(`itens_req_${req.id}`, JSON.stringify(itens));
     exibirPopup('sucesso', 'Sucesso!', 'Progresso salvo com sucesso!\nOs dados da separação foram registrados (Memória Local).');
+  };
+
+  const confirmarAssumirTarefa = () => {
+    if (!nomeAssumir.trim()) {
+      exibirPopup('aviso', 'Atenção', 'Digite seu nome para assumir a separação!');
+      return;
+    }
+    if (aoAdicionarResponsavel) {
+      aoAdicionarResponsavel(req.id, nomeAssumir);
+      exibirPopup('sucesso', 'Tarefa Assumida!', `${nomeAssumir} foi adicionado(a) à equipe de separação desta requisição!`);
+      setNomeAssumir('');
+      setModoAssumir(false);
+    }
   };
 
   const confirmarMudanca = () => {
@@ -204,14 +192,15 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       return;
     }
     
-    if (novoStatus === 'Separado') {
+    // ATUALIZADO: Nova validação para "Saída de produtos"
+    if (novoStatus === 'Saída de produtos') {
       const todosBipados = itens.every((item, i) => {
         const bipItem = bips[i] || { contagem: 0 };
         return bipItem.contagem >= Number(item.quantidade);
       });
 
       if (!todosBipados) {
-        exibirPopup('erro', 'Trava de Segurança', 'Você não pode finalizar a separação sem bipar a quantidade exata de TODOS os produtos solicitados!');
+        exibirPopup('erro', 'Trava de Segurança', 'Você não pode finalizar a saída sem bipar a quantidade exata de TODOS os produtos solicitados!');
         return;
       }
 
@@ -221,14 +210,15 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       }
     }
     
-    if (novoStatus === 'Faturado' && !notaFiscal.trim()) {
+    // ATUALIZADO: Nova validação para "Faturamento"
+    if (novoStatus === 'Faturamento' && !notaFiscal.trim()) {
       exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Nota Fiscal de transferência!');
       return;
     }
 
     const dadosExtras = {};
-    if (novoStatus === 'Separado') dadosExtras.numeroRequisicaoExterna = numReqExterna;
-    if (novoStatus === 'Faturado') dadosExtras.notaFiscal = notaFiscal;
+    if (novoStatus === 'Saída de produtos') dadosExtras.numeroRequisicaoExterna = numReqExterna;
+    if (novoStatus === 'Faturamento') dadosExtras.notaFiscal = notaFiscal;
     
     dadosExtras.listaItensAtualizada = itens; 
     dadosExtras.progressoBips = bips; 
@@ -277,14 +267,15 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     setModoExpansao('resumo'); 
   };
 
+  // ATUALIZADO: Mapeamento de cores para as novas nomenclaturas
   const getStatusClass = (status) => {
     switch (status) {
       case 'Pendente': return 'status-pendente';
       case 'Em Separação': return 'status-separacao';
-      case 'Separado': return 'status-separado';
-      case 'Faturado': return 'status-faturado';
-      case 'Enviado': return 'status-enviado';
-      case 'Recebido': return 'status-recebido';
+      case 'Saída de produtos': return 'status-separado';
+      case 'Faturamento': return 'status-faturado';
+      case 'Transporte': return 'status-enviado';
+      case 'Recebimento': return 'status-recebido';
       default: return 'status-pendente';
     }
   };
@@ -320,15 +311,42 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           )}
         </div>
 
+        {req.status === 'Em Separação' && (
+          <div className="box-assumir-tarefa">
+            <div className="assumir-info">
+              <span><strong>Separador(es) Atual(is):</strong> {req.historico['Em Separação'] || 'Não informado'}</span>
+            </div>
+            
+            {!modoAssumir ? (
+              <button className="btn-assumir" onClick={() => setModoAssumir(true)}>
+                🙋 Assumir / Ajudar na Separação
+              </button>
+            ) : (
+              <div className="linha-assumir">
+                <input 
+                  type="text" 
+                  placeholder="Digite o seu nome..." 
+                  value={nomeAssumir} 
+                  onChange={(e) => setNomeAssumir(e.target.value)} 
+                />
+                <button className="btn-confirmar-assumir" onClick={confirmarAssumirTarefa}>Confirmar</button>
+                <button className="btn-cancelar-assumir" onClick={() => { setModoAssumir(false); setNomeAssumir(''); }}>Cancelar</button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="controle-status" style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
           <strong>Atualizar Status:</strong>
+          
+          {/* ATUALIZADO: Menu Select com os Novos Nomes */}
           <select className="select-status" value={novoStatus} onChange={(e) => setNovoStatus(e.target.value)}>
             <option value="Pendente">Pendente</option>
             <option value="Em Separação">Em Separação</option>
-            <option value="Separado">Separado</option>
-            <option value="Faturado">Faturado</option>
-            <option value="Enviado">Enviado</option>
-            <option value="Recebido">Recebido</option>
+            <option value="Saída de produtos">Saída de produtos</option>
+            <option value="Faturamento">Faturamento</option>
+            <option value="Transporte">Transporte</option>
+            <option value="Recebimento">Recebimento</option>
           </select>
           
           <input 
@@ -339,7 +357,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             onChange={(e) => setResponsavel(e.target.value)}
           />
 
-          {novoStatus === 'Separado' && (
+          {novoStatus === 'Saída de produtos' && (
             <input 
               type="text" 
               placeholder="Nº da Req. no Sistema" 
@@ -349,7 +367,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             />
           )}
 
-          {novoStatus === 'Faturado' && (
+          {novoStatus === 'Faturamento' && (
             <input 
               type="text" 
               placeholder="Nº da Nota Fiscal" 
@@ -363,7 +381,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             style={{ padding: '10px 20px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
             onClick={confirmarMudanca}
           >
-            Confirmar
+            Confirmar Status
           </button>
         </div>
       </div>
@@ -476,11 +494,13 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         </div>
       </div>
 
-      <button className="btn-salvar-progresso" onClick={salvarProgresso}>
-        💾 Salvar Progresso
-      </button>
+      {/* ATUALIZADO: Condição para exibir o botão SOMENTE Em Separação */}
+      {req.status === 'Em Separação' && (
+        <button className="btn-salvar-progresso" onClick={salvarProgresso}>
+          💾 Salvar Progresso Físico
+        </button>
+      )}
 
-      {/* --- MODAL OVERLAY DA CÂMERA (TELA CHEIA) --- */}
       {itemCameraAtiva !== null && (() => {
         const itemAtivo = itens[itemCameraAtiva];
         const infoBipAtivo = bips[itemCameraAtiva] || { contagem: 0, referencia: null };
@@ -526,7 +546,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         );
       })()}
 
-      {/* --- RENDERIZA O POPUP CUSTOMIZADO GLOBAL --- */}
       {popupCustom.visivel && (
         <div className="popup-custom-overlay">
           <div className={`popup-custom-content ${popupCustom.tipo}`}>
@@ -538,7 +557,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             </div>
             
             <div className="popup-custom-body">
-              {/* O split permite quebrar a linha (\n) igual o alert() nativo fazia */}
               {popupCustom.mensagem.split('\n').map((linha, i) => (
                 <p key={i}>{linha}</p>
               ))}

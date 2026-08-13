@@ -13,8 +13,6 @@ function App() {
   const [telaAtual, setTelaAtual] = useState('painel');
   const [reqSelecionada, setReqSelecionada] = useState(null);
 
-  // --- LÓGICA DE LOCALSTORAGE (Cache do Navegador) ---
-  // Tenta puxar os dados salvos; se não tiver, começa vazio.
   const [baseProdutos, setBaseProdutos] = useState(() => {
     const salvo = localStorage.getItem('estoqueBaseProdutos');
     return salvo ? JSON.parse(salvo) : [];
@@ -30,7 +28,6 @@ function App() {
     return salvo ? JSON.parse(salvo) : [];
   });
 
-  // Sempre que as listas mudarem, salva automaticamente no LocalStorage
   useEffect(() => {
     localStorage.setItem('estoqueBaseProdutos', JSON.stringify(baseProdutos));
   }, [baseProdutos]);
@@ -42,7 +39,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem('estoquePedidosMarketplace', JSON.stringify(pedidosMarketplace));
   }, [pedidosMarketplace]);
-  // --------------------------------------------------
 
   // --- LÓGICA DE TRANSFERÊNCIAS INTERNAS ---
   const handleSalvarRequisicao = (novaReq) => {
@@ -58,6 +54,32 @@ function App() {
           status: novoStatus,
           historico: { ...req.historico, [novoStatus]: responsavel },
           ...dadosExtras
+        };
+      }
+      return req;
+    });
+    setRequisicoes(listaAtualizada);
+    
+    const reqAtualizada = listaAtualizada.find(r => r.id === id);
+    setReqSelecionada(reqAtualizada);
+  };
+
+  // NOVO: Função para adicionar ajudante na mesma etapa
+  const handleAdicionarResponsavel = (id, novoResponsavel) => {
+    const listaAtualizada = requisicoes.map(req => {
+      if (req.id === id) {
+        const statusAtual = req.status; 
+        const responsavelAtual = req.historico && req.historico[statusAtual] ? req.historico[statusAtual] : '';
+        
+        // Evita duplicar o mesmo nome caso a pessoa clique duas vezes
+        if (responsavelAtual.includes(novoResponsavel)) return req;
+
+        // Concatena os nomes
+        const responsavelConcatenado = responsavelAtual ? `${responsavelAtual} + ${novoResponsavel}` : novoResponsavel;
+
+        return { 
+          ...req, 
+          historico: { ...req.historico, [statusAtual]: responsavelConcatenado }
         };
       }
       return req;
@@ -125,6 +147,7 @@ function App() {
             aoVoltar={() => setTelaAtual('painel')} 
             aoMudarStatus={handleAlterarStatus} 
             aoAtualizarItens={handleAtualizarItens}
+            aoAdicionarResponsavel={handleAdicionarResponsavel} // Passando a nova função
           />
         )}
 

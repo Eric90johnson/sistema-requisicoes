@@ -11,11 +11,12 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const temPedidoPendente = pedidosMarketplace.some(ped => ped.status === 'Pendente');
 
   // =========================================================================
-  // CÓDIGO ORIGINAL DA SUA TABELA DE TRANSFERÊNCIAS (Preservado)
+  // LÓGICA DE TRANSFERÊNCIAS (ATUALIZADA COM NOVOS NOMES)
   // =========================================================================
-  const ordemProcesso = ['Em Separação', 'Separado', 'Faturado', 'Enviado', 'Recebido'];
+  const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
   
-  const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebido');
+  // Agora filtra ocultando os itens com status "Recebimento"
+  const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebimento');
   
   const colunasDinamicas = ordemProcesso.filter(etapa => 
     requisicoesAtivas.some(req => req.historico && req.historico[etapa])
@@ -25,10 +26,10 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     switch (status) {
       case 'Pendente': return 'status-pendente';
       case 'Em Separação': return 'status-separacao';
-      case 'Separado': return 'status-separado';
-      case 'Faturado': return 'status-faturado';
-      case 'Enviado': return 'status-enviado';
-      case 'Recebido': return 'status-recebido';
+      case 'Saída de produtos': return 'status-separado';
+      case 'Faturamento': return 'status-faturado';
+      case 'Transporte': return 'status-enviado';
+      case 'Recebimento': return 'status-recebido';
       default: return 'status-pendente';
     }
   };
@@ -54,7 +55,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
         </button>
       </div>
 
-      {/* ABA 1: TRANSFERÊNCIAS INTERNAS (Seu código original) */}
+      {/* ABA 1: TRANSFERÊNCIAS INTERNAS */}
       {abaAtiva === 'interna' && (
         <>
           <div className="painel-header">
@@ -116,7 +117,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
         </>
       )}
 
-      {/* ABA 2: MARKETPLACE (Renderiza o componente isolado) */}
+      {/* ABA 2: MARKETPLACE */}
       {abaAtiva === 'marketplace' && (
         <PainelMarketplace 
           pedidosMarketplace={pedidosMarketplace} 

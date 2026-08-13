@@ -1,13 +1,13 @@
 import React from 'react';
-// CORREÇÃO AQUI: 3 níveis para trás (../../../) para chegar na pasta 'src' e entrar em 'styles'
 import '../../../styles/pages/marketplace/painel/painelMarketplace.css';
 
 export default function PainelMarketplace({ pedidosMarketplace = [], aoClicarNovoPedido, aoAbrirDetalhes }) {
   
-  const ordemProcessoMarketplace = ['Em Separação', 'Separado', 'Faturado', 'Enviado'];
+  // ATUALIZADO COM OS NOVOS TERMOS WMS
+  const ordemProcessoMarketplace = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte'];
   
-  // Filtramos para não exibir pedidos que já foram despachados
-  const pedidosAtivos = pedidosMarketplace.filter(ped => ped.status !== 'Enviado');
+  // Filtramos para não exibir pedidos que já foram despachados (Transporte)
+  const pedidosAtivos = pedidosMarketplace.filter(ped => ped.status !== 'Transporte');
   
   // Colunas dinâmicas de responsáveis
   const colunasDinamicas = ordemProcessoMarketplace.filter(etapa => 
@@ -18,9 +18,9 @@ export default function PainelMarketplace({ pedidosMarketplace = [], aoClicarNov
     switch (status) {
       case 'Pendente': return 'status-pendente';
       case 'Em Separação': return 'status-separacao';
-      case 'Separado': return 'status-separado';
-      case 'Faturado': return 'status-faturado';
-      case 'Enviado': return 'status-enviado';
+      case 'Saída de produtos': return 'status-separado';
+      case 'Faturamento': return 'status-faturado';
+      case 'Transporte': return 'status-enviado';
       default: return 'status-pendente';
     }
   };

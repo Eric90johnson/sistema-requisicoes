@@ -8,14 +8,15 @@ export default function Historico({ requisicoes, aoVoltar }) {
   const [filtroOrdem, setFiltroOrdem] = useState('');
   const [filtroNotaFiscal, setFiltroNotaFiscal] = useState('');
 
+  // ATUALIZADO COM OS NOVOS TERMOS WMS
   const getStatusClass = (status) => {
     switch (status) {
       case 'Pendente': return 'status-pendente';
       case 'Em Separação': return 'status-separacao';
-      case 'Separado': return 'status-separado';
-      case 'Faturado': return 'status-faturado';
-      case 'Enviado': return 'status-enviado';
-      case 'Recebido': return 'status-recebido';
+      case 'Saída de produtos': return 'status-separado';
+      case 'Faturamento': return 'status-faturado';
+      case 'Transporte': return 'status-enviado';
+      case 'Recebimento': return 'status-recebido';
       default: return 'status-pendente';
     }
   };
@@ -73,21 +74,17 @@ export default function Historico({ requisicoes, aoVoltar }) {
     setFiltroNotaFiscal('');
   };
 
-  // LÓGICA DE EXPORTAÇÃO ATUALIZADA: Foco nos produtos
   const exportarParaExcel = () => {
     if (requisicoesFiltradas.length === 0) {
       alert("Não há dados para exportar com os filtros atuais.");
       return;
     }
 
-    // Novo cabeçalho voltado para os itens
     let csv = "ID da Requisicao;Data da Requisicao;Cod. do Produto;Descricao do Produto;Quantidade;Ordem Interna;N da NF;Observacoes\n";
 
-    // Loop duplo: Passa pelas requisições filtradas e depois pelos itens de cada uma
     requisicoesFiltradas.forEach(req => {
       if (req.listaItens && req.listaItens.length > 0) {
         req.listaItens.forEach(item => {
-          // Extraindo e formatando os dados de forma segura
           const id = req.id || '-';
           const dataReq = req.data || '-';
           const codProduto = item.cod || '-';
@@ -97,14 +94,11 @@ export default function Historico({ requisicoes, aoVoltar }) {
           const nf = req.notaFiscal || '-';
           const obs = item.observacao || '-';
 
-          // Adicionamos a linha no CSV. 
-          // Textos descritivos e observações vão entre aspas para evitar quebras por ponto e vírgula.
           csv += `${id};${dataReq};${codProduto};"${descProduto}";${qtd};${ordemInterna};${nf};"${obs}"\n`;
         });
       }
     });
 
-    // Gera e baixa o arquivo
     const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     

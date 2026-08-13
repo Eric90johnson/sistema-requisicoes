@@ -48,6 +48,75 @@
   font-weight: bold;
 }
 
+/* --- NOVO: ESTILOS PARA ASSUMIR TAREFA --- */
+.box-assumir-tarefa {
+  background-color: #eaf2f8;
+  border: 1px dashed #3498db;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assumir-info {
+  font-size: 0.95rem;
+  color: #2c3e50;
+}
+
+.btn-assumir {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background-color 0.2s;
+}
+
+.btn-assumir:hover { 
+  background-color: #2980b9; 
+}
+
+.linha-assumir {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.linha-assumir input {
+  padding: 10px;
+  border: 1px solid #bdc3c7;
+  border-radius: 6px;
+  flex: 1;
+  min-width: 150px;
+}
+
+.btn-confirmar-assumir {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-cancelar-assumir {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+/* ----------------------------------------- */
+
 .controle-status {
   display: flex;
   align-items: center;
@@ -68,7 +137,6 @@
   cursor: pointer;
 }
 
-/* --- RESPONSIVIDADE DETALHES --- */
 @media (max-width: 768px) {
   .detalhes-container {
     padding: 15px;
@@ -101,7 +169,6 @@
   }
 }
 
-/* --- RESPONSIVIDADE DA TABELA DE PRODUTOS --- */
 .tabela-wrapper {
   width: 100%;
   overflow-x: auto;
@@ -117,7 +184,6 @@
   border-collapse: collapse;
 }
 
-/* --- CLASSES: TABELA CLICÁVEL E RESUMO --- */
 .tr-clicavel {
   cursor: pointer;
   transition: background-color 0.2s;
@@ -178,7 +244,6 @@
 .btn-acao-editar { background-color: #95a5a6; color: white; }
 .btn-acao-editar:hover { background-color: #7f8c8d; }
 
-/* --- ESTILOS DE EDIÇÃO MANUAL --- */
 .edicao-container {
   display: flex;
   flex-direction: column;
@@ -232,15 +297,14 @@
   font-style: italic;
 }
 
-/* --- NOVO: MODAL DA CÂMERA (TELA CHEIA) --- */
 .camera-modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(0, 0, 0, 0.85); /* Fundo escuro */
-  z-index: 99999; /* Por cima de tudo */
+  background-color: rgba(0, 0, 0, 0.85); 
+  z-index: 99999; 
   display: flex;
   justify-content: center;
   align-items: center;
@@ -375,12 +439,11 @@
 .btn-salvar-progresso:hover { background-color: #6a2a85; }
 .btn-salvar-progresso:active { transform: scale(0.98); }
 
-/* --- NOVO: POPUP CUSTOMIZADO DE ALERTAS --- */
 .popup-custom-overlay {
   position: fixed;
   top: 0; left: 0; width: 100vw; height: 100vh;
   background-color: rgba(0, 0, 0, 0.7);
-  z-index: 999999; /* Por cima de absolutamente tudo */
+  z-index: 999999; 
   display: flex;
   justify-content: center;
   align-items: center;
@@ -412,7 +475,6 @@
   gap: 10px;
 }
 
-/* Cores dinâmicas para o cabeçalho do popup */
 .popup-custom-content.sucesso .popup-custom-header { background-color: #27ae60; }
 .popup-custom-content.erro .popup-custom-header { background-color: #e74c3c; }
 .popup-custom-content.aviso .popup-custom-header { background-color: #f39c12; }
@@ -462,7 +524,6 @@
   color: white;
 }
 
-/* Animações do Modal */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
