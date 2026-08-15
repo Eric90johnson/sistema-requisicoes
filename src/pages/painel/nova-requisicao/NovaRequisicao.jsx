@@ -17,10 +17,12 @@ const parseValorMoeda = (valorStr) => {
 };
 
 export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
+  // --- NOVO: Lojas com nomes reduzidos e inclusão de Mulungu ---
   const lojas = [
-    'Loja Neta Dantas Araturi (matriz)', 
-    'Loja Neta Dantas Conjunto Ceará', 
-    'Loja Neta Dantas Messejana'
+    'Araturi', 
+    'Conjunto Ceará', 
+    'Messejana',
+    'Mulungu'
   ];
 
   const [lojaDe, setLojaDe] = useState(lojas[0]);
@@ -29,7 +31,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
   
   const [motivo, setMotivo] = useState('');
   const [motivoOutro, setMotivoOutro] = useState('');
-  // --- NOVO: ESTADO PARA PRIORIDADE MANUAL (USADO QUANDO O MOTIVO FOR "OUTROS") ---
   const [prioridadeOutro, setPrioridadeOutro] = useState('3'); 
 
   const [codigo, setCodigo] = useState('');
@@ -248,7 +249,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     }
 
     let motivoFinal = motivo;
-    // --- NOVO: DETERMINANDO O GRAU DE PRIORIDADE (1 = ALTA, 2 = MÉDIA, 3 = BAIXA) ---
     let grauPrioridade = 3; 
 
     if (!motivo) { 
@@ -256,7 +256,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
       return; 
     }
 
-    // Regras automáticas de prioridade baseadas na sua lógica
     if (motivo === 'Rota para clientes') {
       grauPrioridade = 1;
     } else if (motivo === 'Reposição de estoque') {
@@ -269,7 +268,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
         return; 
       }
       motivoFinal = motivoOutro;
-      // Pega a prioridade que o usuário escolheu no select manual
       grauPrioridade = Number(prioridadeOutro);
     }
 
@@ -291,11 +289,11 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     const novaRequisicao = {
       id: `REQ-${Math.floor(Math.random() * 9000) + 1000}`,
       data: new Date().toLocaleDateString('pt-BR'),
-      timestampCriacao: Date.now(), // NOVO: Salva a hora exata para critério de desempate
+      timestampCriacao: Date.now(), 
       destino: lojaPara,
       solicitante: solicitante,
       motivo: motivoFinal,
-      prioridade: grauPrioridade, // NOVO: Injeta o peso numérico da prioridade
+      prioridade: grauPrioridade, 
       itens: itensAdicionados.length,
       status: 'Pendente',
       listaItens: itensAdicionados,
@@ -354,7 +352,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
               <option value="Outros">Outros (Especificar)</option>
             </select>
             
-            {/* NOVO: CONJUNTO DE CAMPOS QUANDO O MOTIVO FOR "OUTROS" */}
             {motivo === 'Outros' && (
               <div className="linha-dupla" style={{ marginTop: '5px' }}>
                 <div className="campo-loja" style={{ flex: 2 }}>

@@ -6,35 +6,63 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   
   const [abaAtiva, setAbaAtiva] = useState('interna'); 
 
-  // --- ESTADOS DO MODAL DE RANKING ---
   const [mostrarRanking, setMostrarRanking] = useState(false);
   const [dataInicioRanking, setDataInicioRanking] = useState('');
   const [dataFimRanking, setDataFimRanking] = useState('');
 
+  const [filtros, setFiltros] = useState({});
+  const [colunaFiltroAberta, setColunaFiltroAberta] = useState(null);
+
   const temPedidoPendente = pedidosMarketplace.some(ped => ped.status === 'Pendente');
 
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
-  
   const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebimento');
 
-  const requisicoesOrdenadas = useMemo(() => {
-    return [...requisicoesAtivas].sort((a, b) => {
+  const getNomeLojaCurto = (nomeLoja) => {
+    if (!nomeLoja) return '-';
+    if (nomeLoja.includes('Araturi')) return 'Araturi';
+    if (nomeLoja.includes('Conjunto Ceará') || nomeLoja.includes('Conjunto Ceara')) return 'Conjunto Ceará';
+    if (nomeLoja.includes('Messejana')) return 'Messejana';
+    if (nomeLoja.includes('Mulungu')) return 'Mulungu';
+    return nomeLoja; 
+  };
+
+  const colunasDinamicas = ordemProcesso.filter(etapa => 
+    requisicoesAtivas.some(req => req.historico && req.historico[etapa])
+  );
+
+  const requisicoesFiltradasEOrdenadas = useMemo(() => {
+    let filtradas = requisicoesAtivas;
+    
+    if (filtros.motivo) filtradas = filtradas.filter(req => req.motivo === filtros.motivo);
+    if (filtros.status) filtradas = filtradas.filter(req => req.status === filtros.status);
+    if (filtros.destino) filtradas = filtradas.filter(req => getNomeLojaCurto(req.destino) === filtros.destino);
+    if (filtros.data) filtradas = filtradas.filter(req => req.data === filtros.data);
+    if (filtros.solicitante) filtradas = filtradas.filter(req => req.solicitante === filtros.solicitante);
+
+    colunasDinamicas.forEach(coluna => {
+      if (filtros[coluna]) {
+        filtradas = filtradas.filter(req => req.historico && req.historico[coluna] === filtros[coluna]);
+      }
+    });
+
+    return filtradas.sort((a, b) => {
       const prioA = a.prioridade || 3; 
       const prioB = b.prioridade || 3;
       
-      if (prioA !== prioB) {
-        return prioA - prioB; 
-      }
+      if (prioA !== prioB) return prioA - prioB; 
       
       const tempoA = a.timestampCriacao || 0;
       const tempoB = b.timestampCriacao || 0;
       return tempoA - tempoB; 
     });
-  }, [requisicoesAtivas]);
+  }, [requisicoesAtivas, filtros, colunasDinamicas]);
 
-  const colunasDinamicas = ordemProcesso.filter(etapa => 
-    requisicoesAtivas.some(req => req.historico && req.historico[etapa])
-  );
+  const opcoesMotivo = [...new Set(requisicoesAtivas.map(r => r.motivo))].filter(Boolean);
+  const opcoesStatus = [...new Set(requisicoesAtivas.map(r => r.status))].filter(Boolean);
+  const opcoesDestino = [...new Set(requisicoesAtivas.map(r => getNomeLojaCurto(r.destino)))].filter(Boolean);
+  const opcoesData = [...new Set(requisicoesAtivas.map(r => r.data))].filter(Boolean);
+  const opcoesSolicitante = [...new Set(requisicoesAtivas.map(r => r.solicitante))].filter(Boolean);
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -104,9 +132,52 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     return rankingFinal;
   }, [requisicoes, dataInicioRanking, dataFimRanking]);
 
+  // --- CORREÇÃO AQUI: Controle dinâmico do zIndex (camada) ---
+  const RenderHeaderFiltro = ({ titulo, chave, opcoes }) => {
+    const estaAberto = colunaFiltroAberta === chave;
+    const filtroAtivo = filtros[chave];
+
+    return (
+      <th 
+        className="th-com-filtro" 
+        style={{ zIndex: estaAberto ? 101 : 10 }} // Pula para frente do overlay se estiver aberto
+      >
+        <div 
+          className="cabecalho-filtro" 
+          onClick={() => setColunaFiltroAberta(estaAberto ? null : chave)}
+        >
+          {titulo}
+          <span className={`icone-filtro ${filtroAtivo ? 'ativo' : 'inativo'}`}>▼</span>
+        </div>
+
+        {estaAberto && (
+          <div className="filtro-dropdown">
+            <div 
+              className={`filtro-opcao ${!filtroAtivo ? 'selecionado' : ''}`}
+              onClick={() => { setFiltros({ ...filtros, [chave]: '' }); setColunaFiltroAberta(null); }}
+            >
+              (Todos)
+            </div>
+            {opcoes.map((opcao, idx) => (
+              <div 
+                key={idx}
+                className={`filtro-opcao ${filtroAtivo === opcao ? 'selecionado' : ''}`}
+                onClick={() => { setFiltros({ ...filtros, [chave]: opcao }); setColunaFiltroAberta(null); }}
+              >
+                {opcao}
+              </div>
+            ))}
+          </div>
+        )}
+      </th>
+    );
+  };
+
   return (
     <div className="painel-container">
       
+      {colunaFiltroAberta && <div className="filtro-overlay" onClick={() => setColunaFiltroAberta(null)}></div>}
+
       <div className="abas-container">
         <button className={`aba-btn ${abaAtiva === 'interna' ? 'ativa' : ''}`} onClick={() => setAbaAtiva('interna')}>
           🏢 Transferências Internas
@@ -125,33 +196,46 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
         <>
           <div className="painel-header">
             <h2>Visão Geral</h2>
+            
+            <div className="contador-requisicoes">
+              <span className="numero-destaque">{requisicoesAtivas.length}</span> 
+              <span>requisições pendentes de conclusão</span>
+            </div>
+
             <button className="btn-nova-req" onClick={aoClicarNovo}>+ Nova Requisição</button>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <div className="tabela-container-scroll">
             <table className="tabela-requisicoes" style={{ whiteSpace: 'nowrap' }}>
               <thead>
                 <tr>
-                  <th>Motivo / Prioridade</th>
+                  <RenderHeaderFiltro titulo="Motivo / Prioridade" chave="motivo" opcoes={opcoesMotivo} />
                   <th>ID</th>
-                  <th>Status</th>
-                  <th>Data</th>
-                  <th>Solicitante</th>
-                  <th>Loja Destino</th>
+                  <RenderHeaderFiltro titulo="Status" chave="status" opcoes={opcoesStatus} />
+                  <RenderHeaderFiltro titulo="Data" chave="data" opcoes={opcoesData} />
+                  <RenderHeaderFiltro titulo="Solicitante" chave="solicitante" opcoes={opcoesSolicitante} />
+                  <RenderHeaderFiltro titulo="Loja Destino" chave="destino" opcoes={opcoesDestino} />
                   <th>Itens</th>
-                  {colunasDinamicas.map(coluna => (<th key={coluna}>Resp. {coluna}</th>))}
+                  
+                  {colunasDinamicas.map(coluna => (
+                    <RenderHeaderFiltro 
+                      key={coluna}
+                      titulo={`Resp. ${coluna}`} 
+                      chave={coluna} 
+                      opcoes={[...new Set(requisicoesAtivas.map(r => r.historico && r.historico[coluna]).filter(Boolean))]} 
+                    />
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {requisicoesOrdenadas.length > 0 ? (
-                  requisicoesOrdenadas.map((req) => (
+                {requisicoesFiltradasEOrdenadas.length > 0 ? (
+                  requisicoesFiltradasEOrdenadas.map((req) => (
                     <tr 
                       key={req.id} 
                       onClick={() => aoAbrirDetalhes(req)} 
                       style={{ cursor: 'pointer' }} 
                       className={`linha-tabela-hover ${getLinhaPrioridadeClass(req.prioridade)}`}
                     >
-                      {/* Célula com title para hover e limite de 25 caracteres */}
                       <td style={{ fontWeight: 'bold' }} title={req.motivo || ''}>
                         {req.motivo 
                           ? (req.motivo.length > 25 ? `${req.motivo.substring(0, 25)}...` : req.motivo) 
@@ -162,7 +246,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       <td><span className={`status-badge ${getStatusClass(req.status)}`}>{req.status}</span></td>
                       <td>{req.data}</td>
                       <td><strong>{req.solicitante}</strong></td>
-                      <td>{req.destino}</td>
+                      <td>{getNomeLojaCurto(req.destino)}</td>
                       <td>{req.itens}</td>
                       
                       {colunasDinamicas.map(coluna => (
@@ -175,7 +259,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                 ) : (
                   <tr>
                     <td colSpan={7 + colunasDinamicas.length} style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}>
-                      Parabéns equipe de estoque! Nenhuma requisição de transferência pendente no momento. A operação está limpa!
+                      Nenhuma requisição encontrada com os filtros selecionados. A operação está limpa!
                     </td>
                   </tr>
                 )}

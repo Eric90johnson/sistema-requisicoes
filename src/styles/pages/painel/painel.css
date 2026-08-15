@@ -77,6 +77,29 @@
   margin-bottom: 25px;
 }
 
+/* --- NOVO: CONTADOR DE REQUISIÇÕES --- */
+.contador-requisicoes {
+  background-color: #f8f9fa;
+  color: #2c3e50;
+  border: 1px solid #dcdde1;
+  padding: 6px 18px;
+  border-radius: 20px;
+  font-size: 0.95rem;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contador-requisicoes .numero-destaque {
+  background-color: #e74c3c; /* Vermelho para chamar a atenção para a fila de trabalho */
+  color: white;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 1.1rem;
+}
+
 .btn-nova-req {
   background-color: var(--cor-secundaria);
   color: var(--cor-branca);
@@ -99,21 +122,45 @@
   background-color: #1c5980;
 }
 
-.tabela-wrapper {
+/* --- NOVO: TABELA COM ROLAGEM VERTICAL --- */
+.tabela-container-scroll {
   width: 100%;
+  max-height: 55vh; /* Controla a altura máxima gerando o scroll */
+  overflow-y: auto;
   overflow-x: auto;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  background-color: var(--cor-branca);
+}
+
+/* Estilização bonita da barra de rolagem */
+.tabela-container-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.tabela-container-scroll::-webkit-scrollbar-track {
+  background: #f1f2f6;
+  border-radius: 4px;
+}
+.tabela-container-scroll::-webkit-scrollbar-thumb {
+  background: #bdc3c7;
+  border-radius: 4px;
+}
+.tabela-container-scroll::-webkit-scrollbar-thumb:hover {
+  background: #95a5a6;
 }
 
 .tabela-requisicoes {
   width: 100%;
   min-width: 800px; 
   border-collapse: collapse;
-  background-color: var(--cor-branca);
 }
 
+/* --- NOVO: FIXANDO O CABEÇALHO (STICKY) --- */
 .tabela-requisicoes th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   background-color: #e8dff0; 
   padding: 15px;
   text-align: left;
@@ -134,11 +181,11 @@
   border-bottom: none;
 }
 
-/* --- STATUS MINIMALISTA (SEM CAIXA/FUNDO) --- */
+/* --- STATUS MINIMALISTA --- */
 .status-badge {
   font-size: 0.95em;
   font-weight: bold;
-  color: #000000; /* Texto na cor preta */
+  color: #000000; 
   padding: 0; 
   border-radius: 0; 
 }
@@ -163,6 +210,7 @@
   .btn-nova-req { width: 100%; text-align: center; }
   .abas-container { flex-direction: column; border-bottom: none; }
   .btn-ranking-abrir { margin-left: 0 !important; width: 100%; text-align: center; }
+  .contador-requisicoes { width: 100%; justify-content: center; }
 }
 
 /* ========================================================= */
@@ -345,40 +393,98 @@
 /* --- CLASSES DE PRIORIDADE VISUAL DA TABELA ---            */
 /* ========================================================= */
 
-/* Prioridade 1 (Alta) - Rota para clientes (Fundo Vermelho Vivo) */
-.prioridade-alta td {
-  background-color: #ffc2c2 !important; 
-}
-.prioridade-alta:hover td {
-  background-color: #ffadad !important; 
-}
-.prioridade-alta td:first-child {
-  border-left: 6px solid #e74c3c !important;
-}
+.prioridade-alta td { background-color: #ffc2c2 !important; }
+.prioridade-alta:hover td { background-color: #ffadad !important; }
+.prioridade-alta td:first-child { border-left: 6px solid #e74c3c !important; }
 
-/* Prioridade 2 (Média) - Reposição de Estoque (Fundo Amarelo Vivo) */
-.prioridade-media td {
-  background-color: #ffec99 !important;
-}
-.prioridade-media:hover td {
-  background-color: #ffe680 !important;
-}
-.prioridade-media td:first-child {
-  border-left: 6px solid #f1c40f !important;
-}
+.prioridade-media td { background-color: #ffec99 !important; }
+.prioridade-media:hover td { background-color: #ffe680 !important; }
+.prioridade-media td:first-child { border-left: 6px solid #f1c40f !important; }
 
-/* Prioridade 3 (Baixa) - Produtos para provadores (Fundo Azul Vivo) */
-.prioridade-baixa td {
-  background-color: #cce5ff !important;
-}
-.prioridade-baixa:hover td {
-  background-color: #b3d9ff !important;
-}
-.prioridade-baixa td:first-child {
-  border-left: 6px solid #3498db !important;
-}
+.prioridade-baixa td { background-color: #cce5ff !important; }
+.prioridade-baixa:hover td { background-color: #b3d9ff !important; }
+.prioridade-baixa td:first-child { border-left: 6px solid #3498db !important; }
 
-/* Mantém as bordas limpas na tabela e a transição suave */
 .tabela-requisicoes tr td:first-child {
   transition: background-color 0.2s, border-left 0.2s;
+}
+
+/* ========================================================= */
+/* --- FILTROS ESTILO EXCEL (CABEÇALHO DA TABELA) ---        */
+/* ========================================================= */
+
+.th-com-filtro {
+  position: relative;
+  user-select: none;
+}
+
+.cabecalho-filtro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.cabecalho-filtro:hover {
+  color: #2980b9;
+}
+
+.icone-filtro {
+  font-size: 0.7em;
+  transition: transform 0.2s;
+}
+
+.icone-filtro.ativo {
+  color: #e74c3c;
+  opacity: 1;
+}
+
+.icone-filtro.inativo {
+  color: #95a5a6;
+  opacity: 0.5;
+}
+
+.filtro-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: #ffffff;
+  border: 1px solid #dcdde1;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  z-index: 100;
+  min-width: 180px;
+  max-height: 250px;
+  overflow-y: auto;
+  font-weight: normal;
+  font-size: 0.9rem;
+  color: #2f3640;
+}
+
+.filtro-opcao {
+  padding: 10px 15px;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f2f6;
+  transition: background-color 0.2s;
+}
+
+.filtro-opcao:last-child {
+  border-bottom: none;
+}
+
+.filtro-opcao:hover {
+  background-color: #f5f6fa;
+}
+
+.filtro-opcao.selecionado {
+  background-color: #eaf2f8;
+  font-weight: bold;
+  color: #2980b9;
+}
+
+.filtro-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 99;
 }
