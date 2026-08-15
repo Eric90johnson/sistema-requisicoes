@@ -6,7 +6,7 @@
   width: 100%;
 }
 
-/* --- NOVO: SISTEMA DE ABAS --- */
+/* --- SISTEMA DE ABAS --- */
 .abas-container {
   display: flex;
   gap: 10px;
@@ -134,20 +134,25 @@
   border-bottom: none;
 }
 
+/* --- STATUS MINIMALISTA (SEM CAIXA/FUNDO) --- */
 .status-badge {
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.85em;
+  font-size: 0.95em;
   font-weight: bold;
+  color: #000000; /* Texto na cor preta */
+  padding: 0; 
+  border-radius: 0; 
 }
 
-.status-pendente { background-color: #ffeeba; color: #856404; }
-.status-atendida { background-color: #c3e6cb; color: #155724; }
-.status-separacao { background-color: #bee5eb; color: #0c5460; }
-.status-separado { background-color: #f8f5ca; color: #856304; }
-.status-faturado { background-color: #d1ecff; color: #0c5460; }
-.status-enviado { background-color: #e2e3e5; color: #1f2b36; }
-.status-recebido { background-color: #d4edda; color: #155724; }
+.status-pendente, 
+.status-atendida, 
+.status-separacao, 
+.status-separado, 
+.status-faturado, 
+.status-enviado, 
+.status-recebido {
+  background-color: transparent !important;
+  color: #000000 !important;
+}
 
 .linha-tabela-hover:hover { background-color: #f9f5fb; }
 .tabela-marketplace .linha-tabela-hover:hover { background-color: #f4f9fc; } 
@@ -161,7 +166,7 @@
 }
 
 /* ========================================================= */
-/* --- NOVO: ESTILOS DO RANKING E GAMIFICAÇÃO GERENCIAL  --- */
+/* --- ESTILOS DO RANKING E GAMIFICAÇÃO GERENCIAL  --- */
 /* ========================================================= */
 
 .btn-ranking-abrir {
@@ -335,3 +340,45 @@
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes popInModal { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+/* ========================================================= */
+/* --- CLASSES DE PRIORIDADE VISUAL DA TABELA ---            */
+/* ========================================================= */
+
+/* Prioridade 1 (Alta) - Rota para clientes (Fundo Vermelho Vivo) */
+.prioridade-alta td {
+  background-color: #ffc2c2 !important; 
+}
+.prioridade-alta:hover td {
+  background-color: #ffadad !important; 
+}
+.prioridade-alta td:first-child {
+  border-left: 6px solid #e74c3c !important;
+}
+
+/* Prioridade 2 (Média) - Reposição de Estoque (Fundo Amarelo Vivo) */
+.prioridade-media td {
+  background-color: #ffec99 !important;
+}
+.prioridade-media:hover td {
+  background-color: #ffe680 !important;
+}
+.prioridade-media td:first-child {
+  border-left: 6px solid #f1c40f !important;
+}
+
+/* Prioridade 3 (Baixa) - Produtos para provadores (Fundo Azul Vivo) */
+.prioridade-baixa td {
+  background-color: #cce5ff !important;
+}
+.prioridade-baixa:hover td {
+  background-color: #b3d9ff !important;
+}
+.prioridade-baixa td:first-child {
+  border-left: 6px solid #3498db !important;
+}
+
+/* Mantém as bordas limpas na tabela e a transição suave */
+.tabela-requisicoes tr td:first-child {
+  transition: background-color 0.2s, border-left 0.2s;
+}

@@ -8,12 +8,10 @@ const parseValorMoeda = (valorStr) => {
   
   let limpo = valorStr.toString().replace(/[^\d.,-]/g, '');
   
-  // Se o número tiver ponto (milhar) e vírgula (decimal), ex: 1.493,78
   if (limpo.includes('.') && limpo.includes(',')) {
     limpo = limpo.replace(/\./g, '');
   }
   
-  // Troca a vírgula final por ponto para o JavaScript conseguir somar
   limpo = limpo.replace(',', '.');
   return Number(limpo) || 0;
 };
@@ -31,6 +29,8 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
   
   const [motivo, setMotivo] = useState('');
   const [motivoOutro, setMotivoOutro] = useState('');
+  // --- NOVO: ESTADO PARA PRIORIDADE MANUAL (USADO QUANDO O MOTIVO FOR "OUTROS") ---
+  const [prioridadeOutro, setPrioridadeOutro] = useState('3'); 
 
   const [codigo, setCodigo] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -41,14 +41,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
   const [novaQuantidadeEdit, setNovaQuantidadeEdit] = useState('');
 
   const [alerta, setAlerta] = useState({ 
-    visivel: false, 
-    tipo: '', 
-    titulo: '', 
-    mensagem: '', 
-    onConfirm: null, 
-    onCancel: null,
-    textoConfirmar: 'Entendi',
-    textoCancelar: 'Cancelar'
+    visivel: false, tipo: '', titulo: '', mensagem: '', onConfirm: null, onCancel: null, textoConfirmar: 'Entendi', textoCancelar: 'Cancelar'
   });
 
   const inputCodigoRef = useRef(null);
@@ -84,7 +77,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     const qtdSolicitada = Number(quantidade);
     const isInsuficiente = temEstoqueDefinido && (qtdSolicitada > estoqueAtual);
 
-    // LÓGICA DE CUSTO UNITÁRIO
     let custoUnit = 0;
     const campoCustoTotal = produto ? (produto.custo || produto.precoCusto || produto.preco_custo) : null;
     
@@ -98,7 +90,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
       descricao: descricao || 'Produto não encontrado', 
       quantidade: qtdSolicitada,
       estoque: estoqueAtual,
-      custoUnitario: custoUnit, // Salva o custo unitário desmembrado
+      custoUnitario: custoUnit,
       insuficiente: isInsuficiente
     };
 
@@ -215,7 +207,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
           const qtdSolicitada = Number(qtdFormatada);
           const isInsuficiente = temEstoqueDefinido && (qtdSolicitada > estoqueAtual);
 
-          // CÁLCULO DE CUSTO UNITÁRIO NA IMPORTAÇÃO
           let custoUnit = 0;
           const campoCustoTotal = produto ? (produto.custo || produto.precoCusto || produto.preco_custo) : null;
           if (campoCustoTotal && estoqueAtual > 0) {
@@ -257,16 +248,29 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     }
 
     let motivoFinal = motivo;
+    // --- NOVO: DETERMINANDO O GRAU DE PRIORIDADE (1 = ALTA, 2 = MÉDIA, 3 = BAIXA) ---
+    let grauPrioridade = 3; 
+
     if (!motivo) { 
       mostrarAlerta('erro', 'Campo Obrigatório', 'Selecione o motivo da transferência antes de prosseguir.'); 
       return; 
     }
-    if (motivo === 'Outros') {
+
+    // Regras automáticas de prioridade baseadas na sua lógica
+    if (motivo === 'Rota para clientes') {
+      grauPrioridade = 1;
+    } else if (motivo === 'Reposição de estoque') {
+      grauPrioridade = 2;
+    } else if (motivo === 'Produtos para provadores') {
+      grauPrioridade = 3;
+    } else if (motivo === 'Outros') {
       if (!motivoOutro.trim()) {
         mostrarAlerta('erro', 'Campo Obrigatório', 'Você selecionou "Outros". Por favor, especifique o motivo escrevendo na caixa abaixo.'); 
         return; 
       }
       motivoFinal = motivoOutro;
+      // Pega a prioridade que o usuário escolheu no select manual
+      grauPrioridade = Number(prioridadeOutro);
     }
 
     if (itensAdicionados.length === 0) { 
@@ -287,9 +291,11 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     const novaRequisicao = {
       id: `REQ-${Math.floor(Math.random() * 9000) + 1000}`,
       data: new Date().toLocaleDateString('pt-BR'),
+      timestampCriacao: Date.now(), // NOVO: Salva a hora exata para critério de desempate
       destino: lojaPara,
       solicitante: solicitante,
       motivo: motivoFinal,
+      prioridade: grauPrioridade, // NOVO: Injeta o peso numérico da prioridade
       itens: itensAdicionados.length,
       status: 'Pendente',
       listaItens: itensAdicionados,
@@ -302,7 +308,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     });
   };
 
-  // CÁLCULO DINÂMICO DO VALOR TOTAL DA REQUISIÇÃO
   const valorTotalRequisicao = itensAdicionados.reduce((total, item) => {
     return total + ((item.custoUnitario || 0) * item.quantidade);
   }, 0);
@@ -343,21 +348,37 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
             <label>Motivo da Transferência:</label>
             <select className="input-item" value={motivo} onChange={(e) => setMotivo(e.target.value)}>
               <option value="">Selecione um motivo...</option>
-              <option value="Reposição de estoque">Reposição de estoque</option>
-              <option value="Produtos para provadores">Produtos para provadores</option>
-              <option value="Rota para clientes">Rota para clientes</option>
+              <option value="Rota para clientes">Rota para clientes (Prioridade Alta)</option>
+              <option value="Reposição de estoque">Reposição de estoque (Prioridade Média)</option>
+              <option value="Produtos para provadores">Produtos para provadores (Prioridade Baixa)</option>
               <option value="Outros">Outros (Especificar)</option>
             </select>
             
+            {/* NOVO: CONJUNTO DE CAMPOS QUANDO O MOTIVO FOR "OUTROS" */}
             {motivo === 'Outros' && (
-              <input 
-                type="text" 
-                className="input-item" 
-                style={{ marginTop: '5px' }}
-                placeholder="Especifique o motivo da requisição..." 
-                value={motivoOutro} 
-                onChange={(e) => setMotivoOutro(e.target.value)} 
-              />
+              <div className="linha-dupla" style={{ marginTop: '5px' }}>
+                <div className="campo-loja" style={{ flex: 2 }}>
+                  <input 
+                    type="text" 
+                    className="input-item" 
+                    placeholder="Especifique o motivo da requisição..." 
+                    value={motivoOutro} 
+                    onChange={(e) => setMotivoOutro(e.target.value)} 
+                  />
+                </div>
+                <div className="campo-loja" style={{ flex: 1 }}>
+                  <select 
+                    className="input-item" 
+                    value={prioridadeOutro} 
+                    onChange={(e) => setPrioridadeOutro(e.target.value)}
+                    title="Defina o nível de urgência desta requisição"
+                  >
+                    <option value="1">Prioridade 1 (Alta / Urgente)</option>
+                    <option value="2">Prioridade 2 (Média)</option>
+                    <option value="3">Prioridade 3 (Baixa)</option>
+                  </select>
+                </div>
+              </div>
             )}
           </div>
           
@@ -464,7 +485,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
               </table>
             </div>
 
-            {/* NOVO: PAINEL DE RESUMO DE VALORES */}
             <div className="resumo-valores">
               <div className="resumo-valores-texto">
                 <strong>Atenção:</strong> Esta transferência movimenta produtos físicos. 

@@ -14,7 +14,24 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const temPedidoPendente = pedidosMarketplace.some(ped => ped.status === 'Pendente');
 
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
+  
   const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebimento');
+
+  const requisicoesOrdenadas = useMemo(() => {
+    return [...requisicoesAtivas].sort((a, b) => {
+      const prioA = a.prioridade || 3; 
+      const prioB = b.prioridade || 3;
+      
+      if (prioA !== prioB) {
+        return prioA - prioB; 
+      }
+      
+      const tempoA = a.timestampCriacao || 0;
+      const tempoB = b.timestampCriacao || 0;
+      return tempoA - tempoB; 
+    });
+  }, [requisicoesAtivas]);
+
   const colunasDinamicas = ordemProcesso.filter(etapa => 
     requisicoesAtivas.some(req => req.historico && req.historico[etapa])
   );
@@ -31,13 +48,19 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     }
   };
 
-  // --- LÓGICA MATEMÁTICA DO RANKING (ÍNDICE DE EFICIÊNCIA) ---
+  const getLinhaPrioridadeClass = (prioridade) => {
+    switch (prioridade) {
+      case 1: return 'prioridade-alta';   
+      case 2: return 'prioridade-media';  
+      case 3: return 'prioridade-baixa';  
+      default: return ''; 
+    }
+  };
+
   const rankingCalculado = useMemo(() => {
-    // 1. Filtra as requisições que já foram finalizadas e possuem métricas
     const reqsValidas = requisicoes.filter(req => {
       if (!req.metricasSeparacao) return false;
       
-      // 2. Aplica o filtro de datas (se houver)
       if (dataInicioRanking || dataFimRanking) {
         const dataFimReal = req.metricasSeparacao.finalizadoEm ? new Date(req.metricasSeparacao.finalizadoEm) : null;
         if (!dataFimReal) return false;
@@ -54,13 +77,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       return true;
     });
 
-    // 3. Agrupa por funcionário e soma as eficiências
     const pontuacoes = {};
     reqsValidas.forEach(req => {
       const resp = req.metricasSeparacao.responsavel;
       const ef = req.metricasSeparacao.eficienciaPercentual || 0;
       
-      // Se a tarefa foi feita em dupla ("João + Maria"), pontua ambos justamente
       const nomes = resp.split('+').map(n => n.trim());
       nomes.forEach(nome => {
         if (!nome) return;
@@ -72,14 +93,12 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       });
     });
 
-    // 4. Calcula a Média de Eficiência de cada um
     const rankingFinal = Object.values(pontuacoes).map(p => ({
       nome: p.nome,
       mediaEficiencia: Math.round(p.totalEficiencia / p.qtdSeparacoes),
       qtdSeparacoes: p.qtdSeparacoes
     }));
 
-    // 5. Ordena do maior (mais eficiente) para o menor
     rankingFinal.sort((a, b) => b.mediaEficiencia - a.mediaEficiencia);
 
     return rankingFinal;
@@ -88,32 +107,20 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   return (
     <div className="painel-container">
       
-      {/* NAVEGAÇÃO DE ABAS */}
       <div className="abas-container">
-        <button 
-          className={`aba-btn ${abaAtiva === 'interna' ? 'ativa' : ''}`} 
-          onClick={() => setAbaAtiva('interna')}
-        >
+        <button className={`aba-btn ${abaAtiva === 'interna' ? 'ativa' : ''}`} onClick={() => setAbaAtiva('interna')}>
           🏢 Transferências Internas
         </button>
         
-        <button 
-          className={`aba-btn ${abaAtiva === 'marketplace' ? 'ativa' : ''}`} 
-          onClick={() => setAbaAtiva('marketplace')}
-        >
-          🛒 Marketplace 
-          {temPedidoPendente && <span className="alerta-pisca">!</span>}
+        <button className={`aba-btn ${abaAtiva === 'marketplace' ? 'ativa' : ''}`} onClick={() => setAbaAtiva('marketplace')}>
+          🛒 Marketplace {temPedidoPendente && <span className="alerta-pisca">!</span>}
         </button>
 
-        {/* BOTÃO GERENCIAL DO RANKING */}
         <div style={{ marginLeft: 'auto' }}>
-          <button className="btn-ranking-abrir" onClick={() => setMostrarRanking(true)}>
-            🏆 Ranking da Equipe
-          </button>
+          <button className="btn-ranking-abrir" onClick={() => setMostrarRanking(true)}>🏆 Ranking da Equipe</button>
         </div>
       </div>
 
-      {/* ABA 1: TRANSFERÊNCIAS INTERNAS */}
       {abaAtiva === 'interna' && (
         <>
           <div className="painel-header">
@@ -125,28 +132,34 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
             <table className="tabela-requisicoes" style={{ whiteSpace: 'nowrap' }}>
               <thead>
                 <tr>
+                  <th>Motivo / Prioridade</th>
                   <th>ID</th>
                   <th>Status</th>
                   <th>Data</th>
                   <th>Solicitante</th>
                   <th>Loja Destino</th>
                   <th>Itens</th>
-                  
-                  {colunasDinamicas.map(coluna => (
-                    <th key={coluna}>Resp. {coluna}</th>
-                  ))}
+                  {colunasDinamicas.map(coluna => (<th key={coluna}>Resp. {coluna}</th>))}
                 </tr>
               </thead>
               <tbody>
-                {requisicoesAtivas.length > 0 ? (
-                  requisicoesAtivas.map((req) => (
-                    <tr key={req.id} onClick={() => aoAbrirDetalhes(req)} style={{ cursor: 'pointer' }} className="linha-tabela-hover">
-                      <td>{req.id}</td>
-                      <td>
-                        <span className={`status-badge ${getStatusClass(req.status)}`}>
-                          {req.status}
-                        </span>
+                {requisicoesOrdenadas.length > 0 ? (
+                  requisicoesOrdenadas.map((req) => (
+                    <tr 
+                      key={req.id} 
+                      onClick={() => aoAbrirDetalhes(req)} 
+                      style={{ cursor: 'pointer' }} 
+                      className={`linha-tabela-hover ${getLinhaPrioridadeClass(req.prioridade)}`}
+                    >
+                      {/* Célula com title para hover e limite de 25 caracteres */}
+                      <td style={{ fontWeight: 'bold' }} title={req.motivo || ''}>
+                        {req.motivo 
+                          ? (req.motivo.length > 25 ? `${req.motivo.substring(0, 25)}...` : req.motivo) 
+                          : '-'} 
+                        {req.prioridade && <span style={{fontSize: '0.8em', display:'block', color:'#666'}}>Prioridade {req.prioridade}</span>}
                       </td>
+                      <td>{req.id}</td>
+                      <td><span className={`status-badge ${getStatusClass(req.status)}`}>{req.status}</span></td>
                       <td>{req.data}</td>
                       <td><strong>{req.solicitante}</strong></td>
                       <td>{req.destino}</td>
@@ -161,10 +174,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                   ))
                 ) : (
                   <tr>
-                    <td 
-                      colSpan={6 + colunasDinamicas.length} 
-                      style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}
-                    >
+                    <td colSpan={7 + colunasDinamicas.length} style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}>
                       Parabéns equipe de estoque! Nenhuma requisição de transferência pendente no momento. A operação está limpa!
                     </td>
                   </tr>
@@ -175,7 +185,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
         </>
       )}
 
-      {/* ABA 2: MARKETPLACE */}
       {abaAtiva === 'marketplace' && (
         <PainelMarketplace 
           pedidosMarketplace={pedidosMarketplace} 
@@ -184,9 +193,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
         />
       )}
 
-      {/* ========================================== */}
-      {/* MODAL DO RANKING GERENCIAL DE PRODUTIVIDADE  */}
-      {/* ========================================== */}
       {mostrarRanking && (
         <div className="ranking-modal-overlay" onClick={() => setMostrarRanking(false)}>
           <div className="ranking-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -196,7 +202,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
             </div>
             
             <div className="ranking-modal-body">
-              {/* FILTROS DE DATA */}
               <div className="ranking-filtros">
                 <div className="filtro-grupo">
                   <label>Data Início:</label>
@@ -215,9 +220,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                 </div>
               ) : (
                 <>
-                  {/* PÓDIO DOS VENCEDORES */}
                   <div className="podio-container">
-                    {/* 2º LUGAR */}
                     {rankingCalculado[1] && (
                       <div className="podio-lugar podio-prata">
                         <div className="podio-avatar">🥈</div>
@@ -225,8 +228,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                         <span className="podio-nota">+{rankingCalculado[1].mediaEficiencia}%</span>
                       </div>
                     )}
-                    
-                    {/* 1º LUGAR */}
                     {rankingCalculado[0] && (
                       <div className="podio-lugar podio-ouro">
                         <div className="podio-avatar">🥇</div>
@@ -234,8 +235,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                         <span className="podio-nota">+{rankingCalculado[0].mediaEficiencia}%</span>
                       </div>
                     )}
-
-                    {/* 3º LUGAR */}
                     {rankingCalculado[2] && (
                       <div className="podio-lugar podio-bronze">
                         <div className="podio-avatar">🥉</div>
@@ -245,7 +244,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                     )}
                   </div>
 
-                  {/* TABELA DE POSIÇÕES */}
                   <table className="tabela-ranking">
                     <thead>
                       <tr>
