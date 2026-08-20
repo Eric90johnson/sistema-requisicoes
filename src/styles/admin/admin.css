@@ -1,0 +1,139 @@
+/* src/styles/admin/admin.css */
+.admin-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  animation: fadeIn 0.3s ease;
+}
+
+.admin-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.admin-header h2 {
+  color: #2c3e50;
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+
+.admin-header p {
+  color: #7f8c8d;
+}
+
+.admin-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 30px;
+  border-bottom: 2px solid #ecf0f1;
+  padding-bottom: 15px;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: bold;
+  color: #95a5a6;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-btn:hover {
+  background-color: #f8f9fa;
+  color: #34495e;
+}
+
+.tab-btn.ativo {
+  background-color: #8e44ad; /* Roxo para destacar que é área de gestão */
+  color: white;
+  box-shadow: 0 4px 10px rgba(142, 68, 173, 0.3);
+}
+
+.admin-content {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+  min-height: 400px;
+}
+
+/* --- ESTILOS DAS ABAS DO ADMIN (ESTILO PASTA/TRAPÉZIO) --- */
+.admin-tabs-header {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  width: 100%;
+  margin-top: 15px; /* Espaço reduzido para ficar mais próximo do título */
+  position: relative;
+}
+
+/* A barra contínua que conecta todas as abas por baixo */
+.admin-tabs-header::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 10%; /* Define a largura da barra base (pode alterar para 0% se quiser de ponta a ponta) */
+  right: 10%;
+  height: 5px;
+  background: #ffffff; /* Mesma cor da aba ativa para criar o efeito de união */
+  border-radius: 5px;
+  z-index: 1;
+}
+
+.tab-header {
+  position: relative;
+  background: transparent;
+  border: none;
+  padding: 12px 45px; /* Mais padding lateral para acomodar a inclinação */
+  margin: 0 -8px; /* Margem negativa para as abas se sobreporem suavemente */
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: bold;
+  font-size: 0.95rem;
+  cursor: pointer;
+  z-index: 2; /* Fica acima da barra base */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* O fundo da aba fazendo o formato inclinado (Trapézio) */
+.tab-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.25); /* Cor das abas desativadas */
+  border-radius: 12px 12px 0 0; /* Cantos superiores arredondados */
+  
+  /* O truque 3D para criar as laterais inclinadas (/ \) idêntico à sua imagem */
+  transform: perspective(80px) rotateX(20deg);
+  transform-origin: bottom;
+  
+  z-index: -1; /* Fica atrás do ícone e do texto */
+  transition: all 0.3s ease;
+}
+
+/* Efeito ao passar o mouse nas abas inativas */
+.tab-header:hover::before {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* ESTILO DA ABA ATIVA */
+.tab-header.ativo {
+  color: #8e44ad; /* O texto fica roxo para dar contraste no fundo branco */
+  z-index: 3; /* Traz a aba ativa para a frente de todas as outras */
+}
+
+.tab-header.ativo::before {
+  background: #ffffff; /* Fundo branco, conectando visualmente sem emendas com a barra inferior */
+  box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+}

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import '../../styles/components/menu/menu.css';
 
-// NOVO: Recebemos a prop 'aoSair' aqui no menu
-export default function Menu({ aoClicarPainel, aoClicarHistorico, aoClicarBaseDados, aoSair }) { 
+// NOVO: Adicionamos aoClicarAdmin e usuarioLogado nas propriedades
+export default function Menu({ aoClicarPainel, aoClicarHistorico, aoClicarBaseDados, aoClicarAdmin, usuarioLogado, aoSair }) { 
   const [aberto, setAberto] = useState(false);
 
   const alternarMenu = () => setAberto(!aberto);
@@ -48,7 +48,20 @@ export default function Menu({ aoClicarPainel, aoClicarHistorico, aoClicarBaseDa
             <span>🗄️</span> Base de Dados
           </div>
 
-          {/* NOVO: Botão de Sair estilizado para destacar o Logout */}
+          {/* NOVO: A mágica acontece aqui! Só aparece se o usuário for o admin */}
+          {usuarioLogado?.username === 'admin' && (
+            <div 
+              className="menu-item" 
+              style={{ borderTop: '1px solid #eee', marginTop: '5px', paddingTop: '10px', color: '#8e44ad', fontWeight: 'bold' }}
+              onClick={() => {
+                aoClicarAdmin(); 
+                setAberto(false); 
+              }}
+            >
+              <span>⚙️</span> Painel Administrador
+            </div>
+          )}
+
           <div 
             className="menu-item" 
             style={{ borderTop: '1px solid #eee', marginTop: '5px', paddingTop: '10px', color: '#c0392b' }}

@@ -1,0 +1,157 @@
+/* src/styles/admin/usuarios/adminUsuarios.css */
+.admin-usuarios-container {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  animation: fadeIn 0.4s ease;
+}
+
+/* Área de cadastro de novo usuário */
+.card-novo-usuario {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 25px;
+}
+
+.card-novo-usuario h3 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-usuarios {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.input-group-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.input-group-admin label {
+  font-weight: bold;
+  color: #34495e;
+  font-size: 0.9rem;
+}
+
+.input-group-admin input,
+.input-group-admin select {
+  padding: 10px 15px;
+  border: 1px solid #bdc3c7;
+  border-radius: 6px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-group-admin input:focus,
+.input-group-admin select:focus {
+  border-color: #8e44ad;
+}
+
+.btn-salvar-usuario {
+  grid-column: span 2;
+  background-color: #8e44ad;
+  color: white;
+  border: none;
+  padding: 12px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 10px;
+}
+
+.btn-salvar-usuario:hover {
+  background-color: #732d91;
+}
+
+.btn-salvar-usuario:disabled {
+  background-color: #bdc3c7;
+  cursor: not-allowed;
+}
+
+/* Tabela de Usuários Cadastrados */
+.lista-usuarios-section h3 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+  font-size: 1.3rem;
+}
+
+.tabela-usuarios {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tabela-usuarios th {
+  background-color: #ecf0f1;
+  color: #2c3e50;
+  padding: 15px;
+  text-align: left;
+  font-weight: bold;
+}
+
+.tabela-usuarios td {
+  padding: 15px;
+  border-bottom: 1px solid #ecf0f1;
+  color: #34495e;
+}
+
+.tabela-usuarios tr:last-child td {
+  border-bottom: none;
+}
+
+.tabela-usuarios tr:hover {
+  background-color: #f9f9f9;
+}
+
+.tag-loja {
+  background-color: #dff9fb;
+  color: #000;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.btn-excluir-usuario {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.btn-excluir-usuario:hover {
+  background-color: #c0392b;
+}
+
+.btn-excluir-usuario:disabled {
+  background-color: #fab1a0;
+  cursor: not-allowed;
+}
+
+/* Responsividade do Formulário */
+@media (max-width: 768px) {
+  .form-usuarios {
+    grid-template-columns: 1fr;
+  }
+  .btn-salvar-usuario {
+    grid-column: span 1;
+  }
+}

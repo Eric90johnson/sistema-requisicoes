@@ -11,11 +11,10 @@ import InserirPedido from './pages/marketplace/inserir-pedido/InserirPedido';
 import Login from './pages/login/Login';
 import logo from './assets/logo.jpeg'; 
 
-// Importando a ponte de comunicação com o Supabase
+import Admin from './pages/admin/Admin';
 import { supabase } from './services/supabase';
 
 function App() {
-  // Mantém a sessão ativa mesmo após recarregar a página
   const [isLogado, setIsLogado] = useState(() => {
     return localStorage.getItem('netadantas_logado') === 'true';
   });
@@ -27,16 +26,16 @@ function App() {
 
   const [telaAtual, setTelaAtual] = useState('painel');
   const [reqSelecionada, setReqSelecionada] = useState(null);
+  
+  // NOVO: Estado que controla qual aba do admin está aberta
+  const [abaAdminAtiva, setAbaAdminAtiva] = useState('base-dados');
 
-  // Os estados começam vazios, pois a verdade absoluta agora mora no Supabase
   const [baseProdutos, setBaseProdutos] = useState([]);
   const [requisicoes, setRequisicoes] = useState([]);
   const [pedidosMarketplace, setPedidosMarketplace] = useState([]);
   const [recordesGlobais, setRecordesGlobais] = useState({});
-  
   const [carregando, setCarregando] = useState(false);
 
-  // Registra login e persiste no navegador
   const handleLogar = (dadosUsuario) => {
     localStorage.setItem('netadantas_logado', 'true');
     if (dadosUsuario) {
@@ -46,7 +45,6 @@ function App() {
     setIsLogado(true);
   };
 
-  // Encerra sessão e remove os registros locais
   const handleSair = () => {
     localStorage.removeItem('netadantas_logado');
     localStorage.removeItem('netadantas_usuario');
@@ -54,7 +52,6 @@ function App() {
     setIsLogado(false);
   };
 
-  // Puxa as informações da nuvem ao autenticar
   useEffect(() => {
     if (isLogado) {
       carregarDadosDaNuvem();
@@ -64,9 +61,7 @@ function App() {
   const carregarDadosDaNuvem = async () => {
     setCarregando(true);
     try {
-      // 1. Puxa as Requisições Internas
       const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false });
-      
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
           ...r,
@@ -79,7 +74,6 @@ function App() {
         setRequisicoes(reqsFormatadas);
       }
 
-      // 2. Puxa os Recordes do Jogo de Produtividade
       const { data: recData } = await supabase.from('recordes_globais').select('*');
       if (recData) {
         const objRecordes = {};
@@ -93,7 +87,6 @@ function App() {
         setRecordesGlobais(objRecordes);
       }
 
-      // 3. Puxa os Produtos Base do Supabase e converte para o formato do frontend
       const { data: prodData } = await supabase.from('base_produtos').select('*');
       if (prodData) {
         const produtosFormatados = prodData.map(p => ({
@@ -109,7 +102,6 @@ function App() {
         }));
         setBaseProdutos(produtosFormatados);
       }
-
     } catch (error) {
       console.error("Erro ao sincronizar com o Supabase:", error);
     } finally {
@@ -247,15 +239,40 @@ function App() {
 
   return (
     <div className="layout-container">
-      <header className="cabecalho-global">
-        <img src={logo} alt="Logo Neta Dantas" className="logo-header" />
-        <h1 className="titulo-cabecalho">Painel de Requisição Interna de Produtos</h1>
-        <Menu 
-          aoClicarPainel={() => setTelaAtual('painel')}
-          aoClicarHistorico={() => setTelaAtual('historico')}
-          aoClicarBaseDados={() => setTelaAtual('base-dados')} 
-          aoSair={handleSair} 
-        />
+      {/* NOVO: Ajuste no cabeçalho para permitir a injeção das abas quando na tela admin */}
+      <header className="cabecalho-global" style={telaAtual === 'admin' ? { display: 'flex', flexDirection: 'column', paddingBottom: '0px' } : {}}>
+        
+        {/* Camada 1: Logo, Título e Menu Hambúrguer (mantém o layout original) */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <img src={logo} alt="Logo Neta Dantas" className="logo-header" />
+          <h1 className="titulo-cabecalho">Painel de Requisição Interna de Produtos</h1>
+          <Menu 
+            aoClicarPainel={() => setTelaAtual('painel')}
+            aoClicarHistorico={() => setTelaAtual('historico')}
+            aoClicarBaseDados={() => setTelaAtual('base-dados')} 
+            aoClicarAdmin={() => setTelaAtual('admin')}
+            usuarioLogado={usuarioLogado}
+            aoSair={handleSair} 
+          />
+        </div>
+
+        {/* Camada 2: As Abas que aparecem APENAS quando o Admin está na sua tela */}
+        {telaAtual === 'admin' && usuarioLogado?.username === 'admin' && (
+          <div className="admin-tabs-header">
+            <button
+              className={`tab-header ${abaAdminAtiva === 'base-dados' ? 'ativo' : ''}`}
+              onClick={() => setAbaAdminAtiva('base-dados')}
+            >
+              🗄️ Base de Dados
+            </button>
+            <button
+              className={`tab-header ${abaAdminAtiva === 'usuarios' ? 'ativo' : ''}`}
+              onClick={() => setAbaAdminAtiva('usuarios')}
+            >
+              👥 Gestão de Usuários
+            </button>
+          </div>
+        )}
       </header>
       
       <main>
@@ -276,29 +293,19 @@ function App() {
               />
             )}
             
-            {telaAtual === 'nova' && (
-              <NovaRequisicao 
-                aoVoltar={() => setTelaAtual('painel')} 
-                baseProdutos={baseProdutos} 
-                aoSalvar={handleSalvarRequisicao} 
-                requisicoes={requisicoes} 
-              />
-            )}
-            
-            {telaAtual === 'detalhes' && (
-              <DetalhesRequisicao 
-                req={reqSelecionada} 
-                aoVoltar={() => setTelaAtual('painel')} 
-                aoMudarStatus={handleAlterarStatus} 
-                aoAtualizarItens={handleAtualizarItens}
-                aoAdicionarResponsavel={handleAdicionarResponsavel}
-                aoFinalizarSeparacao={handleFinalizarSeparacao} 
-                recordesGlobais={recordesGlobais}
-              />
-            )}
+            {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} />}
+            {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} recordesGlobais={recordesGlobais} />}
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
             {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => setTelaAtual('painel')} produtos={baseProdutos} setProdutos={setBaseProdutos} />}
+            
+            {/* NOVO: Passamos a aba ativa como propriedade para o componente Admin */}
+            {telaAtual === 'admin' && usuarioLogado?.username === 'admin' && (
+              <Admin 
+                setProdutos={setBaseProdutos} 
+                abaAtiva={abaAdminAtiva} 
+              />
+            )}
           </>
         )}
       </main>
