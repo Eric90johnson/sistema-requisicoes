@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import '../../styles/pages/base-dados/baseDados.css';
+import { supabase } from '../../services/supabase';
 
 export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
   const inputFileRef = useRef(null);
@@ -96,15 +97,17 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
     };
   }, []);
 
-  // 2. Processamento da Importação
-  const handleProcessarArquivo = (evento) => {
+  // 2. Processamento da Importação e Sobrescrita no Supabase
+  const handleProcessarArquivo = async (evento) => {
     const arquivo = evento.target.files[0];
     if (!arquivo) return;
+    
     const leitor = new FileReader();
-    leitor.onload = (e) => {
+    leitor.onload = async (e) => {
       const texto = e.target.result;
       const linhas = texto.split('\n');
       const novosProdutos = [];
+
       for (let i = 1; i < linhas.length; i++) {
         const linhaAtual = linhas[i].trim();
         if (linhaAtual) {
@@ -113,21 +116,48 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
           novosProdutos.push({
             codigo: colunas[0] ? colunas[0].trim() : '-',
             descricao: colunas[1] ? colunas[1].trim() : 'Sem descrição',
-            codigoBarra: colunas[2] ? colunas[2].trim() : '-',
+            codigo_barra: colunas[2] ? colunas[2].trim() : '-',
             ncm: colunas[3] ? colunas[3].trim() : '-',
             fornecedor: colunas[4] ? colunas[4].trim() : '-',
             marca: colunas[5] ? colunas[5].trim() : '-',
-            quantidade: colunas[6] ? colunas[6].trim() : '0', 
-            precoVenda: colunas[7] ? colunas[7].trim() : '0,00',
-            precoCusto: colunas[8] ? colunas[8].trim() : '0,00'
+            quantidade: parseFloat((colunas[6] ? colunas[6].trim() : '0').replace(',', '.')) || 0, 
+            preco_venda: colunas[7] ? colunas[7].trim() : '0,00',
+            preco_custo: colunas[8] ? colunas[8].trim() : '0,00'
           });
         }
       }
-      setProdutos(novosProdutos);
+
+      // Atualiza o estado local imediatamente para feedback visual rápido
+      const produtosFormatadosFrontend = novosProdutos.map(p => ({
+        ...p,
+        codigoBarra: p.codigo_barra,
+        precoVenda: p.preco_venda,
+        precoCusto: p.preco_custo
+      }));
+
+      setProdutos(produtosFormatadosFrontend);
       setFiltrosAtivos({}); 
       setItensVisiveis(50); 
       setPopup({ visivel: true, quantidade: novosProdutos.length });
       evento.target.value = null; 
+
+      // --- SUPABASE: SOBRESCREVER DADOS ---
+      try {
+        // 1. Limpa completamente a tabela antiga
+        await supabase.from('base_produtos').delete().neq('codigo', 'EXCLUIR_TUDO_IMPOSSIVEL');
+
+        // 2. Insere os novos produtos em lotes (para evitar gargalos se a base for muito grande)
+        const tamanhoLote = 500;
+        for (let i = 0; i < novosProdutos.length; i += tamanhoLote) {
+          const lote = novosProdutos.slice(i, i + tamanhoLote);
+          const { error } = await supabase.from('base_produtos').insert(lote);
+          if (error) {
+            console.error("Erro ao inserir lote no Supabase:", error);
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao sincronizar base de produtos com a nuvem:", err);
+      }
     };
     leitor.readAsText(arquivo);
   };
@@ -232,10 +262,8 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
     });
   }
 
-  // Criação do array final cortado para a Rolagem Infinita
   const produtosParaExibir = produtosFiltrados.slice(0, itensVisiveis);
 
-  // Função que detecta se o usuário rolou a tabela até o final
   const handleScroll = (e) => {
     const { scrollTop, clientHeight, scrollHeight } = e.target;
     if (scrollHeight - scrollTop <= clientHeight + 150) {
@@ -243,7 +271,6 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
     }
   };
 
-  // Componente do Cabeçalho Excel com Resizer
   const renderCabecalho = (titulo, chave) => {
     const isFiltrado = filtrosAtivos[chave] !== undefined;
     
@@ -304,7 +331,7 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
       </div>
 
       <div className="acoes-base">
-        <p>Importe a planilha de posição de estoque gerada pelo ERP. O sistema espera o formato CSV padrão com as 9 colunas.</p>
+        <p>Importe a planilha de posição de estoque gerada pelo ERP. Ao importar um novo arquivo, a base anterior será totalmente substituída na nuvem.</p>
         <input type="file" accept=".csv" ref={inputFileRef} className="input-file-oculto" onChange={handleProcessarArquivo} />
         <button className="btn-importar" onClick={() => inputFileRef.current.click()}>
           <span>📥</span> Importar Arquivo ERP (.CSV)
@@ -364,7 +391,7 @@ export default function BaseDados({ aoVoltar, produtos, setProdutos }) {
             <span className="popup-icone">✅</span>
             <p className="popup-mensagem">
               <strong>Sucesso!</strong>
-              Base de dados atualizada. <br/>
+              Base de dados atualizada e salva na nuvem. <br/>
               {popup.quantidade} produtos foram importados.
             </p>
             <button className="popup-btn" onClick={fecharPopup}>
