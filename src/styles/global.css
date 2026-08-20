@@ -1,8 +1,8 @@
 /* src/styles/global.css */
 :root {
-  --cor-primaria: #9b59b6; /* Lilás principal */
-  --cor-secundaria: #8e44ad; /* Lilás mais escuro */
-  --cor-fundo: #f8f5fa; /* Fundo quase branco com toque lilás */
+  --cor-primaria: #9b59b6; 
+  --cor-secundaria: #8e44ad; 
+  --cor-fundo: #f8f5fa; 
   --cor-texto: #333333;
   --cor-branca: #ffffff;
 }
@@ -37,17 +37,14 @@ body {
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
 }
 
-.espaco-logo {
+/* NOVO: Formatação da logo perfeita no cabeçalho */
+.logo-header {
   width: 60px;
   height: 60px;
-  background-color: rgba(255, 255, 255, 0.2);
-  border: 1px dashed rgba(255, 255, 255, 0.5);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  text-align: center;
+  object-fit: cover; /* Garante que a imagem preencha o espaço sem distorcer */
+  border-radius: 50%; /* Faz o recorte circular perfeito */
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .titulo-cabecalho {
@@ -59,7 +56,7 @@ body {
 }
 
 .espaco-vazio {
-  width: 60px; /* Mesma largura da logo para equilibrar o título no centro perfeitamente */
+  width: 60px; 
 }
 
 /* Badges de Status Globais */
@@ -73,10 +70,10 @@ body {
 
 .status-pendente { background-color: #ffeeba; color: #856404; }
 .status-separacao { background-color: #bee5eb; color: #0c5460; }
-.status-separado { background-color: #e2d9f3; color: #5a3286; } /* Lilás claro */
-.status-faturado { background-color: #f8d7da; color: #721c24; } /* Avermelhado */
-.status-enviado { background-color: #cce5ff; color: #004085; }  /* Azul */
-.status-recebido { background-color: #d4edda; color: #155724; } /* Verde */
+.status-separado { background-color: #e2d9f3; color: #5a3286; } 
+.status-faturado { background-color: #f8d7da; color: #721c24; } 
+.status-enviado { background-color: #cce5ff; color: #004085; }  
+.status-recebido { background-color: #d4edda; color: #155724; } 
 
 /* --- RESPONSIVIDADE (Celulares e Telas Menores) --- */
 @media (max-width: 768px) {
@@ -85,10 +82,12 @@ body {
   }
   
   .titulo-cabecalho {
-    font-size: 1.1rem; /* Diminui o título para caber na tela */
+    font-size: 1.1rem; 
   }
   
-  .espaco-logo, .menu-container {
-    width: 40px; /* Reduz os espaços laterais para focar no título */
+  /* NOVO: Ajuste do tamanho da logo no celular */
+  .logo-header, .menu-container {
+    width: 45px; 
+    height: 45px;
   }
 }

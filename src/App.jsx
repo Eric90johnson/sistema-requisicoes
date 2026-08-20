@@ -9,7 +9,14 @@ import Historico from './pages/historico/Historico';
 import Menu from './components/menu/Menu';
 import InserirPedido from './pages/marketplace/inserir-pedido/InserirPedido';
 
+import Login from './pages/login/Login';
+
+// NOVO: Importando a logo para usar no cabeçalho!
+import logo from './assets/logo.jpeg'; 
+
 function App() {
+  const [isLogado, setIsLogado] = useState(false);
+
   const [telaAtual, setTelaAtual] = useState('painel');
   const [reqSelecionada, setReqSelecionada] = useState(null);
 
@@ -141,15 +148,26 @@ function App() {
     setTelaAtual('painel');
   };
 
+  if (!isLogado) {
+    return <Login aoLogar={() => setIsLogado(true)} />;
+  }
+
   return (
     <div className="layout-container">
       <header className="cabecalho-global">
-        <div className="espaco-logo">Logo</div>
+        
+        {/* NOVO: Imagem da logo renderizada aqui! */}
+        <img src={logo} alt="Logo Neta Dantas" className="logo-header" />
+        
         <h1 className="titulo-cabecalho">Painel de Requisição Interna de Produtos</h1>
+        
         <Menu 
           aoClicarPainel={() => setTelaAtual('painel')}
           aoClicarHistorico={() => setTelaAtual('historico')}
           aoClicarBaseDados={() => setTelaAtual('base-dados')} 
+          
+          /* NOVO: Função que tira o login e manda de volta pra tela inicial */
+          aoSair={() => setIsLogado(false)} 
         />
       </header>
       <main>
@@ -163,7 +181,6 @@ function App() {
           />
         )}
         
-        {/* NOVO: A propriedade requisicoes={requisicoes} foi adicionada aqui */}
         {telaAtual === 'nova' && (
           <NovaRequisicao 
             aoVoltar={() => setTelaAtual('painel')} 

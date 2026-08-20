@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import '../../styles/components/menu/menu.css';
 
-// Recebemos todas as props de navegação aqui
-export default function Menu({ aoClicarPainel, aoClicarHistorico, aoClicarBaseDados }) { 
+// NOVO: Recebemos a prop 'aoSair' aqui no menu
+export default function Menu({ aoClicarPainel, aoClicarHistorico, aoClicarBaseDados, aoSair }) { 
   const [aberto, setAberto] = useState(false);
 
   const alternarMenu = () => setAberto(!aberto);
@@ -21,8 +21,8 @@ export default function Menu({ aoClicarPainel, aoClicarHistorico, aoClicarBaseDa
           <div 
             className="menu-item" 
             onClick={() => {
-              aoClicarPainel(); // Volta para a tela inicial
-              setAberto(false); // Fecha o menu
+              aoClicarPainel(); 
+              setAberto(false); 
             }}
           >
             <span>🏠</span> Painel Principal
@@ -31,8 +31,8 @@ export default function Menu({ aoClicarPainel, aoClicarHistorico, aoClicarBaseDa
           <div 
             className="menu-item" 
             onClick={() => {
-              aoClicarHistorico(); // Vai para a tela de histórico
-              setAberto(false);    // Fecha o menu
+              aoClicarHistorico(); 
+              setAberto(false); 
             }}
           >
             <span>🕒</span> Histórico
@@ -41,11 +41,23 @@ export default function Menu({ aoClicarPainel, aoClicarHistorico, aoClicarBaseDa
           <div 
             className="menu-item" 
             onClick={() => {
-              aoClicarBaseDados(); // Chama a função que troca a tela
-              setAberto(false);    // Fecha a caixinha do menu
+              aoClicarBaseDados(); 
+              setAberto(false); 
             }}
           >
             <span>🗄️</span> Base de Dados
+          </div>
+
+          {/* NOVO: Botão de Sair estilizado para destacar o Logout */}
+          <div 
+            className="menu-item" 
+            style={{ borderTop: '1px solid #eee', marginTop: '5px', paddingTop: '10px', color: '#c0392b' }}
+            onClick={() => {
+              aoSair(); 
+              setAberto(false); 
+            }}
+          >
+            <span>🚪</span> Sair do Sistema
           </div>
 
         </div>
