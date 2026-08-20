@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import '../../../styles/pages/painel/nova-requisicao/novaRequisicao.css';
 
-// Função para tratar valores monetários que vêm sujos da base de dados (Ex: "R$ 493,78" ou "493.78")
 const parseValorMoeda = (valorStr) => {
   if (!valorStr) return 0;
   if (typeof valorStr === 'number') return valorStr;
@@ -16,8 +15,8 @@ const parseValorMoeda = (valorStr) => {
   return Number(limpo) || 0;
 };
 
-export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
-  // --- NOVO: Lojas com nomes reduzidos e inclusão de Mulungu ---
+export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requisicoes = [] }) {
+  
   const lojas = [
     'Araturi', 
     'Conjunto Ceará', 
@@ -230,7 +229,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
         setItensAdicionados(prev => [...prev, ...novosItens]);
         const qtdAlertas = novosItens.filter(item => item.insuficiente).length;
         if (qtdAlertas > 0) {
-          mostrarAlerta('aviso', 'Importação Parcial', `${novosItens.length} produtos importados.\n\nATENÇÃO: ${qtdAlertas} produto(s) excedem o estoque atual e foram marcados em vermelho na lista.`);
+          mostrarAlerta('aviso', 'Importação Parcial', `${novosItens.length} produtos importados.\n\nATENÇÃO: ${qtdAlertas} produto(s) excedem o estoque atual e foram markedos em vermelho na lista.`);
         } else {
           mostrarAlerta('sucesso', 'Importação Concluída', `${novosItens.length} produtos importados com sucesso!`);
         }
@@ -240,6 +239,29 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
       e.target.value = null; 
     };
     reader.readAsText(file);
+  };
+
+  const gerarIdSequencial = (destino) => {
+    let prefixo = 'REQ'; 
+    if (destino === 'Araturi') prefixo = 'A';
+    else if (destino === 'Conjunto Ceará') prefixo = 'C';
+    else if (destino === 'Messejana') prefixo = 'M';
+    else if (destino === 'Mulungu') prefixo = 'MU';
+    
+    let maxNum = 0;
+    
+    requisicoes.forEach(req => {
+      if (req.id && req.id.startsWith(prefixo)) {
+        const resto = req.id.substring(prefixo.length);
+        if (/^\d+$/.test(resto)) {
+          const num = parseInt(resto, 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+    });
+
+    const proxNumFormatado = String(maxNum + 1).padStart(4, '0');
+    return `${prefixo}${proxNumFormatado}`;
   };
 
   const finalizarRequisicao = () => {
@@ -287,9 +309,10 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
     }
 
     const novaRequisicao = {
-      id: `REQ-${Math.floor(Math.random() * 9000) + 1000}`,
+      id: gerarIdSequencial(lojaPara),
       data: new Date().toLocaleDateString('pt-BR'),
       timestampCriacao: Date.now(), 
+      origem: lojaDe, // <--- NOVO: Grava a loja que fará a separação/saída
       destino: lojaPara,
       solicitante: solicitante,
       motivo: motivoFinal,
@@ -300,7 +323,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar }) {
       historico: {} 
     };
 
-    mostrarAlerta('sucesso', 'Requisição Concluída!', 'A requisição foi gravada e já está disponível no painel.', () => {
+    mostrarAlerta('sucesso', 'Requisição Concluída!', `A requisição ${novaRequisicao.id} foi gravada e já está disponível no painel.`, () => {
       fecharAlerta();
       aoSalvar(novaRequisicao);
     });

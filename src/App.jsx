@@ -28,7 +28,6 @@ function App() {
     return salvo ? JSON.parse(salvo) : [];
   });
 
-  // --- NOVO: BANCO DE RECORDES GLOBAL ---
   const [recordesGlobais, setRecordesGlobais] = useState(() => {
     const salvo = localStorage.getItem('estoqueRecordesGlobais');
     return salvo ? JSON.parse(salvo) : {};
@@ -89,21 +88,17 @@ function App() {
     setReqSelecionada(reqAtualizada);
   };
 
-  // --- NOVO: FUNÇÃO PARA REGISTRAR O FIM DA SEPARAÇÃO (TEMPO E EFICIÊNCIA) ---
   const handleFinalizarSeparacao = (id, tempoSegundos, responsavelSeparacao) => {
     const listaAtualizada = requisicoes.map(req => {
       if (req.id === id) {
-        // Cálculo do Índice de Eficiência: Consideramos que o tempo ideal é de 12 segundos por item físico total.
         const totalItensFisicos = req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0);
-        const tempoSlaEsperado = totalItensFisicos * 12; // Ex: 100 itens = 1200 segundos (20 min)
+        const tempoSlaEsperado = totalItensFisicos * 12; 
         
         let percentualEficiencia = 0;
         if (tempoSegundos > 0) {
-          // Se o SLA era 1200 e ele fez em 900 -> (1200 / 900) * 100 = 133% (-100 = +33% de eficiência)
           percentualEficiencia = Math.round(((tempoSlaEsperado / tempoSegundos) * 100) - 100);
         }
 
-        // Verifica e atualiza o recorde para essa quantidade EXATA de itens
         const chaveRecorde = `qtd_${totalItensFisicos}`;
         const recordeAtual = recordesGlobais[chaveRecorde];
         let bateuRecorde = false;
@@ -133,7 +128,6 @@ function App() {
     const reqAtualizada = listaAtualizada.find(r => r.id === id);
     setReqSelecionada(reqAtualizada);
     
-    // Retorna os dados para disparar o popup de festa na tela de detalhes
     return listaAtualizada.find(r => r.id === id).metricasSeparacao;
   };
 
@@ -168,7 +162,17 @@ function App() {
             aoAbrirDetalhes={abrirDetalhes} 
           />
         )}
-        {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} />}
+        
+        {/* NOVO: A propriedade requisicoes={requisicoes} foi adicionada aqui */}
+        {telaAtual === 'nova' && (
+          <NovaRequisicao 
+            aoVoltar={() => setTelaAtual('painel')} 
+            baseProdutos={baseProdutos} 
+            aoSalvar={handleSalvarRequisicao} 
+            requisicoes={requisicoes} 
+          />
+        )}
+        
         {telaAtual === 'detalhes' && (
           <DetalhesRequisicao 
             req={reqSelecionada} 
@@ -176,7 +180,7 @@ function App() {
             aoMudarStatus={handleAlterarStatus} 
             aoAtualizarItens={handleAtualizarItens}
             aoAdicionarResponsavel={handleAdicionarResponsavel}
-            aoFinalizarSeparacao={handleFinalizarSeparacao} // Passando a prop do game
+            aoFinalizarSeparacao={handleFinalizarSeparacao} 
             recordesGlobais={recordesGlobais}
           />
         )}

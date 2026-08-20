@@ -5,7 +5,6 @@ import '../../../styles/pages/painel/detalhes/detalhes.css';
 export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, recordesGlobais }) {
   if (!req) return null;
 
-  // --- ESTADOS BÁSICOS ---
   const [novoStatus, setNovoStatus] = useState(req.status);
   const [responsavel, setResponsavel] = useState('');
   const [numReqExterna, setNumReqExterna] = useState('');
@@ -14,12 +13,10 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [nomeAssumir, setNomeAssumir] = useState('');
   const [modoAssumir, setModoAssumir] = useState(false);
 
-  // --- ESTADOS DO CRONÔMETRO E GAMIFICAÇÃO ---
   const [tempoDecorrido, setTempoDecorrido] = useState(0);
   const [cronometroRodando, setCronometroRodando] = useState(false);
   const [mostrarFesta, setMostrarFesta] = useState(false);
 
-  // --- ESTADOS DE ITENS E BIPS ---
   const [itens, setItens] = useState(() => {
     const itensSalvos = localStorage.getItem(`itens_req_${req.id}`);
     return itensSalvos ? JSON.parse(itensSalvos) : (req.listaItens || []);
@@ -35,7 +32,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     bipsRef.current = bips;
   }, [bips]);
 
-  // --- ESTADOS DE INTERFACE ---
   const [linhaExpandida, setLinhaExpandida] = useState(null);
   const [modoExpansao, setModoExpansao] = useState('resumo'); 
   const [itemCameraAtiva, setItemCameraAtiva] = useState(null);
@@ -49,7 +45,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const ultimoBipTempo = useRef(0);
   const ultimoBipTexto = useRef("");
 
-  // --- FUNÇÕES DE ÁUDIO E POPUP ---
   const exibirPopup = (tipo, titulo, mensagem, onConfirm = null, onCancel = null) => {
     setPopupCustom({ visivel: true, tipo, titulo, mensagem, onConfirm, onCancel });
   };
@@ -75,7 +70,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     } catch(e) {}
   };
 
-  // --- GATILHO DO DESAFIO (INÍCIO DA SEPARAÇÃO) ---
   const dispararDesafioDeProdutividade = () => {
     const totalItensFisicos = itens.reduce((acc, item) => acc + Number(item.quantidade), 0);
     const chaveRecorde = `qtd_${totalItensFisicos}`;
@@ -92,7 +86,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     exibirPopup('info', '🔥 Desafio de Agilidade', msgDesafio);
   };
 
-  // --- LÓGICA DO CRONÔMETRO IMPLACÁVEL ---
   useEffect(() => {
     let intervalo;
     if (req.status === 'Em Separação' && !req.metricasSeparacao) {
@@ -127,7 +120,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     return `${m}:${s}`;
   };
 
-  // --- LÓGICA DA CÂMERA E BIPS ---
   useEffect(() => {
     let scanner = null;
     if (itemCameraAtiva !== null) {
@@ -188,7 +180,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     );
   };
 
-  // --- NOVA LÓGICA DA LINHA DE CHEGADA ---
   const salvarProgresso = () => {
     localStorage.setItem(`bips_req_${req.id}`, JSON.stringify(bips));
     localStorage.setItem(`itens_req_${req.id}`, JSON.stringify(itens));
@@ -220,7 +211,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     }
   };
 
-  // --- AÇÕES DE ASSUMIR E MUDAR STATUS ---
   const confirmarAssumirTarefa = () => {
     if (!nomeAssumir.trim()) { exibirPopup('aviso', 'Atenção', 'Digite seu nome para assumir a separação!'); return; }
     if (aoAdicionarResponsavel) {
@@ -310,10 +300,18 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             <label>Data da Solicitação</label>
             <span>{req.data}</span>
           </div>
+          
+          {/* NOVO: Mostrando a loja de origem de forma clara para a equipe */}
+          <div className="info-item">
+            <label>Loja Atendente (Saída)</label>
+            <span>{req.origem || 'Não informada'}</span>
+          </div>
+
           <div className="info-item">
             <label>Loja Destino (Para)</label>
             <span>{req.destino}</span>
           </div>
+          
           <div className="info-item">
             <label>Status Atual</label>
             <div><span className={`status-badge ${getStatusClass(req.status)}`}>{req.status}</span></div>
@@ -525,7 +523,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         </button>
       )}
 
-      {/* MODAL DA CÂMERA */}
       {itemCameraAtiva !== null && (() => {
         const itemAtivo = itens[itemCameraAtiva];
         const infoBipAtivo = bips[itemCameraAtiva] || { contagem: 0, referencia: null };
@@ -552,7 +549,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         );
       })()}
 
-      {/* MODAL DE POPUP CUSTOMIZADO GLOBAL */}
       {popupCustom.visivel && (
         <div className="popup-custom-overlay">
           <div className={`popup-custom-content ${popupCustom.tipo}`}>
