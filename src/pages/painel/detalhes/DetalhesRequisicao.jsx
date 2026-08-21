@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+// IMPORTANTE: Adicionamos o Html5QrcodeSupportedFormats para focar apenas em códigos 1D
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import '../../../styles/pages/painel/detalhes/detalhes.css';
 
 export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, recordesGlobais }) {
@@ -17,7 +18,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [cronometroRodando, setCronometroRodando] = useState(false);
   const [mostrarFesta, setMostrarFesta] = useState(false);
 
-  // OS ITENS AGORA REFLETEM SEMPRE A NUVEM, NUNCA MEMÓRIA LOCAL
   const [itens, setItens] = useState(req.listaItens || []);
   
   useEffect(() => {
@@ -76,7 +76,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     exibirPopup('info', '🔥 Desafio de Agilidade', msgDesafio);
   };
 
-  // CORREÇÃO DO RELÓGIO GLOBAL (Busca do banco e não do LocalStorage)
   useEffect(() => {
     let intervalo;
     if (req.status === 'Em Separação' && !req.metricasSeparacao) {
@@ -104,12 +103,41 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     return `${m}:${s}`;
   };
 
+  // --- SUPER CONFIGURAÇÃO DA CÂMERA ---
   useEffect(() => {
     let scanner = null;
     if (itemCameraAtiva !== null) {
-      scanner = new Html5Qrcode('leitor-camera-modal');
+      
+      // 1. Instancia o scanner focado apenas em Varejo (Ignora QR Code e foca em 13 números EAN)
+      scanner = new Html5Qrcode('leitor-camera-modal', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.CODE_39
+        ]
+      });
+
+      // 2. Configura a caixa e a velocidade do processador (15 fps é 3x mais rápido que o padrão)
+      const configCamera = { 
+        fps: 15, 
+        qrbox: { width: 320, height: 120 }, // Caixa larga e fina, ideal para código de barras
+        disableFlip: true,
+      };
+
+      // 3. Força resolução HD e Autofoco Contínuo para não borrar as linhas
+      const configAvancada = {
+        facingMode: "environment",
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        advanced: [{ focusMode: "continuous" }] 
+      };
+
+      // Tenta iniciar com o Modo Turbo HD
       scanner.start(
-        { facingMode: "environment" }, { fps: 5, qrbox: { width: 250, height: 100 } },
+        configAvancada, 
+        configCamera,
         (decodedText) => {
           const agora = Date.now();
           if (decodedText === ultimoBipTexto.current && (agora - ultimoBipTempo.current < 1500)) return;
@@ -117,23 +145,41 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           ultimoBipTempo.current = agora;
           processarBipagem(itemCameraAtiva, decodedText);
         },
-        (err) => { }
+        (err) => { /* Ignora erros de "código não encontrado no frame" */ }
       ).catch(err => {
-        exibirPopup('erro', 'Câmera Indisponível', 'Não foi possível acessar a câmera do dispositivo.');
-        setItemCameraAtiva(null); 
+        // Plano B: Se o celular recusar a config HD (Iphones antigos ou Androids de entrada), tenta o modo simples
+        scanner.start(
+          { facingMode: "environment" }, 
+          configCamera,
+          (decodedText) => {
+            const agora = Date.now();
+            if (decodedText === ultimoBipTexto.current && (agora - ultimoBipTempo.current < 1500)) return;
+            ultimoBipTexto.current = decodedText;
+            ultimoBipTempo.current = agora;
+            processarBipagem(itemCameraAtiva, decodedText);
+          },
+          (err) => { }
+        ).catch(fallbackErr => {
+          exibirPopup('erro', 'Erro de Câmera', 'Não foi possível acessar a lente do celular. Verifique se o navegador tem permissão.');
+          setItemCameraAtiva(null); 
+        });
       });
     }
-    return () => { if (scanner && scanner.isScanning) scanner.stop().catch(console.error); };
-  }, [itemCameraAtiva, itens]); // Adicionado `itens` na dependência para garantir atualização correta
+    
+    return () => { 
+      if (scanner && scanner.isScanning) {
+        scanner.stop().catch(console.error); 
+      }
+    };
+  }, [itemCameraAtiva, itens]); 
+  // ------------------------------------
 
-  // CORREÇÃO DOS BIPS: Grava diretamente no campo do Item e manda pro Banco
   const processarBipagem = (index, decodedText) => {
     const itemAtual = itens[index];
     const qtdBipada = itemAtual.bipContagem || 0;
     const refBipada = itemAtual.bipReferencia || null;
     const qtdDesejada = Number(itemAtual.quantidade);
     
-    // Verifica conflitos com outros itens
     const itemConflitoIndex = itens.findIndex((it, i) => it.bipReferencia === decodedText && i !== index);
     
     if (itemConflitoIndex !== -1) {
@@ -150,13 +196,13 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       tocarBipSucesso();
       const novosItens = [...itens];
       novosItens[index] = { ...itemAtual, bipContagem: 1, bipReferencia: decodedText };
-      aoAtualizarItens(req.id, novosItens); // MANDA PRA NUVEM NA MESMA HORA
+      aoAtualizarItens(req.id, novosItens); 
     } else {
       if (refBipada === decodedText) {
         tocarBipSucesso();
         const novosItens = [...itens];
         novosItens[index] = { ...itemAtual, bipContagem: qtdBipada + 1 };
-        aoAtualizarItens(req.id, novosItens); // MANDA PRA NUVEM NA MESMA HORA
+        aoAtualizarItens(req.id, novosItens); 
       } else {
         tocarBipErro();
         exibirPopup('erro', 'Produto Incorreto!', `Você escaneou o código: ${decodedText}\nMas a referência esperada é: ${refBipada}`);
@@ -169,7 +215,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       () => {
         const novosItens = [...itens];
         novosItens[index] = { ...novosItens[index], bipContagem: 0, bipReferencia: null };
-        aoAtualizarItens(req.id, novosItens); // MANDA PRA NUVEM NA MESMA HORA
+        aoAtualizarItens(req.id, novosItens); 
         ultimoBipTexto.current = ""; fecharPopupCustom();
       }, () => fecharPopupCustom()
     );

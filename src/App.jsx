@@ -46,8 +46,6 @@ function App() {
     setIsLogado(false);
   };
 
-  // Carrega dados da nuvem. O parâmetro "silencioso" impede a tela de piscar "Carregando"
-  // quando for uma atualização instantânea de background (um bip de outro celular).
   const carregarDadosDaNuvem = useCallback(async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
     try {
@@ -63,7 +61,6 @@ function App() {
         }));
         setRequisicoes(reqsFormatadas);
 
-        // Se uma requisição estiver aberta na tela, atualiza ela dinamicamente
         setReqSelecionada(prev => {
           if (!prev) return null;
           return reqsFormatadas.find(r => r.id === prev.id) || prev;
@@ -93,7 +90,6 @@ function App() {
     }
   }, []);
 
-  // MOTOR DE TEMPO REAL: Atualiza o sistema sozinho quando alguém altera algo no banco
   useEffect(() => {
     if (isLogado) {
       carregarDadosDaNuvem();
@@ -129,11 +125,16 @@ function App() {
     const req = requisicoes.find(r => r.id === id);
     const historicoAtualizado = { ...req.historico, [novoStatus]: responsavel };
     
-    // CORREÇÃO TIMER GLOBAL: Quando entra "Em Separação", grava a hora exata na Nuvem
     if (novoStatus === 'Em Separação' && req.status !== 'Em Separação') {
       historicoAtualizado.inicio_separacao = Date.now();
     }
 
+    // ATUALIZAÇÃO OTIMISTA: Faz a tela mudar imediatamente sem delay
+    const reqAtualizada = { ...req, status: novoStatus, historico: historicoAtualizado, ...dadosExtras };
+    setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
+    setReqSelecionada(reqAtualizada);
+
+    // Manda para a nuvem em background
     const payloadBanco = { status: novoStatus, historico: historicoAtualizado };
     if (dadosExtras.numeroRequisicaoExterna) payloadBanco.numero_requisicao_externa = dadosExtras.numeroRequisicaoExterna;
     if (dadosExtras.notaFiscal) payloadBanco.nota_fiscal = dadosExtras.notaFiscal;
@@ -149,11 +150,26 @@ function App() {
     
     const responsavelConcatenado = responsavelAtual ? `${responsavelAtual} + ${novoResponsavel}` : novoResponsavel;
     const historicoAtualizado = { ...req.historico, [statusAtual]: responsavelConcatenado };
+    
+    // ATUALIZAÇÃO OTIMISTA
+    const reqAtualizada = { ...req, historico: historicoAtualizado };
+    setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
+    setReqSelecionada(reqAtualizada);
+
     await supabase.from('requisicoes').update({ historico: historicoAtualizado }).eq('id', id);
   };
 
-  // CORREÇÃO DE BIPS NA NUVEM: Salva a lista inteira (com os bips) no banco
   const handleAtualizarItens = async (id, novaListaItens) => {
+    // ATUALIZAÇÃO OTIMISTA: O Bip da câmera aparece no mesmo milissegundo
+    const reqAtualizada = { 
+      ...requisicoes.find(r => r.id === id), 
+      listaItens: novaListaItens, 
+      lista_itens: novaListaItens 
+    };
+    setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
+    setReqSelecionada(reqAtualizada);
+
+    // Salva na nuvem em background
     await supabase.from('requisicoes').update({ lista_itens: novaListaItens }).eq('id', id);
   };
 
@@ -177,6 +193,11 @@ function App() {
         qtd_itens: totalItensFisicos, tempo_segundos: tempoSegundos, responsavel: responsavelSeparacao, data: new Date().toLocaleDateString()
       });
     }
+
+    // ATUALIZAÇÃO OTIMISTA
+    const reqAtualizada = { ...req, metricasSeparacao: novasMetricas };
+    setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
+    setReqSelecionada(reqAtualizada);
 
     await supabase.from('requisicoes').update({ metricas_separacao: novasMetricas }).eq('id', id);
     return novasMetricas;
