@@ -90,25 +90,37 @@ function App() {
     }
   }, []);
 
+  // MOTOR DE TEMPO REAL: Atualiza o sistema sozinho quando alguém altera algo no banco
   useEffect(() => {
     if (isLogado) {
+      // 1. Puxa os dados da nuvem quando faz o login
       carregarDadosDaNuvem();
 
+      // 2. Abre a conexão contínua
       const canalAtualizacao = supabase
         .channel('mudancas-globais')
-        .on('postgres', { event: '*', schema: 'public', table: 'requisicoes' }, () => {
+        .on('postgres', { event: '*', schema: 'public', table: 'requisicoes' }, (payload) => {
+          console.log("⚡ ALERTA REALTIME: Mudança detectada em requisições!", payload);
           carregarDadosDaNuvem(true); 
         })
-        .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, () => {
+        .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, (payload) => {
+          console.log("⚡ ALERTA REALTIME: Mudança detectada em produtos!", payload);
           carregarDadosDaNuvem(true); 
         })
-        .subscribe();
+        .subscribe((status) => {
+          console.log("📡 Status da Conexão Supabase Realtime:", status);
+          if (status === 'SUBSCRIBED') {
+            console.log("✅ Conectado com sucesso à nuvem em tempo real!");
+          }
+        });
 
       return () => {
         supabase.removeChannel(canalAtualizacao);
       };
     }
-  }, [isLogado, carregarDadosDaNuvem]);
+  // 🔥 A MÁGICA ESTÁ AQUI: Removemos o carregarDadosDaNuvem deste colchete!
+  // Agora ele só roda de novo se o isLogado mudar (entrar ou sair do sistema).
+  }, [isLogado]);
 
   const handleSalvarRequisicao = async (novaReq) => {
     setTelaAtual('painel');
