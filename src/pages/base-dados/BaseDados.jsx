@@ -2,6 +2,9 @@ import { useRef, useState, useEffect } from 'react';
 import '../../styles/pages/base-dados/baseDados.css';
 
 export default function BaseDados({ aoVoltar, produtos }) {
+  // NOVO: Estado para a Barra de Pesquisa Global
+  const [buscaGlobal, setBuscaGlobal] = useState('');
+
   // Estados dos Filtros Avançados
   const [menuAberto, setMenuAberto] = useState(null);
   const [filtrosAtivos, setFiltrosAtivos] = useState({});
@@ -163,13 +166,25 @@ export default function BaseDados({ aoVoltar, produtos }) {
 
   // 3. LÓGICA FINAL: Cruzamento de Filtros e Ordenação
   let produtosFiltrados = [...produtos];
+
+  // NOVO: Aplica a Busca Global (pesquisa livre) antes dos filtros de coluna
+  if (buscaGlobal.trim() !== '') {
+    const termo = buscaGlobal.toLowerCase();
+    produtosFiltrados = produtosFiltrados.filter(p => 
+      (p.codigo && p.codigo.toLowerCase().includes(termo)) ||
+      (p.descricao && p.descricao.toLowerCase().includes(termo)) ||
+      (p.codigoBarra && p.codigoBarra.toLowerCase().includes(termo))
+    );
+  }
   
+  // Aplica os filtros de coluna (Excel)
   Object.keys(filtrosAtivos).forEach(col => {
     if (filtrosAtivos[col]) {
       produtosFiltrados = produtosFiltrados.filter(p => filtrosAtivos[col].includes(p[col]));
     }
   });
 
+  // Aplica a ordenação
   if (ordenacao.coluna) {
     produtosFiltrados.sort((a, b) => {
       let valA = a[ordenacao.coluna];
@@ -264,46 +279,93 @@ export default function BaseDados({ aoVoltar, produtos }) {
       </div>
 
       {produtos.length > 0 ? (
-        <div className="tabela-responsiva" onScroll={handleScroll}>
-          <table id="tabela-dados" className="tabela-produtos" style={{ width: `${larguraTotalTabela}px` }}>
-            <thead>
-              <tr>
-                {renderCabecalho("PRODUTO (Código)", "codigo")}
-                {renderCabecalho("DESCRIÇÃO", "descricao")}
-                {renderCabecalho("CÓDIGO BARRA", "codigoBarra")}
-                {renderCabecalho("NCM", "ncm")}
-                {renderCabecalho("FORNECEDOR", "fornecedor")}
-                {renderCabecalho("MARCA", "marca")}
-                {renderCabecalho("ESTOQUE", "quantidade")}
-                {renderCabecalho("PREÇO VENDA", "precoVenda")}
-                {renderCabecalho("PREÇO CUSTO", "precoCusto")}
-              </tr>
-            </thead>
-            <tbody>
-              {produtosParaExibir.length > 0 ? (
-                produtosParaExibir.map((prod, index) => (
-                  <tr key={index}>
-                    <td title={prod.codigo}><strong>{prod.codigo}</strong></td>
-                    <td title={prod.descricao}>{prod.descricao}</td> 
-                    <td title={prod.codigoBarra}>{prod.codigoBarra}</td>
-                    <td title={prod.ncm}>{prod.ncm}</td>
-                    <td title={prod.fornecedor}>{prod.fornecedor}</td>
-                    <td title={prod.marca}>{prod.marca}</td>
-                    <td style={{ color: '#27ae60', fontWeight: 'bold' }}>{prod.quantidade}</td>
-                    <td>R$ {prod.precoVenda}</td>
-                    <td>R$ {prod.precoCusto}</td>
-                  </tr>
-                ))
-              ) : (
+        <>
+          {/* NOVO: Barra de Pesquisa Global */}
+          <div style={{ marginBottom: '15px', display: 'flex', gap: '10px' }}>
+            <input 
+              type="text" 
+              placeholder="🔍 Pesquisar por código, descrição ou código de barras..." 
+              value={buscaGlobal}
+              onChange={(e) => {
+                setBuscaGlobal(e.target.value);
+                setItensVisiveis(50); // Reseta a paginação ao digitar
+              }}
+              style={{
+                flex: 1,
+                padding: '12px 15px',
+                borderRadius: '8px',
+                border: '2px solid #bdc3c7',
+                fontSize: '1.05rem',
+                outline: 'none',
+                transition: 'border-color 0.2s',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#3498db'}
+              onBlur={(e) => e.target.style.borderColor = '#bdc3c7'}
+            />
+            {buscaGlobal && (
+              <button 
+                onClick={() => { setBuscaGlobal(''); setItensVisiveis(50); }}
+                style={{
+                  padding: '0 20px',
+                  backgroundColor: '#e74c3c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#c0392b'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#e74c3c'}
+              >
+                Limpar Busca
+              </button>
+            )}
+          </div>
+
+          <div className="tabela-responsiva" onScroll={handleScroll}>
+            <table id="tabela-dados" className="tabela-produtos" style={{ width: `${larguraTotalTabela}px` }}>
+              <thead>
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '50px', color: '#888' }}>
-                    Nenhum produto encontrado com as combinações de filtro atuais.
-                  </td>
+                  {renderCabecalho("PRODUTO (Código)", "codigo")}
+                  {renderCabecalho("DESCRIÇÃO", "descricao")}
+                  {renderCabecalho("CÓDIGO BARRA", "codigoBarra")}
+                  {renderCabecalho("NCM", "ncm")}
+                  {renderCabecalho("FORNECEDOR", "fornecedor")}
+                  {renderCabecalho("MARCA", "marca")}
+                  {renderCabecalho("ESTOQUE", "quantidade")}
+                  {renderCabecalho("PREÇO VENDA", "precoVenda")}
+                  {renderCabecalho("PREÇO CUSTO", "precoCusto")}
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {produtosParaExibir.length > 0 ? (
+                  produtosParaExibir.map((prod, index) => (
+                    <tr key={index}>
+                      <td title={prod.codigo}><strong>{prod.codigo}</strong></td>
+                      <td title={prod.descricao}>{prod.descricao}</td> 
+                      <td title={prod.codigoBarra}>{prod.codigoBarra}</td>
+                      <td title={prod.ncm}>{prod.ncm}</td>
+                      <td title={prod.fornecedor}>{prod.fornecedor}</td>
+                      <td title={prod.marca}>{prod.marca}</td>
+                      <td style={{ color: '#27ae60', fontWeight: 'bold' }}>{prod.quantidade}</td>
+                      <td>R$ {prod.precoVenda}</td>
+                      <td>R$ {prod.precoCusto}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="9" style={{ textAlign: 'center', padding: '50px', color: '#888' }}>
+                      Nenhum produto encontrado com a busca ou filtros atuais.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : (
         <div className="mensagem-vazia">
           A base de dados de produtos ainda não foi sincronizada.

@@ -17,20 +17,12 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [cronometroRodando, setCronometroRodando] = useState(false);
   const [mostrarFesta, setMostrarFesta] = useState(false);
 
-  const [itens, setItens] = useState(() => {
-    const itensSalvos = localStorage.getItem(`itens_req_${req.id}`);
-    return itensSalvos ? JSON.parse(itensSalvos) : (req.listaItens || []);
-  });
+  // OS ITENS AGORA REFLETEM SEMPRE A NUVEM, NUNCA MEMÓRIA LOCAL
+  const [itens, setItens] = useState(req.listaItens || []);
   
-  const [bips, setBips] = useState(() => {
-    const bipsSalvos = localStorage.getItem(`bips_req_${req.id}`);
-    return bipsSalvos ? JSON.parse(bipsSalvos) : {};
-  }); 
-
-  const bipsRef = useRef(bips);
   useEffect(() => {
-    bipsRef.current = bips;
-  }, [bips]);
+    setItens(req.listaItens || []);
+  }, [req.listaItens]);
 
   const [linhaExpandida, setLinhaExpandida] = useState(null);
   const [modoExpansao, setModoExpansao] = useState('resumo'); 
@@ -48,9 +40,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const exibirPopup = (tipo, titulo, mensagem, onConfirm = null, onCancel = null) => {
     setPopupCustom({ visivel: true, tipo, titulo, mensagem, onConfirm, onCancel });
   };
-  const fecharPopupCustom = () => {
-    setPopupCustom({ ...popupCustom, visivel: false });
-  };
+  const fecharPopupCustom = () => setPopupCustom({ ...popupCustom, visivel: false });
   
   const tocarBipSucesso = () => {
     try {
@@ -86,33 +76,27 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     exibirPopup('info', '🔥 Desafio de Agilidade', msgDesafio);
   };
 
+  // CORREÇÃO DO RELÓGIO GLOBAL (Busca do banco e não do LocalStorage)
   useEffect(() => {
     let intervalo;
     if (req.status === 'Em Separação' && !req.metricasSeparacao) {
-      let horaInicio = localStorage.getItem(`start_time_req_${req.id}`);
+      const horaInicioBanco = req.historico?.inicio_separacao;
       
-      if (!horaInicio) {
-        horaInicio = Date.now().toString();
-        localStorage.setItem(`start_time_req_${req.id}`, horaInicio);
+      if (horaInicioBanco) {
+        setCronometroRodando(true);
+        intervalo = setInterval(() => {
+          const diferencaSegundos = Math.floor((Date.now() - Number(horaInicioBanco)) / 1000);
+          setTempoDecorrido(diferencaSegundos);
+        }, 1000);
       }
-
-      setCronometroRodando(true);
-      
-      intervalo = setInterval(() => {
-        const tempoAtualMs = Date.now();
-        const diferencaSegundos = Math.floor((tempoAtualMs - Number(horaInicio)) / 1000);
-        setTempoDecorrido(diferencaSegundos);
-      }, 1000);
-      
     } else {
       setCronometroRodando(false);
       if (req.metricasSeparacao) {
         setTempoDecorrido(req.metricasSeparacao.tempoTotalSegundos);
       }
     }
-
     return () => clearInterval(intervalo);
-  }, [req.status, req.id, req.metricasSeparacao]);
+  }, [req.status, req.historico, req.metricasSeparacao]);
 
   const formatarTempo = (segundos) => {
     const m = Math.floor(segundos / 60).toString().padStart(2, '0');
@@ -140,33 +124,42 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       });
     }
     return () => { if (scanner && scanner.isScanning) scanner.stop().catch(console.error); };
-  }, [itemCameraAtiva]);
+  }, [itemCameraAtiva, itens]); // Adicionado `itens` na dependência para garantir atualização correta
 
+  // CORREÇÃO DOS BIPS: Grava diretamente no campo do Item e manda pro Banco
   const processarBipagem = (index, decodedText) => {
-    const atual = bipsRef.current[index] || { contagem: 0, referencia: null };
-    const qtdDesejada = Number(itens[index].quantidade);
-    const itemConflitoIndex = Object.keys(bipsRef.current).find((key) => bipsRef.current[key].referencia === decodedText && Number(key) !== index);
+    const itemAtual = itens[index];
+    const qtdBipada = itemAtual.bipContagem || 0;
+    const refBipada = itemAtual.bipReferencia || null;
+    const qtdDesejada = Number(itemAtual.quantidade);
     
-    if (itemConflitoIndex !== undefined) {
+    // Verifica conflitos com outros itens
+    const itemConflitoIndex = itens.findIndex((it, i) => it.bipReferencia === decodedText && i !== index);
+    
+    if (itemConflitoIndex !== -1) {
       tocarBipErro();
       exibirPopup('erro', 'Trava de Segurança', `Este código de barras já pertence a outro item:\n\n👉 ${itens[itemConflitoIndex].descricao}\n\nVocê está tentando bipar no produto errado!`);
       return; 
     }
-    if (atual.contagem >= qtdDesejada) {
+    if (qtdBipada >= qtdDesejada) {
       tocarBipErro();
       exibirPopup('aviso', 'Limite Atingido!', `Você já separou a quantidade total (${qtdDesejada} un) para este produto.`);
       return;
     }
-    if (atual.contagem === 0) {
+    if (qtdBipada === 0) {
       tocarBipSucesso();
-      setBips(prev => ({ ...prev, [index]: { contagem: 1, referencia: decodedText } }));
+      const novosItens = [...itens];
+      novosItens[index] = { ...itemAtual, bipContagem: 1, bipReferencia: decodedText };
+      aoAtualizarItens(req.id, novosItens); // MANDA PRA NUVEM NA MESMA HORA
     } else {
-      if (atual.referencia === decodedText) {
+      if (refBipada === decodedText) {
         tocarBipSucesso();
-        setBips(prev => ({ ...prev, [index]: { ...atual, contagem: atual.contagem + 1 } }));
+        const novosItens = [...itens];
+        novosItens[index] = { ...itemAtual, bipContagem: qtdBipada + 1 };
+        aoAtualizarItens(req.id, novosItens); // MANDA PRA NUVEM NA MESMA HORA
       } else {
         tocarBipErro();
-        exibirPopup('erro', 'Produto Incorreto!', `Você escaneou o código: ${decodedText}\nMas a referência esperada é: ${atual.referencia}`);
+        exibirPopup('erro', 'Produto Incorreto!', `Você escaneou o código: ${decodedText}\nMas a referência esperada é: ${refBipada}`);
       }
     }
   };
@@ -174,20 +167,16 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const resetarBipagem = (index) => {
     exibirPopup('aviso', 'Zerar Leitura?', 'Tem certeza que deseja ZERAR a leitura deste item?\nO código de referência atual será apagado.',
       () => {
-        setBips((prevBips) => { const novosBips = { ...prevBips }; delete novosBips[index]; return novosBips; });
+        const novosItens = [...itens];
+        novosItens[index] = { ...novosItens[index], bipContagem: 0, bipReferencia: null };
+        aoAtualizarItens(req.id, novosItens); // MANDA PRA NUVEM NA MESMA HORA
         ultimoBipTexto.current = ""; fecharPopupCustom();
       }, () => fecharPopupCustom()
     );
   };
 
-  const salvarProgresso = () => {
-    localStorage.setItem(`bips_req_${req.id}`, JSON.stringify(bips));
-    localStorage.setItem(`itens_req_${req.id}`, JSON.stringify(itens));
-    
-    const todosBipados = itens.every((item, i) => {
-      const bipItem = bips[i] || { contagem: 0 };
-      return bipItem.contagem >= Number(item.quantidade);
-    });
+  const finalizarSeparacaoValidada = () => {
+    const todosBipados = itens.every(item => (item.bipContagem || 0) >= Number(item.quantidade));
 
     if (todosBipados) {
       const respAtual = req.historico['Em Separação'] || 'Equipe Desconhecida';
@@ -207,7 +196,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         exibirPopup('sucesso', '🏁 Missão Cumprida', msgFinal);
       }
     } else {
-      exibirPopup('aviso', 'Progresso Salvo', 'Atenção: O tempo CONTINUA CORRENDO!\n\nOs dados da separação foram registrados (Memória Local), mas você ainda precisa finalizar todos os itens.');
+      exibirPopup('aviso', 'Separação Incompleta', 'Você ainda precisa finalizar a leitura (bipar) todos os itens da requisição.');
     }
   };
 
@@ -228,14 +217,10 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     }
 
     if (novoStatus === 'Saída de produtos') {
-      const todosBipados = itens.every((item, i) => { const bipItem = bips[i] || { contagem: 0 }; return bipItem.contagem >= Number(item.quantidade); });
+      const todosBipados = itens.every(item => (item.bipContagem || 0) >= Number(item.quantidade));
       if (!todosBipados) { exibirPopup('erro', 'Trava de Segurança', 'Você não pode finalizar a saída sem bipar a quantidade exata de TODOS os produtos solicitados!'); return; }
       if (!numReqExterna.trim()) { exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Requisição gerado pelo sistema da loja!'); return; }
-      
-      if (!req.metricasSeparacao) {
-        exibirPopup('erro', 'Atenção', 'Você deve clicar no botão "Salvar Progresso Físico" na parte de baixo da tela para travar o seu tempo antes de passar para a próxima etapa!');
-        return;
-      }
+      if (!req.metricasSeparacao) { exibirPopup('erro', 'Atenção', 'Você deve clicar no botão "Concluir Separação" na parte de baixo da tela para travar o seu tempo antes de passar para a próxima etapa!'); return; }
     }
     
     if (novoStatus === 'Faturamento' && !notaFiscal.trim()) { exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Nota Fiscal de transferência!'); return; }
@@ -243,9 +228,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     const dadosExtras = {};
     if (novoStatus === 'Saída de produtos') dadosExtras.numeroRequisicaoExterna = numReqExterna;
     if (novoStatus === 'Faturamento') dadosExtras.notaFiscal = notaFiscal;
-    
-    localStorage.setItem(`bips_req_${req.id}`, JSON.stringify(bips));
-    localStorage.setItem(`itens_req_${req.id}`, JSON.stringify(itens));
     
     aoMudarStatus(req.id, novoStatus, responsavel, dadosExtras);
     
@@ -264,8 +246,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     if (motivoAlteracao.trim().length < 10) { exibirPopup('aviso', 'Atenção', 'O motivo da alteração deve conter no mínimo 10 caracteres para justificar a mudança.'); return; }
     const itensAtualizados = [...itens];
     itensAtualizados[index] = { ...itensAtualizados[index], quantidade: novaQuantidade, observacao: motivoAlteracao };
-    setItens(itensAtualizados); 
-    if (aoAtualizarItens) aoAtualizarItens(req.id, itensAtualizados);
+    aoAtualizarItens(req.id, itensAtualizados);
     setModoExpansao('resumo'); 
   };
 
@@ -300,18 +281,14 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             <label>Data da Solicitação</label>
             <span>{req.data}</span>
           </div>
-          
-          {/* NOVO: Mostrando a loja de origem de forma clara para a equipe */}
           <div className="info-item">
             <label>Loja Atendente (Saída)</label>
             <span>{req.origem || 'Não informada'}</span>
           </div>
-
           <div className="info-item">
             <label>Loja Destino (Para)</label>
             <span>{req.destino}</span>
           </div>
-          
           <div className="info-item">
             <label>Status Atual</label>
             <div><span className={`status-badge ${getStatusClass(req.status)}`}>{req.status}</span></div>
@@ -437,8 +414,8 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             </thead>
             <tbody>
               {itens.map((item, index) => {
-                const infoBip = bips[index] || { contagem: 0, referencia: null };
-                const completo = infoBip.contagem >= Number(item.quantidade);
+                const contagemBipada = item.bipContagem || 0;
+                const completo = contagemBipada >= Number(item.quantidade);
                 const estaExpandido = linhaExpandida === index;
 
                 return (
@@ -457,7 +434,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                             {modoExpansao === 'resumo' && (
                               <div className="info-bipagem-resumo">
                                 <span className="qtd-destaque" style={{ color: completo ? '#27ae60' : '#333' }}>
-                                  Separado: {infoBip.contagem} / {item.quantidade} un
+                                  Separado: {contagemBipada} / {item.quantidade} un
                                 </span>
                                 
                                 {item.observacao && (
@@ -475,7 +452,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                                   </div>
                                 )}
                                 
-                                {req.status === 'Em Separação' && !req.metricasSeparacao && infoBip.contagem > 0 && (
+                                {req.status === 'Em Separação' && !req.metricasSeparacao && contagemBipada > 0 && (
                                   <button className="btn-resetar-bip" onClick={() => resetarBipagem(index)} style={{ marginTop: '10px' }}>
                                     Zerar Leitura Deste Item
                                   </button>
@@ -518,15 +495,15 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       </div>
 
       {req.status === 'Em Separação' && !req.metricasSeparacao && (
-        <button className="btn-salvar-progresso" onClick={salvarProgresso}>
-          💾 Salvar Progresso Físico
+        <button className="btn-salvar-progresso" onClick={finalizarSeparacaoValidada}>
+          ✅ Concluir Separação
         </button>
       )}
 
       {itemCameraAtiva !== null && (() => {
         const itemAtivo = itens[itemCameraAtiva];
-        const infoBipAtivo = bips[itemCameraAtiva] || { contagem: 0, referencia: null };
-        const porcentagemAtiva = Math.min((infoBipAtivo.contagem / Number(itemAtivo.quantidade)) * 100, 100);
+        const contagemBipada = itemAtivo.bipContagem || 0;
+        const porcentagemAtiva = Math.min((contagemBipada / Number(itemAtivo.quantidade)) * 100, 100);
 
         return (
           <div className="camera-modal-overlay">
@@ -535,9 +512,9 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
               <div className="camera-modal-body">
                 <div id="leitor-camera-modal" className="camera-box-modal"></div>
                 <div className="info-bipagem">
-                  <div className="progresso-texto">Bipados: {infoBipAtivo.contagem} de {itemAtivo.quantidade}</div>
+                  <div className="progresso-texto">Bipados: {contagemBipada} de {itemAtivo.quantidade}</div>
                   <div className="barra-progresso-bg"><div className="barra-progresso-fill" style={{ width: `${porcentagemAtiva}%` }}></div></div>
-                  {infoBipAtivo.referencia && (<span className="codigo-referencia">Cód. Referência: <strong>{infoBipAtivo.referencia}</strong></span>)}
+                  {itemAtivo.bipReferencia && (<span className="codigo-referencia">Cód. Referência: <strong>{itemAtivo.bipReferencia}</strong></span>)}
                   <div className="botoes-camera">
                     <button className="btn-resetar-bip" onClick={() => resetarBipagem(itemCameraAtiva)}>Zerar Leitura</button>
                     <button className="btn-fechar-camera" onClick={() => setItemCameraAtiva(null)}>Fechar Câmera</button>
