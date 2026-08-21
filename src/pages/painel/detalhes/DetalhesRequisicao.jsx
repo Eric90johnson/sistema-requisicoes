@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-// IMPORTANTE: Adicionamos o Html5QrcodeSupportedFormats para focar apenas em códigos 1D
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import '../../../styles/pages/painel/detalhes/detalhes.css';
 
@@ -20,8 +19,12 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
   const [itens, setItens] = useState(req.listaItens || []);
   
+  // CORREÇÃO: Guardamos a lista de itens numa Ref para a câmera poder ler
+  // os dados atualizados sem precisar reiniciar o vídeo a cada bip.
+  const itensRef = useRef(itens);
   useEffect(() => {
     setItens(req.listaItens || []);
+    itensRef.current = req.listaItens || [];
   }, [req.listaItens]);
 
   const [linhaExpandida, setLinhaExpandida] = useState(null);
@@ -103,51 +106,32 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     return `${m}:${s}`;
   };
 
-  // --- SUPER CONFIGURAÇÃO DA CÂMERA ---
+  // --- CÂMERA CORRIGIDA ---
   useEffect(() => {
     let scanner = null;
+    let isComponentMounted = true;
+
     if (itemCameraAtiva !== null) {
-      
-      // 1. Instancia o scanner focado apenas em Varejo (Ignora QR Code e foca em 13 números EAN)
-      scanner = new Html5Qrcode('leitor-camera-modal', {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.CODE_39
-        ]
-      });
+      // Delay pequeno para garantir que a div "leitor-camera-modal" já renderizou na tela
+      setTimeout(() => {
+        if (!isComponentMounted) return;
 
-      // 2. Configura a caixa e a velocidade do processador (15 fps é 3x mais rápido que o padrão)
-      const configCamera = { 
-        fps: 15, 
-        qrbox: { width: 320, height: 120 }, // Caixa larga e fina, ideal para código de barras
-        disableFlip: true,
-      };
+        scanner = new Html5Qrcode('leitor-camera-modal', {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.CODE_39
+          ]
+        });
 
-      // 3. Força resolução HD e Autofoco Contínuo para não borrar as linhas
-      const configAvancada = {
-        facingMode: "environment",
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        advanced: [{ focusMode: "continuous" }] 
-      };
+        // Configuração balanceada (10fps é seguro, caixa retangular foca melhor)
+        const configCamera = { 
+          fps: 10, 
+          qrbox: { width: 250, height: 100 }
+        };
 
-      // Tenta iniciar com o Modo Turbo HD
-      scanner.start(
-        configAvancada, 
-        configCamera,
-        (decodedText) => {
-          const agora = Date.now();
-          if (decodedText === ultimoBipTexto.current && (agora - ultimoBipTempo.current < 1500)) return;
-          ultimoBipTexto.current = decodedText;
-          ultimoBipTempo.current = agora;
-          processarBipagem(itemCameraAtiva, decodedText);
-        },
-        (err) => { /* Ignora erros de "código não encontrado no frame" */ }
-      ).catch(err => {
-        // Plano B: Se o celular recusar a config HD (Iphones antigos ou Androids de entrada), tenta o modo simples
         scanner.start(
           { facingMode: "environment" }, 
           configCamera,
@@ -158,33 +142,41 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             ultimoBipTempo.current = agora;
             processarBipagem(itemCameraAtiva, decodedText);
           },
-          (err) => { }
-        ).catch(fallbackErr => {
-          exibirPopup('erro', 'Erro de Câmera', 'Não foi possível acessar a lente do celular. Verifique se o navegador tem permissão.');
-          setItemCameraAtiva(null); 
+          (err) => { /* Ignorar erros normais de leitura por frame */ }
+        ).catch(err => {
+          console.error("Erro ao iniciar câmera:", err);
+          exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões do navegador.');
+          setItemCameraAtiva(null);
         });
-      });
+      }, 150);
     }
     
+    // Função de limpeza robusta (previne o "already under transition")
     return () => { 
-      if (scanner && scanner.isScanning) {
-        scanner.stop().catch(console.error); 
+      isComponentMounted = false;
+      if (scanner) {
+        scanner.stop().then(() => {
+          scanner.clear();
+        }).catch(err => console.error("Erro ao parar a câmera:", err)); 
       }
     };
-  }, [itemCameraAtiva, itens]); 
-  // ------------------------------------
+  }, [itemCameraAtiva]); // REMOVIDO: A dependência "itens" foi tirada daqui!
+  // -------------------------
 
   const processarBipagem = (index, decodedText) => {
-    const itemAtual = itens[index];
+    // Usa os itens salvos na Ref para sempre ler o dado mais atual da nuvem
+    const itensAtuais = itensRef.current; 
+    const itemAtual = itensAtuais[index];
+    
     const qtdBipada = itemAtual.bipContagem || 0;
     const refBipada = itemAtual.bipReferencia || null;
     const qtdDesejada = Number(itemAtual.quantidade);
     
-    const itemConflitoIndex = itens.findIndex((it, i) => it.bipReferencia === decodedText && i !== index);
+    const itemConflitoIndex = itensAtuais.findIndex((it, i) => it.bipReferencia === decodedText && i !== index);
     
     if (itemConflitoIndex !== -1) {
       tocarBipErro();
-      exibirPopup('erro', 'Trava de Segurança', `Este código de barras já pertence a outro item:\n\n👉 ${itens[itemConflitoIndex].descricao}\n\nVocê está tentando bipar no produto errado!`);
+      exibirPopup('erro', 'Trava de Segurança', `Este código de barras já pertence a outro item:\n\n👉 ${itensAtuais[itemConflitoIndex].descricao}\n\nVocê está tentando bipar no produto errado!`);
       return; 
     }
     if (qtdBipada >= qtdDesejada) {
@@ -194,13 +186,13 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     }
     if (qtdBipada === 0) {
       tocarBipSucesso();
-      const novosItens = [...itens];
+      const novosItens = [...itensAtuais];
       novosItens[index] = { ...itemAtual, bipContagem: 1, bipReferencia: decodedText };
       aoAtualizarItens(req.id, novosItens); 
     } else {
       if (refBipada === decodedText) {
         tocarBipSucesso();
-        const novosItens = [...itens];
+        const novosItens = [...itensAtuais];
         novosItens[index] = { ...itemAtual, bipContagem: qtdBipada + 1 };
         aoAtualizarItens(req.id, novosItens); 
       } else {
@@ -213,7 +205,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const resetarBipagem = (index) => {
     exibirPopup('aviso', 'Zerar Leitura?', 'Tem certeza que deseja ZERAR a leitura deste item?\nO código de referência atual será apagado.',
       () => {
-        const novosItens = [...itens];
+        const novosItens = [...itensRef.current];
         novosItens[index] = { ...novosItens[index], bipContagem: 0, bipReferencia: null };
         aoAtualizarItens(req.id, novosItens); 
         ultimoBipTexto.current = ""; fecharPopupCustom();
@@ -548,19 +540,19 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
       {itemCameraAtiva !== null && (() => {
         const itemAtivo = itens[itemCameraAtiva];
-        const contagemBipada = itemAtivo.bipContagem || 0;
-        const porcentagemAtiva = Math.min((contagemBipada / Number(itemAtivo.quantidade)) * 100, 100);
+        const contagemBipada = itemAtivo?.bipContagem || 0;
+        const porcentagemAtiva = itemAtivo ? Math.min((contagemBipada / Number(itemAtivo.quantidade)) * 100, 100) : 0;
 
         return (
           <div className="camera-modal-overlay">
             <div className="camera-modal-content">
-              <div className="camera-modal-header">Lendo: {itemAtivo.cod} - {itemAtivo.descricao}</div>
+              <div className="camera-modal-header">Lendo: {itemAtivo?.cod} - {itemAtivo?.descricao}</div>
               <div className="camera-modal-body">
                 <div id="leitor-camera-modal" className="camera-box-modal"></div>
                 <div className="info-bipagem">
-                  <div className="progresso-texto">Bipados: {contagemBipada} de {itemAtivo.quantidade}</div>
+                  <div className="progresso-texto">Bipados: {contagemBipada} de {itemAtivo?.quantidade}</div>
                   <div className="barra-progresso-bg"><div className="barra-progresso-fill" style={{ width: `${porcentagemAtiva}%` }}></div></div>
-                  {itemAtivo.bipReferencia && (<span className="codigo-referencia">Cód. Referência: <strong>{itemAtivo.bipReferencia}</strong></span>)}
+                  {itemAtivo?.bipReferencia && (<span className="codigo-referencia">Cód. Referência: <strong>{itemAtivo.bipReferencia}</strong></span>)}
                   <div className="botoes-camera">
                     <button className="btn-resetar-bip" onClick={() => resetarBipagem(itemCameraAtiva)}>Zerar Leitura</button>
                     <button className="btn-fechar-camera" onClick={() => setItemCameraAtiva(null)}>Fechar Câmera</button>
