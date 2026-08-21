@@ -38,6 +38,9 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const ultimoBipTempo = useRef(0);
   const ultimoBipTexto = useRef("");
 
+  // Verifica se TODOS os produtos já foram bipados na quantidade correta
+  const todosBipados = itens.length > 0 && itens.every(item => (item.bipContagem || 0) >= Number(item.quantidade));
+
   const exibirPopup = (tipo, titulo, mensagem, onConfirm = null, onCancel = null) => {
     setPopupCustom({ visivel: true, tipo, titulo, mensagem, onConfirm, onCancel });
   };
@@ -205,14 +208,14 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     );
   };
 
-  // CORREÇÃO: Função transformada em assíncrona (async/await) para aguardar o Supabase
-  const finalizarSeparacaoValidada = async () => {
-    const todosBipados = itens.every(item => (item.bipContagem || 0) >= Number(item.quantidade));
+  // NOVO: Função para o botão de "Salvar Progresso" quando a separação ainda não terminou
+  const salvarProgressoParcial = () => {
+    exibirPopup('info', 'Progresso Salvo', 'As quantidades bipadas já estão gravadas na nuvem de forma segura.\n\nAtenção: O cronômetro CONTINUA CORRENDO. Você pode sair desta tela e voltar mais tarde para finalizar a separação.');
+  };
 
+  const finalizarSeparacaoValidada = async () => {
     if (todosBipados) {
       const respAtual = req.historico['Em Separação'] || 'Equipe Desconhecida';
-      
-      // AWAIT ADICIONADO AQUI: O código agora espera o banco devolver os números
       const metricasFinais = await aoFinalizarSeparacao(req.id, tempoDecorrido, respAtual);
       
       if (!metricasFinais) return; 
@@ -250,7 +253,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     }
 
     if (novoStatus === 'Saída de produtos') {
-      const todosBipados = itens.every(item => (item.bipContagem || 0) >= Number(item.quantidade));
       if (!todosBipados) { exibirPopup('erro', 'Trava de Segurança', 'Você não pode finalizar a saída sem bipar a quantidade exata de TODOS os produtos solicitados!'); return; }
       if (!numReqExterna.trim()) { exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Requisição gerado pelo sistema da loja!'); return; }
       if (!req.metricasSeparacao) { exibirPopup('erro', 'Atenção', 'Você deve clicar no botão "Concluir Separação" na parte de baixo da tela para travar o seu tempo antes de passar para a próxima etapa!'); return; }
@@ -528,9 +530,15 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       </div>
 
       {req.status === 'Em Separação' && !req.metricasSeparacao && (
-        <button className="btn-salvar-progresso" onClick={finalizarSeparacaoValidada}>
-          ✅ Concluir Separação
-        </button>
+        todosBipados ? (
+          <button className="btn-salvar-progresso" onClick={finalizarSeparacaoValidada}>
+            ✅ Concluir Separação
+          </button>
+        ) : (
+          <button className="btn-salvar-progresso" onClick={salvarProgressoParcial} style={{ backgroundColor: '#f39c12' }}>
+            💾 Salvar Progresso Físico
+          </button>
+        )
       )}
 
       {itemCameraAtiva !== null && (() => {
