@@ -19,8 +19,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
   const [itens, setItens] = useState(req.listaItens || []);
   
-  // CORREÇÃO: Guardamos a lista de itens numa Ref para a câmera poder ler
-  // os dados atualizados sem precisar reiniciar o vídeo a cada bip.
   const itensRef = useRef(itens);
   useEffect(() => {
     setItens(req.listaItens || []);
@@ -106,13 +104,11 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     return `${m}:${s}`;
   };
 
-  // --- CÂMERA CORRIGIDA ---
   useEffect(() => {
     let scanner = null;
     let isComponentMounted = true;
 
     if (itemCameraAtiva !== null) {
-      // Delay pequeno para garantir que a div "leitor-camera-modal" já renderizou na tela
       setTimeout(() => {
         if (!isComponentMounted) return;
 
@@ -126,7 +122,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           ]
         });
 
-        // Configuração balanceada (10fps é seguro, caixa retangular foca melhor)
         const configCamera = { 
           fps: 10, 
           qrbox: { width: 250, height: 100 }
@@ -142,7 +137,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             ultimoBipTempo.current = agora;
             processarBipagem(itemCameraAtiva, decodedText);
           },
-          (err) => { /* Ignorar erros normais de leitura por frame */ }
+          (err) => { }
         ).catch(err => {
           console.error("Erro ao iniciar câmera:", err);
           exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões do navegador.');
@@ -151,7 +146,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       }, 150);
     }
     
-    // Função de limpeza robusta (previne o "already under transition")
     return () => { 
       isComponentMounted = false;
       if (scanner) {
@@ -160,11 +154,9 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
         }).catch(err => console.error("Erro ao parar a câmera:", err)); 
       }
     };
-  }, [itemCameraAtiva]); // REMOVIDO: A dependência "itens" foi tirada daqui!
-  // -------------------------
+  }, [itemCameraAtiva]); 
 
   const processarBipagem = (index, decodedText) => {
-    // Usa os itens salvos na Ref para sempre ler o dado mais atual da nuvem
     const itensAtuais = itensRef.current; 
     const itemAtual = itensAtuais[index];
     
@@ -213,12 +205,15 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     );
   };
 
-  const finalizarSeparacaoValidada = () => {
+  // CORREÇÃO: Função transformada em assíncrona (async/await) para aguardar o Supabase
+  const finalizarSeparacaoValidada = async () => {
     const todosBipados = itens.every(item => (item.bipContagem || 0) >= Number(item.quantidade));
 
     if (todosBipados) {
       const respAtual = req.historico['Em Separação'] || 'Equipe Desconhecida';
-      const metricasFinais = aoFinalizarSeparacao(req.id, tempoDecorrido, respAtual);
+      
+      // AWAIT ADICIONADO AQUI: O código agora espera o banco devolver os números
+      const metricasFinais = await aoFinalizarSeparacao(req.id, tempoDecorrido, respAtual);
       
       if (!metricasFinais) return; 
       
@@ -281,7 +276,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   };
 
   const salvarEdicao = (index) => {
-    if (motivoAlteracao.trim().length < 10) { exibirPopup('aviso', 'Atenção', 'O motivo da alteração deve conter no mínimo 10 caracteres para justificar a mudança.'); return; }
+    if (motivoAlteracao.trim().length < 10) { exibirPopup('aviso', 'Atenção', 'O motivo da alteração deve conter no mínimo 10 caracteres para justify a mudança.'); return; }
     const itensAtualizados = [...itens];
     itensAtualizados[index] = { ...itensAtualizados[index], quantidade: novaQuantidade, observacao: motivoAlteracao };
     aoAtualizarItens(req.id, itensAtualizados);
