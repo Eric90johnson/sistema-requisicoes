@@ -91,3 +91,17 @@ body {
     height: 45px;
   }
 }
+
+/* --- ANIMAÇÃO DE ATUALIZAÇÃO EM TEMPO REAL (PISCA 3X) --- */
+@keyframes piscaRealtime {
+  0% { background-color: transparent; }
+  50% { background-color: #58d68d; } /* Verde vivo */
+  100% { background-color: transparent; }
+}
+
+.piscar-linha-nova td {
+  /* A animação dura 1.1s e repete 3 vezes = Total de ~3.3 segundos */
+  animation: piscaRealtime 1.1s ease-in-out 3;
+  font-weight: bold; /* Deixa o texto mais forte enquanto pisca */
+  color: #1e8449; /* Escurece a fonte para dar contraste com o verde */
+}
