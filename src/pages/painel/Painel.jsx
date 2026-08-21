@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import '../../styles/pages/painel/painel.css';
 import PainelMarketplace from '../marketplace/painel/PainelMarketplace'; 
 
@@ -12,6 +12,37 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const [filtros, setFiltros] = useState({});
   const [colunaFiltroAberta, setColunaFiltroAberta] = useState(null);
+
+  // Detector de Atualizações em Tempo Real (Piscar a linha)
+  const [idsDestacados, setIdsDestacados] = useState([]);
+  const reqsAnterioresRef = useRef(requisicoes);
+
+  useEffect(() => {
+    // Só compara e pisca se já tínhamos dados antes
+    if (reqsAnterioresRef.current.length > 0) {
+      const reqsAntigas = reqsAnterioresRef.current;
+      const alteradas = [];
+
+      requisicoes.forEach(reqAtual => {
+        const reqAntiga = reqsAntigas.find(r => r.id === reqAtual.id);
+        // Se a requisição é NOVA ou se o STATUS mudou
+        if (!reqAntiga || reqAntiga.status !== reqAtual.status) {
+          alteradas.push(reqAtual.id);
+        }
+      });
+
+      if (alteradas.length > 0) {
+        setIdsDestacados(prev => [...new Set([...prev, ...alteradas])]);
+        
+        // Remove o destaque APÓS 3.5 segundos (tempo suficiente para piscar 3x e descer a linha)
+        setTimeout(() => {
+          setIdsDestacados(prev => prev.filter(id => !alteradas.includes(id)));
+        }, 3500);
+      }
+    }
+    
+    reqsAnterioresRef.current = requisicoes;
+  }, [requisicoes]);
 
   const temPedidoPendente = pedidosMarketplace.some(ped => ped.status === 'Pendente');
 
@@ -47,16 +78,24 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     });
 
     return filtradas.sort((a, b) => {
+      // REGRA 1: Destaque temporário (Se piscou, vai pro topo imediatamente)
+      const aDestacado = idsDestacados.includes(a.id);
+      const bDestacado = idsDestacados.includes(b.id);
+      if (aDestacado && !bDestacado) return -1; // 'a' sobe
+      if (!aDestacado && bDestacado) return 1;  // 'b' sobe
+
+      // REGRA 2: A sua Regra de Negócio de Prioridade (1 Alta, 3 Baixa)
       const prioA = a.prioridade || 3; 
       const prioB = b.prioridade || 3;
-      
       if (prioA !== prioB) return prioA - prioB; 
       
+      // REGRA 3: A sua Regra de Negócio de Tempo (Mais antigas no topo)
       const tempoA = a.timestampCriacao || 0;
       const tempoB = b.timestampCriacao || 0;
       return tempoA - tempoB; 
     });
-  }, [requisicoesAtivas, filtros, colunasDinamicas]);
+  // IMPORTANTE: Adicionamos o 'idsDestacados' aqui para forçar a tabela a se reorganizar quando a luz apagar
+  }, [requisicoesAtivas, filtros, colunasDinamicas, idsDestacados]);
 
   const opcoesMotivo = [...new Set(requisicoesAtivas.map(r => r.motivo))].filter(Boolean);
   const opcoesStatus = [...new Set(requisicoesAtivas.map(r => r.status))].filter(Boolean);
@@ -132,7 +171,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     return rankingFinal;
   }, [requisicoes, dataInicioRanking, dataFimRanking]);
 
-  // --- CORREÇÃO AQUI: Controle dinâmico do zIndex (camada) ---
   const RenderHeaderFiltro = ({ titulo, chave, opcoes }) => {
     const estaAberto = colunaFiltroAberta === chave;
     const filtroAtivo = filtros[chave];
@@ -140,7 +178,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     return (
       <th 
         className="th-com-filtro" 
-        style={{ zIndex: estaAberto ? 101 : 10 }} // Pula para frente do overlay se estiver aberto
+        style={{ zIndex: estaAberto ? 101 : 10 }}
       >
         <div 
           className="cabecalho-filtro" 
@@ -234,7 +272,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       key={req.id} 
                       onClick={() => aoAbrirDetalhes(req)} 
                       style={{ cursor: 'pointer' }} 
-                      className={`linha-tabela-hover ${getLinhaPrioridadeClass(req.prioridade)}`}
+                      className={`linha-tabela-hover ${getLinhaPrioridadeClass(req.prioridade)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
                     >
                       <td style={{ fontWeight: 'bold' }} title={req.motivo || ''}>
                         {req.motivo 
