@@ -488,3 +488,22 @@
   top: 0; left: 0; right: 0; bottom: 0;
   z-index: 99;
 }
+
+/* ========================================================= */
+/* --- ANIMAÇÃO DE NOVA REQUISIÇÃO (Linha piscando) ---      */
+/* ========================================================= */
+
+@keyframes flashLinhaVerde {
+  0% { background-color: rgba(46, 204, 113, 0.1); }
+  50% { background-color: rgba(46, 204, 113, 0.4); }
+  100% { background-color: rgba(46, 204, 113, 0.1); }
+}
+
+.piscar-linha-nova td {
+  animation: flashLinhaVerde 1.2s ease-in-out 3;
+  font-weight: bold;
+}
+
+.piscar-linha-nova td:first-child {
+  border-left: 6px solid #2ecc71 !important;
+}

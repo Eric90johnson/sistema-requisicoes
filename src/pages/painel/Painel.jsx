@@ -18,27 +18,32 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const reqsAnterioresRef = useRef(requisicoes);
 
   useEffect(() => {
-    // Só compara e pisca se já tínhamos dados antes
-    if (reqsAnterioresRef.current.length > 0) {
-      const reqsAntigas = reqsAnterioresRef.current;
-      const alteradas = [];
+    const alteradas = [];
+    const agora = Date.now();
 
-      requisicoes.forEach(reqAtual => {
-        const reqAntiga = reqsAntigas.find(r => r.id === reqAtual.id);
-        // Se a requisição é NOVA ou se o STATUS mudou
-        if (!reqAntiga || reqAntiga.status !== reqAtual.status) {
-          alteradas.push(reqAtual.id);
+    requisicoes.forEach(reqAtual => {
+      // REGRA 1: É uma requisição recém-criada (nos últimos 5 segundos)? 
+      // Isso garante que quem acabou de criar veja a linha pular pro topo!
+      if (reqAtual.timestampCriacao && (agora - reqAtual.timestampCriacao < 5000)) {
+        alteradas.push(reqAtual.id);
+      } else {
+        // REGRA 2: Alguém mudou o status de uma requisição antiga?
+        if (reqsAnterioresRef.current.length > 0) {
+          const reqAntiga = reqsAnterioresRef.current.find(r => r.id === reqAtual.id);
+          if (!reqAntiga || reqAntiga.status !== reqAtual.status) {
+            alteradas.push(reqAtual.id);
+          }
         }
-      });
-
-      if (alteradas.length > 0) {
-        setIdsDestacados(prev => [...new Set([...prev, ...alteradas])]);
-        
-        // Remove o destaque APÓS 3.5 segundos (tempo suficiente para piscar 3x e descer a linha)
-        setTimeout(() => {
-          setIdsDestacados(prev => prev.filter(id => !alteradas.includes(id)));
-        }, 3500);
       }
+    });
+
+    if (alteradas.length > 0) {
+      setIdsDestacados(prev => [...new Set([...prev, ...alteradas])]);
+      
+      // Remove o destaque APÓS 3.5 segundos
+      setTimeout(() => {
+        setIdsDestacados(prev => prev.filter(id => !alteradas.includes(id)));
+      }, 3500);
     }
     
     reqsAnterioresRef.current = requisicoes;
@@ -81,8 +86,8 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       // REGRA 1: Destaque temporário (Se piscou, vai pro topo imediatamente)
       const aDestacado = idsDestacados.includes(a.id);
       const bDestacado = idsDestacados.includes(b.id);
-      if (aDestacado && !bDestacado) return -1; // 'a' sobe
-      if (!aDestacado && bDestacado) return 1;  // 'b' sobe
+      if (aDestacado && !bDestacado) return -1; 
+      if (!aDestacado && bDestacado) return 1;  
 
       // REGRA 2: A sua Regra de Negócio de Prioridade (1 Alta, 3 Baixa)
       const prioA = a.prioridade || 3; 
@@ -94,7 +99,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       const tempoB = b.timestampCriacao || 0;
       return tempoA - tempoB; 
     });
-  // IMPORTANTE: Adicionamos o 'idsDestacados' aqui para forçar a tabela a se reorganizar quando a luz apagar
   }, [requisicoesAtivas, filtros, colunasDinamicas, idsDestacados]);
 
   const opcoesMotivo = [...new Set(requisicoesAtivas.map(r => r.motivo))].filter(Boolean);
