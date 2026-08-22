@@ -130,18 +130,9 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           qrbox: { width: 250, height: 100 }
         };
 
-        // AJUSTE CRÍTICO PARA EVITAR A TELA BRANCA NO S24+:
-        // Removemos o limite 'min' (que causa o crash OverconstrainedError) 
-        // e deixamos apenas o 'ideal', adicionando foco automático contínuo.
-        const restricoesCamera = {
-          facingMode: "environment",
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          advanced: [{ focusMode: "continuous" }]
-        };
-
+        // CORREÇÃO DEFINITIVA: Utiliza o padrão nativo seguro para evitar qualquer tela branca
         scanner.start(
-          restricoesCamera, 
+          { facingMode: "environment" }, 
           configCamera,
           (decodedText) => {
             const agora = Date.now();
@@ -153,9 +144,8 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           (err) => { }
         ).catch(err => {
           console.error("Erro ao iniciar câmera:", err);
-          // O erro não vai mais causar tela branca travada, ele fecha a câmera e avisa
-          exibirPopup('erro', 'Aviso de Câmera', 'Houve um problema de compatibilidade com a lente deste aparelho. Tente novamente.');
-          setItemCameraAtiva(null); 
+          exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões do navegador.');
+          setItemCameraAtiva(null);
         });
       }, 150);
     }
