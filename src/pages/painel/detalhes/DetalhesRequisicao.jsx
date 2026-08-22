@@ -130,13 +130,14 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           qrbox: { width: 250, height: 100 }
         };
 
-        // AJUSTE CRÍTICO: Força a lente principal com qualidade máxima
-        // Ao pedir 1080p, o sistema operacional do S24+ ignora a lente macro 
-        // e ativa o sensor principal de alta qualidade.
+        // AJUSTE CRÍTICO PARA EVITAR A TELA BRANCA NO S24+:
+        // Removemos o limite 'min' (que causa o crash OverconstrainedError) 
+        // e deixamos apenas o 'ideal', adicionando foco automático contínuo.
         const restricoesCamera = {
           facingMode: "environment",
-          width: { ideal: 1920, min: 1280 },
-          height: { ideal: 1080, min: 720 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          advanced: [{ focusMode: "continuous" }]
         };
 
         scanner.start(
@@ -152,8 +153,9 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           (err) => { }
         ).catch(err => {
           console.error("Erro ao iniciar câmera:", err);
-          exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões do navegador.');
-          setItemCameraAtiva(null);
+          // O erro não vai mais causar tela branca travada, ele fecha a câmera e avisa
+          exibirPopup('erro', 'Aviso de Câmera', 'Houve um problema de compatibilidade com a lente deste aparelho. Tente novamente.');
+          setItemCameraAtiva(null); 
         });
       }, 150);
     }
