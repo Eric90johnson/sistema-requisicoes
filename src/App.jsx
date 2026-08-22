@@ -49,6 +49,7 @@ function App() {
   const carregarDadosDaNuvem = useCallback(async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
     try {
+      // 1. CARREGA AS REQUISIÇÕES
       const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false });
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
@@ -67,6 +68,7 @@ function App() {
         });
       }
 
+      // 2. CARREGA OS RECORDES
       const { data: recData } = await supabase.from('recordes_globais').select('*');
       if (recData) {
         const objRecordes = {};
@@ -76,13 +78,41 @@ function App() {
         setRecordesGlobais(objRecordes);
       }
 
-      const { data: prodData } = await supabase.from('base_produtos').select('*');
-      if (prodData) {
-        const produtosFormatados = prodData.map(p => ({
+      // 3. CARREGA OS PRODUTOS (COM PAGINAÇÃO PARA +7000 LINHAS)
+      let todosOsProdutos = [];
+      let buscouTodos = false;
+      let indexAtual = 0;
+      const tamanhoPagina = 1000; // Limite de segurança do Supabase
+
+      while (!buscouTodos) {
+        const { data: prodData, error } = await supabase
+          .from('base_produtos')
+          .select('*')
+          .range(indexAtual, indexAtual + tamanhoPagina - 1);
+
+        if (error) {
+          console.error("Erro na paginação de produtos:", error);
+          break;
+        }
+
+        if (prodData && prodData.length > 0) {
+          todosOsProdutos = [...todosOsProdutos, ...prodData];
+          indexAtual += tamanhoPagina;
+        }
+
+        // Se retornou menos que 1000, significa que chegou na última página
+        if (!prodData || prodData.length < tamanhoPagina) {
+          buscouTodos = true;
+        }
+      }
+
+      if (todosOsProdutos.length > 0) {
+        const produtosFormatados = todosOsProdutos.map(p => ({
           ...p, codigoBarra: p.codigo_barra, precoVenda: p.preco_venda, precoCusto: p.preco_custo
         }));
         setBaseProdutos(produtosFormatados);
       }
+      
     } catch (error) {
       console.error("Erro ao sincronizar com o Supabase:", error);
     } finally {
@@ -90,47 +120,33 @@ function App() {
     }
   }, []);
 
-  // MOTOR DE TEMPO REAL: Atualiza o sistema sozinho quando alguém altera algo no banco
+  // MOTOR DE ATUALIZAÇÃO AUTOMÁTICA EM SEGUNDO PLANO (Substituto do Realtime bloqueado)
   useEffect(() => {
     if (isLogado) {
-      // 1. Puxa os dados da nuvem quando faz o login
       carregarDadosDaNuvem();
 
-      // 2. Abre a conexão contínua
-      const canalAtualizacao = supabase
-        .channel('mudancas-globais')
-        .on('postgres', { event: '*', schema: 'public', table: 'requisicoes' }, (payload) => {
-          console.log("⚡ ALERTA REALTIME: Mudança detectada em requisições!", payload);
-          carregarDadosDaNuvem(true); 
-        })
-        .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, (payload) => {
-          console.log("⚡ ALERTA REALTIME: Mudança detectada em produtos!", payload);
-          carregarDadosDaNuvem(true); 
-        })
-        .subscribe((status) => {
-          console.log("📡 Status da Conexão Supabase Realtime:", status);
-          if (status === 'SUBSCRIBED') {
-            console.log("✅ Conectado com sucesso à nuvem em tempo real!");
-          }
-        });
+      const intervaloFundo = setInterval(() => {
+        carregarDadosDaNuvem(true); 
+      }, 4000);
 
-      return () => {
-        supabase.removeChannel(canalAtualizacao);
-      };
+      return () => clearInterval(intervaloFundo);
     }
-  // 🔥 A MÁGICA ESTÁ AQUI: Removemos o carregarDadosDaNuvem deste colchete!
-  // Agora ele só roda de novo se o isLogado mudar (entrar ou sair do sistema).
-  }, [isLogado]);
+  }, [isLogado, carregarDadosDaNuvem]);
 
   const handleSalvarRequisicao = async (novaReq) => {
-    setTelaAtual('painel');
     const { error } = await supabase.from('requisicoes').insert([{
       id: novaReq.id, data: novaReq.data, timestamp_criacao: novaReq.timestampCriacao,
       origem: novaReq.origem, destino: novaReq.destino, solicitante: novaReq.solicitante,
       motivo: novaReq.motivo, prioridade: novaReq.prioridade, itens: novaReq.itens,
       status: novaReq.status, lista_itens: novaReq.listaItens, historico: novaReq.historico
     }]);
-    if (error) alert(`⚠️ Erro do Supabase: ${error.message}`);
+
+    if (error) {
+      alert(`⚠️ Erro do Supabase: ${error.message}`);
+    } else {
+      await carregarDadosDaNuvem(true); // Autoload forçado
+      setTelaAtual('painel');
+    }
   };
 
   const handleAlterarStatus = async (id, novoStatus, responsavel, dadosExtras = {}) => {
@@ -141,17 +157,18 @@ function App() {
       historicoAtualizado.inicio_separacao = Date.now();
     }
 
-    // ATUALIZAÇÃO OTIMISTA: Faz a tela mudar imediatamente sem delay
+    // ATUALIZAÇÃO OTIMISTA (Muda a tela instantaneamente para quem clicou)
     const reqAtualizada = { ...req, status: novoStatus, historico: historicoAtualizado, ...dadosExtras };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
 
-    // Manda para a nuvem em background
+    // Salva na nuvem e puxa a confirmação (Autoload forçado)
     const payloadBanco = { status: novoStatus, historico: historicoAtualizado };
     if (dadosExtras.numeroRequisicaoExterna) payloadBanco.numero_requisicao_externa = dadosExtras.numeroRequisicaoExterna;
     if (dadosExtras.notaFiscal) payloadBanco.nota_fiscal = dadosExtras.notaFiscal;
 
     await supabase.from('requisicoes').update(payloadBanco).eq('id', id);
+    await carregarDadosDaNuvem(true);
   };
 
   const handleAdicionarResponsavel = async (id, novoResponsavel) => {
@@ -169,10 +186,11 @@ function App() {
     setReqSelecionada(reqAtualizada);
 
     await supabase.from('requisicoes').update({ historico: historicoAtualizado }).eq('id', id);
+    await carregarDadosDaNuvem(true); // Autoload forçado
   };
 
   const handleAtualizarItens = async (id, novaListaItens) => {
-    // ATUALIZAÇÃO OTIMISTA: O Bip da câmera aparece no mesmo milissegundo
+    // ATUALIZAÇÃO OTIMISTA
     const reqAtualizada = { 
       ...requisicoes.find(r => r.id === id), 
       listaItens: novaListaItens, 
@@ -181,7 +199,6 @@ function App() {
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
 
-    // Salva na nuvem em background
     await supabase.from('requisicoes').update({ lista_itens: novaListaItens }).eq('id', id);
   };
 
@@ -212,6 +229,8 @@ function App() {
     setReqSelecionada(reqAtualizada);
 
     await supabase.from('requisicoes').update({ metricas_separacao: novasMetricas }).eq('id', id);
+    await carregarDadosDaNuvem(true); // Autoload forçado
+    
     return novasMetricas;
   };
 
