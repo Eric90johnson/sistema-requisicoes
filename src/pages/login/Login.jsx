@@ -17,7 +17,7 @@ export default function Login({ aoLogar }) {
     setCarregando(true);
 
     try {
-      // Busca o usuário correspondente no banco de dados
+      // 1. Busca o usuário correspondente na SUA tabela customizada
       const { data, error } = await supabase
         .from('usuarios_sistema')
         .select('*')
@@ -27,9 +27,45 @@ export default function Login({ aoLogar }) {
 
       if (error || !data) {
         setErro('Usuário ou senha inválidos.');
-      } else {
-        aoLogar(data); // Passa os dados do usuário autenticado para o App
+        setCarregando(false);
+        return;
       }
+
+      // 2. OPERAÇÃO E-MAIL INVISÍVEL: Integração com a Segurança do Supabase
+      // Removemos espaços e caracteres especiais para formar um e-mail válido
+      const usuarioSanitizado = usuario.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      const emailInvisivel = `${usuarioSanitizado}@netadantas.interno`;
+      
+      // Adicionamos um "sal" à senha para garantir que ela sempre tenha mais de 6 caracteres 
+      // (exigência padrão do Supabase Auth), mesmo que a sua senha no banco seja curta.
+      const senhaInvisivel = `${senha.trim()}-NdAuth2026!`;
+
+      let { error: authError } = await supabase.auth.signInWithPassword({
+        email: emailInvisivel,
+        password: senhaInvisivel
+      });
+
+      // Se o usuário não existir no Supabase Auth, nós o criamos silenciosamente
+      if (authError && (authError.message.includes('Invalid login credentials') || authError.status === 400)) {
+         const { error: signUpError } = await supabase.auth.signUp({
+            email: emailInvisivel,
+            password: senhaInvisivel
+         });
+         
+         if (!signUpError) {
+            // Após criar, faz o login oficial para pegar o "crachá"
+            await supabase.auth.signInWithPassword({
+              email: emailInvisivel,
+              password: senhaInvisivel
+            });
+         } else {
+            console.error('Erro ao criar usuário invisível:', signUpError);
+         }
+      }
+
+      // 3. Tudo certo! Passa os dados para o sistema principal
+      aoLogar(data); 
+
     } catch (err) {
       console.error('Erro na autenticação:', err);
       setErro('Erro ao conectar ao servidor. Tente novamente.');

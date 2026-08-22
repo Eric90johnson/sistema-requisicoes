@@ -39,11 +39,14 @@ function App() {
     setIsLogado(true);
   };
 
-  const handleSair = () => {
+  const handleSair = async () => {
     localStorage.removeItem('netadantas_logado');
     localStorage.removeItem('netadantas_usuario');
     setUsuarioLogado(null);
     setIsLogado(false);
+    
+    // Desloga o "E-mail Invisível" da segurança do Supabase para não deixar sessões abertas
+    await supabase.auth.signOut();
   };
 
   const carregarDadosDaNuvem = useCallback(async (silencioso = false) => {
@@ -82,7 +85,7 @@ function App() {
       let todosOsProdutos = [];
       let buscouTodos = false;
       let indexAtual = 0;
-      const tamanhoPagina = 1000; // Limite de segurança do Supabase
+      const tamanhoPagina = 1000;
 
       while (!buscouTodos) {
         const { data: prodData, error } = await supabase
@@ -100,7 +103,6 @@ function App() {
           indexAtual += tamanhoPagina;
         }
 
-        // Se retornou menos que 1000, significa que chegou na última página
         if (!prodData || prodData.length < tamanhoPagina) {
           buscouTodos = true;
         }
@@ -120,16 +122,31 @@ function App() {
     }
   }, []);
 
-  // MOTOR DE ATUALIZAÇÃO AUTOMÁTICA EM SEGUNDO PLANO (Substituto do Realtime bloqueado)
+  // MOTOR DE TEMPO REAL OFICIAL: Atualiza o sistema instantaneamente via WebSockets
   useEffect(() => {
     if (isLogado) {
       carregarDadosDaNuvem();
 
-      const intervaloFundo = setInterval(() => {
-        carregarDadosDaNuvem(true); 
-      }, 4000);
+      const canalAtualizacao = supabase
+        .channel('mudancas-globais')
+        .on('postgres', { event: '*', schema: 'public', table: 'requisicoes' }, (payload) => {
+          console.log("⚡ ALERTA REALTIME: Mudança detectada em requisições!", payload);
+          carregarDadosDaNuvem(true); 
+        })
+        .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, (payload) => {
+          console.log("⚡ ALERTA REALTIME: Mudança detectada em produtos!", payload);
+          carregarDadosDaNuvem(true); 
+        })
+        .subscribe((status) => {
+          console.log("📡 Status da Conexão Supabase Realtime:", status);
+          if (status === 'SUBSCRIBED') {
+            console.log("✅ Conectado com sucesso à nuvem em tempo real!");
+          }
+        });
 
-      return () => clearInterval(intervaloFundo);
+      return () => {
+        supabase.removeChannel(canalAtualizacao);
+      };
     }
   }, [isLogado, carregarDadosDaNuvem]);
 
@@ -144,7 +161,7 @@ function App() {
     if (error) {
       alert(`⚠️ Erro do Supabase: ${error.message}`);
     } else {
-      await carregarDadosDaNuvem(true); // Autoload forçado
+      await carregarDadosDaNuvem(true);
       setTelaAtual('painel');
     }
   };
@@ -157,12 +174,10 @@ function App() {
       historicoAtualizado.inicio_separacao = Date.now();
     }
 
-    // ATUALIZAÇÃO OTIMISTA (Muda a tela instantaneamente para quem clicou)
     const reqAtualizada = { ...req, status: novoStatus, historico: historicoAtualizado, ...dadosExtras };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
 
-    // Salva na nuvem e puxa a confirmação (Autoload forçado)
     const payloadBanco = { status: novoStatus, historico: historicoAtualizado };
     if (dadosExtras.numeroRequisicaoExterna) payloadBanco.numero_requisicao_externa = dadosExtras.numeroRequisicaoExterna;
     if (dadosExtras.notaFiscal) payloadBanco.nota_fiscal = dadosExtras.notaFiscal;
@@ -180,17 +195,15 @@ function App() {
     const responsavelConcatenado = responsavelAtual ? `${responsavelAtual} + ${novoResponsavel}` : novoResponsavel;
     const historicoAtualizado = { ...req.historico, [statusAtual]: responsavelConcatenado };
     
-    // ATUALIZAÇÃO OTIMISTA
     const reqAtualizada = { ...req, historico: historicoAtualizado };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
 
     await supabase.from('requisicoes').update({ historico: historicoAtualizado }).eq('id', id);
-    await carregarDadosDaNuvem(true); // Autoload forçado
+    await carregarDadosDaNuvem(true);
   };
 
   const handleAtualizarItens = async (id, novaListaItens) => {
-    // ATUALIZAÇÃO OTIMISTA
     const reqAtualizada = { 
       ...requisicoes.find(r => r.id === id), 
       listaItens: novaListaItens, 
@@ -223,13 +236,12 @@ function App() {
       });
     }
 
-    // ATUALIZAÇÃO OTIMISTA
     const reqAtualizada = { ...req, metricasSeparacao: novasMetricas };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
 
     await supabase.from('requisicoes').update({ metricas_separacao: novasMetricas }).eq('id', id);
-    await carregarDadosDaNuvem(true); // Autoload forçado
+    await carregarDadosDaNuvem(true);
     
     return novasMetricas;
   };

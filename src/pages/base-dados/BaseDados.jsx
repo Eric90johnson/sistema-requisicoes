@@ -2,10 +2,13 @@ import { useRef, useState, useEffect } from 'react';
 import '../../styles/pages/base-dados/baseDados.css';
 
 export default function BaseDados({ aoVoltar, produtos }) {
-  // NOVO: Estado para a Barra de Pesquisa Global
-  const [buscaGlobal, setBuscaGlobal] = useState('');
+  // NOVOS ESTADOS: Múltiplas barras de pesquisa independentes
+  const [buscaCodigo, setBuscaCodigo] = useState('');
+  const [buscaDescricao, setBuscaDescricao] = useState('');
+  const [buscaCodigoBarra, setBuscaCodigoBarra] = useState('');
+  const [buscaMarca, setBuscaMarca] = useState('');
 
-  // Estados dos Filtros Avançados
+  // Estados dos Filtros Avançados (Menu Excel)
   const [menuAberto, setMenuAberto] = useState(null);
   const [filtrosAtivos, setFiltrosAtivos] = useState({});
   const [ordenacao, setOrdenacao] = useState({ coluna: null, direcao: null });
@@ -167,14 +170,22 @@ export default function BaseDados({ aoVoltar, produtos }) {
   // 3. LÓGICA FINAL: Cruzamento de Filtros e Ordenação
   let produtosFiltrados = [...produtos];
 
-  // NOVO: Aplica a Busca Global (pesquisa livre) antes dos filtros de coluna
-  if (buscaGlobal.trim() !== '') {
-    const termo = buscaGlobal.toLowerCase();
-    produtosFiltrados = produtosFiltrados.filter(p => 
-      (p.codigo && p.codigo.toLowerCase().includes(termo)) ||
-      (p.descricao && p.descricao.toLowerCase().includes(termo)) ||
-      (p.codigoBarra && p.codigoBarra.toLowerCase().includes(termo))
-    );
+  // APLICA AS BUSCAS ESPECÍFICAS (Filtros independentes)
+  if (buscaCodigo.trim() !== '') {
+    const termo = buscaCodigo.toLowerCase();
+    produtosFiltrados = produtosFiltrados.filter(p => p.codigo && p.codigo.toLowerCase().includes(termo));
+  }
+  if (buscaDescricao.trim() !== '') {
+    const termo = buscaDescricao.toLowerCase();
+    produtosFiltrados = produtosFiltrados.filter(p => p.descricao && p.descricao.toLowerCase().includes(termo));
+  }
+  if (buscaCodigoBarra.trim() !== '') {
+    const termo = buscaCodigoBarra.toLowerCase();
+    produtosFiltrados = produtosFiltrados.filter(p => p.codigoBarra && p.codigoBarra.toLowerCase().includes(termo));
+  }
+  if (buscaMarca.trim() !== '') {
+    const termo = buscaMarca.toLowerCase();
+    produtosFiltrados = produtosFiltrados.filter(p => p.marca && p.marca.toLowerCase().includes(termo));
   }
   
   // Aplica os filtros de coluna (Excel)
@@ -211,6 +222,14 @@ export default function BaseDados({ aoVoltar, produtos }) {
     if (scrollHeight - scrollTop <= clientHeight + 150) {
       setItensVisiveis(prev => prev + 50);
     }
+  };
+
+  const limparTodasAsBuscas = () => {
+    setBuscaCodigo('');
+    setBuscaDescricao('');
+    setBuscaCodigoBarra('');
+    setBuscaMarca('');
+    setItensVisiveis(50);
   };
 
   const renderCabecalho = (titulo, chave) => {
@@ -265,6 +284,18 @@ export default function BaseDados({ aoVoltar, produtos }) {
     );
   };
 
+  const estiloInputBusca = {
+    flex: '1 1 200px',
+    padding: '10px 12px',
+    borderRadius: '6px',
+    border: '1px solid #bdc3c7',
+    fontSize: '0.95rem',
+    outline: 'none',
+    minWidth: '150px'
+  };
+
+  const temBuscaAtiva = buscaCodigo || buscaDescricao || buscaCodigoBarra || buscaMarca;
+
   return (
     <div className="base-dados-container">
       <div className="base-dados-header">
@@ -280,47 +311,52 @@ export default function BaseDados({ aoVoltar, produtos }) {
 
       {produtos.length > 0 ? (
         <>
-          {/* NOVO: Barra de Pesquisa Global */}
-          <div style={{ marginBottom: '15px', display: 'flex', gap: '10px' }}>
+          {/* Múltiplas Caixas de Pesquisa */}
+          <div style={{ marginBottom: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
             <input 
               type="text" 
-              placeholder="🔍 Pesquisar por código, descrição ou código de barras..." 
-              value={buscaGlobal}
-              onChange={(e) => {
-                setBuscaGlobal(e.target.value);
-                setItensVisiveis(50); // Reseta a paginação ao digitar
-              }}
-              style={{
-                flex: 1,
-                padding: '12px 15px',
-                borderRadius: '8px',
-                border: '2px solid #bdc3c7',
-                fontSize: '1.05rem',
-                outline: 'none',
-                transition: 'border-color 0.2s',
-                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#3498db'}
-              onBlur={(e) => e.target.style.borderColor = '#bdc3c7'}
+              placeholder="🔍 Código..." 
+              value={buscaCodigo}
+              onChange={(e) => { setBuscaCodigo(e.target.value); setItensVisiveis(50); }}
+              style={estiloInputBusca}
             />
-            {buscaGlobal && (
+            <input 
+              type="text" 
+              placeholder="🔍 Descrição..." 
+              value={buscaDescricao}
+              onChange={(e) => { setBuscaDescricao(e.target.value); setItensVisiveis(50); }}
+              style={estiloInputBusca}
+            />
+            <input 
+              type="text" 
+              placeholder="🔍 Cód. Barras..." 
+              value={buscaCodigoBarra}
+              onChange={(e) => { setBuscaCodigoBarra(e.target.value); setItensVisiveis(50); }}
+              style={estiloInputBusca}
+            />
+            <input 
+              type="text" 
+              placeholder="🔍 Marca..." 
+              value={buscaMarca}
+              onChange={(e) => { setBuscaMarca(e.target.value); setItensVisiveis(50); }}
+              style={estiloInputBusca}
+            />
+            
+            {temBuscaAtiva && (
               <button 
-                onClick={() => { setBuscaGlobal(''); setItensVisiveis(50); }}
+                onClick={limparTodasAsBuscas}
                 style={{
-                  padding: '0 20px',
+                  padding: '10px 15px',
                   backgroundColor: '#e74c3c',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
                   fontWeight: 'bold',
-                  fontSize: '1rem',
-                  transition: 'background-color 0.2s'
+                  flex: '0 0 auto'
                 }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#c0392b'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#e74c3c'}
               >
-                Limpar Busca
+                Limpar Buscas
               </button>
             )}
           </div>
