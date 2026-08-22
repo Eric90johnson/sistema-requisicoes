@@ -130,8 +130,17 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           qrbox: { width: 250, height: 100 }
         };
 
+        // AJUSTE CRÍTICO: Força a lente principal com qualidade máxima
+        // Ao pedir 1080p, o sistema operacional do S24+ ignora a lente macro 
+        // e ativa o sensor principal de alta qualidade.
+        const restricoesCamera = {
+          facingMode: "environment",
+          width: { ideal: 1920, min: 1280 },
+          height: { ideal: 1080, min: 720 }
+        };
+
         scanner.start(
-          { facingMode: "environment" }, 
+          restricoesCamera, 
           configCamera,
           (decodedText) => {
             const agora = Date.now();
@@ -208,7 +217,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     );
   };
 
-  // NOVO: Função para o botão de "Salvar Progresso" quando a separação ainda não terminou
   const salvarProgressoParcial = () => {
     exibirPopup('info', 'Progresso Salvo', 'As quantidades bipadas já estão gravadas na nuvem de forma segura.\n\nAtenção: O cronômetro CONTINUA CORRENDO. Você pode sair desta tela e voltar mais tarde para finalizar a separação.');
   };
