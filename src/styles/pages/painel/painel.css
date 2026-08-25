@@ -507,3 +507,151 @@
 .piscar-linha-nova td:first-child {
   border-left: 6px solid #2ecc71 !important;
 }
+
+/* ========================================================= */
+/* --- CLASSES EXTRAÍDAS DO JSX (Limpeza de Código) ---      */
+/* ========================================================= */
+
+.tabela-requisicoes {
+  white-space: nowrap;
+}
+
+.td-motivo-bold {
+  font-weight: bold;
+}
+
+.span-prioridade-subtexto {
+  font-size: 0.8em;
+  display: block;
+  color: #666;
+}
+
+.td-historico-texto {
+  color: #666;
+  font-size: 0.9em;
+}
+
+.td-vazio-tabela {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+  font-style: italic;
+}
+
+.ranking-btn-container {
+  margin-left: auto;
+}
+
+.div-vazia-ranking {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+}
+
+.linha-ranking-primeiro {
+  font-weight: bold;
+}
+
+.linha-ranking-normal {
+  font-weight: normal;
+}
+
+.eficiencia-positiva {
+  color: #27ae60;
+}
+
+.eficiencia-negativa {
+  color: #e74c3c;
+}
+
+/* ========================================================= */
+/* --- CHAT DE NOTIFICAÇÃO (VITRINE DO CD) ---               */
+/* ========================================================= */
+
+.chat-notificacao-container {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  width: 320px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  z-index: 9999;
+  overflow: hidden;
+  animation: slideUpChat 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border: 1px solid #e0e0e0;
+}
+
+@keyframes slideUpChat {
+  0% { transform: translateY(150px) scale(0.8); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.chat-notificacao-header {
+  background-color: #2c3e50;
+  color: white;
+  padding: 12px 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: bold;
+  border-bottom: 3px solid #3498db;
+}
+
+.chat-notificacao-icone {
+  font-size: 1.5rem;
+  animation: balancoIcone 2s infinite ease-in-out;
+}
+
+@keyframes balancoIcone {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-10deg); }
+  75% { transform: rotate(10deg); }
+}
+
+.chat-notificacao-body {
+  padding: 20px 15px;
+  font-size: 0.95rem;
+  color: #34495e;
+  line-height: 1.5;
+  background-color: #fcfcfc;
+}
+
+.chat-notificacao-footer {
+  padding: 0 15px 15px 15px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  background-color: #fcfcfc;
+}
+
+.btn-chat-sim {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.btn-chat-sim:hover { 
+  background-color: #219653; 
+}
+
+.btn-chat-nao {
+  background-color: #ecf0f1;
+  color: #7f8c8d;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.btn-chat-nao:hover { 
+  background-color: #bdc3c7; 
+  color: #2c3e50; 
+}

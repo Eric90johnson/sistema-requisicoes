@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import '../../styles/pages/painel/painel.css';
 import PainelMarketplace from '../marketplace/painel/PainelMarketplace'; 
+import { supabase } from '../../services/supabase';
 
 export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, pedidosMarketplace = [], aoAbrirDetalhes }) {
   
@@ -13,21 +14,59 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const [filtros, setFiltros] = useState({});
   const [colunaFiltroAberta, setColunaFiltroAberta] = useState(null);
 
+  // Estados do Chat Notificação de Reposição (Delta)
+  const [alertaDelta, setAlertaDelta] = useState({ visivel: false, estagio: 'pergunta', produtos: [], id: null });
+
   // Detector de Atualizações em Tempo Real (Piscar a linha)
   const [idsDestacados, setIdsDestacados] = useState([]);
   const reqsAnterioresRef = useRef(requisicoes);
+
+  // Busca de Alertas de Reposição (CD)
+  useEffect(() => {
+    const buscarUltimoAlerta = async () => {
+      const { data, error } = await supabase
+        .from('alertas_reposicao')
+        .select('*')
+        .order('data_criacao', { ascending: false })
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        const alerta = data[0];
+        // Verifica na memória do navegador se a filial já recusou este alerta
+        const jaIgnorado = localStorage.getItem(`alerta_ignorado_${alerta.id}`);
+        if (!jaIgnorado) {
+          setAlertaDelta({ visivel: true, estagio: 'pergunta', produtos: alerta.lista_produtos, id: alerta.id });
+        }
+      }
+    };
+    buscarUltimoAlerta();
+  }, []);
+
+  const handleRecusarAlerta = () => {
+    setAlertaDelta(prev => ({ ...prev, estagio: 'despedida' }));
+    // Grava na memória para não perturbar mais com esse mesmo alerta
+    localStorage.setItem(`alerta_ignorado_${alertaDelta.id}`, 'true');
+    setTimeout(() => {
+      setAlertaDelta(prev => ({ ...prev, visivel: false }));
+    }, 3000);
+  };
+
+  const handleAceitarAlerta = () => {
+    // Marca como visto e envia a lista mágica para a tela de nova requisição
+    localStorage.setItem(`alerta_ignorado_${alertaDelta.id}`, 'true');
+    setAlertaDelta(prev => ({ ...prev, visivel: false }));
+    // Dispara a criação mandando os produtos do Delta como parâmetro
+    aoClicarNovo(alertaDelta.produtos); 
+  };
 
   useEffect(() => {
     const alteradas = [];
     const agora = Date.now();
 
     requisicoes.forEach(reqAtual => {
-      // REGRA 1: É uma requisição recém-criada (nos últimos 5 segundos)? 
-      // Isso garante que quem acabou de criar veja a linha pular pro topo!
       if (reqAtual.timestampCriacao && (agora - reqAtual.timestampCriacao < 5000)) {
         alteradas.push(reqAtual.id);
       } else {
-        // REGRA 2: Alguém mudou o status de uma requisição antiga?
         if (reqsAnterioresRef.current.length > 0) {
           const reqAntiga = reqsAnterioresRef.current.find(r => r.id === reqAtual.id);
           if (!reqAntiga || reqAntiga.status !== reqAtual.status) {
@@ -39,8 +78,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
     if (alteradas.length > 0) {
       setIdsDestacados(prev => [...new Set([...prev, ...alteradas])]);
-      
-      // Remove o destaque APÓS 3.5 segundos
       setTimeout(() => {
         setIdsDestacados(prev => prev.filter(id => !alteradas.includes(id)));
       }, 3500);
@@ -50,7 +87,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   }, [requisicoes]);
 
   const temPedidoPendente = pedidosMarketplace.some(ped => ped.status === 'Pendente');
-
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
   const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebimento');
 
@@ -83,18 +119,15 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     });
 
     return filtradas.sort((a, b) => {
-      // REGRA 1: Destaque temporário (Se piscou, vai pro topo imediatamente)
       const aDestacado = idsDestacados.includes(a.id);
       const bDestacado = idsDestacados.includes(b.id);
       if (aDestacado && !bDestacado) return -1; 
       if (!aDestacado && bDestacado) return 1;  
 
-      // REGRA 2: A sua Regra de Negócio de Prioridade (1 Alta, 3 Baixa)
       const prioA = a.prioridade || 3; 
       const prioB = b.prioridade || 3;
       if (prioA !== prioB) return prioA - prioB; 
       
-      // REGRA 3: A sua Regra de Negócio de Tempo (Mais antigas no topo)
       const tempoA = a.timestampCriacao || 0;
       const tempoB = b.timestampCriacao || 0;
       return tempoA - tempoB; 
@@ -218,6 +251,34 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   return (
     <div className="painel-container">
       
+      {/* 🤖 CHAT DE NOTIFICAÇÃO (VITRINE DO CD) */}
+      {alertaDelta.visivel && (
+        <div className="chat-notificacao-container">
+          <div className="chat-notificacao-header">
+            <span className="chat-notificacao-icone">📦</span>
+            <span>Atualização do CD</span>
+          </div>
+          <div className="chat-notificacao-body">
+            {alertaDelta.estagio === 'pergunta' ? (
+              <>
+                <p>Foram identificados novos produtos na base de dados ou atualização de saldo de produtos.</p>
+                <p style={{ marginTop: '10px', fontWeight: 'bold' }}>Gostaria de fazer uma nova requisição com esses produtos?</p>
+              </>
+            ) : (
+              <p style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 'bold', color: '#2980b9' }}>
+                Tudo bem, quem sabe na próxima! 😉
+              </p>
+            )}
+          </div>
+          {alertaDelta.estagio === 'pergunta' && (
+            <div className="chat-notificacao-footer">
+              <button className="btn-chat-nao" onClick={handleRecusarAlerta}>Não, obrigado</button>
+              <button className="btn-chat-sim" onClick={handleAceitarAlerta}>Sim, iniciar</button>
+            </div>
+          )}
+        </div>
+      )}
+
       {colunaFiltroAberta && <div className="filtro-overlay" onClick={() => setColunaFiltroAberta(null)}></div>}
 
       <div className="abas-container">
@@ -229,7 +290,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
           🛒 Marketplace {temPedidoPendente && <span className="alerta-pisca">!</span>}
         </button>
 
-        <div style={{ marginLeft: 'auto' }}>
+        <div className="ranking-btn-container">
           <button className="btn-ranking-abrir" onClick={() => setMostrarRanking(true)}>🏆 Ranking da Equipe</button>
         </div>
       </div>
@@ -244,11 +305,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
               <span>requisições pendentes de conclusão</span>
             </div>
 
-            <button className="btn-nova-req" onClick={aoClicarNovo}>+ Nova Requisição</button>
+            <button className="btn-nova-req" onClick={() => aoClicarNovo()}>+ Nova Requisição</button>
           </div>
 
           <div className="tabela-container-scroll">
-            <table className="tabela-requisicoes" style={{ whiteSpace: 'nowrap' }}>
+            <table className="tabela-requisicoes">
               <thead>
                 <tr>
                   <RenderHeaderFiltro titulo="Motivo / Prioridade" chave="motivo" opcoes={opcoesMotivo} />
@@ -278,11 +339,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       style={{ cursor: 'pointer' }} 
                       className={`linha-tabela-hover ${getLinhaPrioridadeClass(req.prioridade)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
                     >
-                      <td style={{ fontWeight: 'bold' }} title={req.motivo || ''}>
+                      <td className="td-motivo-bold" title={req.motivo || ''}>
                         {req.motivo 
                           ? (req.motivo.length > 25 ? `${req.motivo.substring(0, 25)}...` : req.motivo) 
                           : '-'} 
-                        {req.prioridade && <span style={{fontSize: '0.8em', display:'block', color:'#666'}}>Prioridade {req.prioridade}</span>}
+                        {req.prioridade && <span className="span-prioridade-subtexto">Prioridade {req.prioridade}</span>}
                       </td>
                       <td>{req.id}</td>
                       <td><span className={`status-badge ${getStatusClass(req.status)}`}>{req.status}</span></td>
@@ -292,7 +353,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       <td>{req.itens}</td>
                       
                       {colunasDinamicas.map(coluna => (
-                        <td key={coluna} style={{ color: '#666', fontSize: '0.9em' }}>
+                        <td key={coluna} className="td-historico-texto">
                           {req.historico && req.historico[coluna] ? req.historico[coluna] : '-'}
                         </td>
                       ))}
@@ -300,7 +361,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7 + colunasDinamicas.length} style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}>
+                    <td colSpan={7 + colunasDinamicas.length} className="td-vazio-tabela">
                       Nenhuma requisição encontrada com os filtros selecionados. A operação está limpa!
                     </td>
                   </tr>
@@ -341,7 +402,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
               </div>
 
               {rankingCalculado.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                <div className="div-vazia-ranking">
                   Nenhum dado de separação finalizado neste período.
                 </div>
               ) : (
@@ -381,11 +442,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                     </thead>
                     <tbody>
                       {rankingCalculado.map((colab, index) => (
-                        <tr key={index} style={{ fontWeight: index === 0 ? 'bold' : 'normal' }}>
+                        <tr key={index} className={index === 0 ? 'linha-ranking-primeiro' : 'linha-ranking-normal'}>
                           <td>{index + 1}º</td>
                           <td>{colab.nome}</td>
                           <td>{colab.qtdSeparacoes}</td>
-                          <td style={{ color: colab.mediaEficiencia >= 0 ? '#27ae60' : '#e74c3c' }}>
+                          <td className={colab.mediaEficiencia >= 0 ? 'eficiencia-positiva' : 'eficiencia-negativa'}>
                             {colab.mediaEficiencia > 0 ? '+' : ''}{colab.mediaEficiencia}%
                           </td>
                         </tr>

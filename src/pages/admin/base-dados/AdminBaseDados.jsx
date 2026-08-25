@@ -4,7 +4,7 @@ import { supabase } from '../../../services/supabase';
 
 export default function AdminBaseDados({ setProdutos }) {
   const inputFileRef = useRef(null);
-  const [popup, setPopup] = useState({ visivel: false, quantidade: 0 });
+  const [popup, setPopup] = useState({ visivel: false, quantidade: 0, novidades: 0 });
   const [carregando, setCarregando] = useState(false);
 
   const handleProcessarArquivo = async (evento) => {
@@ -45,24 +45,67 @@ export default function AdminBaseDados({ setProdutos }) {
         precoCusto: p.preco_custo
       }));
 
-      // --- SUPABASE: SOBRESCREVER DADOS NA NUVEM ---
+      // --- SUPABASE: ATUALIZAÇÃO INTELIGENTE (UPSERT) E MOTOR DE DELTA ---
       try {
-        // 1. Limpa completamente a tabela antiga
-        await supabase.from('base_produtos').delete().neq('codigo', 'EXCLUIR_TUDO_IMPOSSIVEL');
+        // 1. Baixa o estoque antigo rapidamente para comparar
+        let produtosAntigos = [];
+        let buscouTodos = false;
+        let indexAtual = 0;
+        const tamanhoPagina = 1000;
 
-        // 2. Insere os novos produtos em lotes de 500
-        const tamanhoLote = 500;
-        for (let i = 0; i < novosProdutos.length; i += tamanhoLote) {
-          const lote = novosProdutos.slice(i, i + tamanhoLote);
-          const { error } = await supabase.from('base_produtos').insert(lote);
-          if (error) {
-            console.error("Erro ao inserir lote no Supabase:", error);
+        while (!buscouTodos) {
+          const { data, error } = await supabase
+            .from('base_produtos')
+            .select('codigo, quantidade')
+            .range(indexAtual, indexAtual + tamanhoPagina - 1);
+
+          if (error) throw error;
+          if (data && data.length > 0) {
+            produtosAntigos = [...produtosAntigos, ...data];
+            indexAtual += tamanhoPagina;
+          }
+          if (!data || data.length < tamanhoPagina) {
+            buscouTodos = true;
           }
         }
 
-        // 3. Atualiza a tela do sistema para não precisar recarregar a página
+        // 2. MOTOR DE DELTA: Identifica itens novos ou com saldo acrescido
+        const mapaAntigo = new Map(produtosAntigos.map(p => [p.codigo, Number(p.quantidade)]));
+        const deltaProdutos = [];
+
+        for (const novo of novosProdutos) {
+          const qtdAntiga = mapaAntigo.get(novo.codigo);
+          // Adiciona ao alerta se for SKU novo ou se a quantidade aumentou (ignorando vendas que reduziram o saldo)
+          if (qtdAntiga === undefined || Number(novo.quantidade) > qtdAntiga) {
+            deltaProdutos.push(novo);
+          }
+        }
+
+        // 3. Registra o Alerta de Reposição para a vitrine das filiais
+        if (deltaProdutos.length > 0) {
+          const { error: erroAlerta } = await supabase.from('alertas_reposicao').insert([{
+            data_criacao: Date.now(),
+            lista_produtos: deltaProdutos,
+            lojas_visualizadas: []
+          }]);
+          
+          if (erroAlerta) console.error("Erro ao gerar alerta de reposição:", erroAlerta);
+        }
+
+        // 4. Insere/Atualiza os produtos usando UPSERT (Não apaga o que já existe no banco!)
+        const tamanhoLote = 500;
+        for (let i = 0; i < novosProdutos.length; i += tamanhoLote) {
+          const lote = novosProdutos.slice(i, i + tamanhoLote);
+          // O upsert verifica a chave primária 'codigo'
+          const { error } = await supabase.from('base_produtos').upsert(lote, { onConflict: 'codigo' });
+          if (error) {
+            console.error("Erro ao atualizar lote no Supabase:", error);
+          }
+        }
+
+        // 5. Atualiza a tela do sistema
         setProdutos(produtosFormatadosFrontend);
-        setPopup({ visivel: true, quantidade: novosProdutos.length });
+        setPopup({ visivel: true, quantidade: novosProdutos.length, novidades: deltaProdutos.length });
 
       } catch (err) {
         console.error("Erro ao sincronizar base de produtos com a nuvem:", err);
@@ -76,7 +119,7 @@ export default function AdminBaseDados({ setProdutos }) {
     leitor.readAsText(arquivo);
   };
 
-  const fecharPopup = () => setPopup({ visivel: false, quantidade: 0 });
+  const fecharPopup = () => setPopup({ visivel: false, quantidade: 0, novidades: 0 });
 
   return (
     <div className="admin-bd-container">
@@ -85,14 +128,14 @@ export default function AdminBaseDados({ setProdutos }) {
         <p>Faça o upload da planilha atualizada do ERP para sincronizar todas as lojas.</p>
       </div>
 
-      <div className="alerta-perigo">
-        <strong>⚠️ Atenção:</strong> Ao importar um novo arquivo, a base de dados anterior será completamente apagada e substituída pela nova. Certifique-se de que o arquivo <code>.csv</code> está no formato correto (9 colunas).
+      <div className="alerta-perigo" style={{ borderLeftColor: '#3498db', backgroundColor: '#eaf2f8', color: '#2980b9' }}>
+        <strong>ℹ️ Atualização Inteligente (Upsert):</strong> Ao importar o arquivo, o sistema fará a leitura da base. Produtos existentes terão preço e saldo atualizados, novos produtos serão criados, e <strong>nenhum</strong> produto anterior será apagado.
       </div>
 
       <div className="area-upload">
-        <p style={{ fontSize: '3rem', margin: '0 0 10px 0' }}>📄</p>
+        <p className="area-upload-icone">📄</p>
         <h4>Selecione o arquivo POSICAODEESTOQUE.CSV</h4>
-        <p style={{ color: '#7f8c8d', marginBottom: '20px' }}>O sistema processará o arquivo e enviará os dados para a nuvem.</p>
+        <p className="area-upload-descricao">O sistema processará o arquivo e enviará os dados para a nuvem.</p>
         
         <input 
           type="file" 
@@ -116,10 +159,12 @@ export default function AdminBaseDados({ setProdutos }) {
         <div className="popup-overlay-admin" onClick={fecharPopup}>
           <div className="popup-content-admin" onClick={(e) => e.stopPropagation()}>
             <span className="popup-icone-admin">✅</span>
-            <h3 style={{ color: '#27ae60', marginBottom: '10px' }}>Sucesso!</h3>
+            <h3 className="popup-titulo-sucesso">Sucesso!</h3>
             <p>
-              A base de dados foi atualizada na nuvem com <strong>{popup.quantidade}</strong> produtos.<br/><br/>
-              Todas as lojas já têm acesso ao novo estoque.
+              A base de dados foi atualizada com <strong>{popup.quantidade}</strong> produtos processados.
+            </p>
+            <p style={{ marginTop: '10px', color: '#e67e22', fontWeight: 'bold' }}>
+              📦 {popup.novidades} itens geraram alertas de reposição para as filiais!
             </p>
             <button className="popup-btn-admin" onClick={fecharPopup}>
               Concluir

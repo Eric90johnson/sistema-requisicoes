@@ -411,3 +411,50 @@
   0% { transform: scale(0.9); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+/* ========================================================= */
+/* --- CLASSES EXTRAÍDAS DO JSX (Limpeza de Código) ---      */
+/* ========================================================= */
+
+.titulo-insercao {
+  margin: 0;
+}
+
+.input-arquivo-oculto {
+  display: none;
+}
+
+.linha-dupla-motivo {
+  margin-top: 5px;
+}
+
+.campo-loja-flex-2 {
+  flex: 2;
+}
+
+.campo-loja-flex-1 {
+  flex: 1;
+}
+
+/* ========================================================= */
+/* --- COLUNA EXTRA: MODO VITRINE DO CD ---                  */
+/* ========================================================= */
+
+.td-centro {
+  text-align: center !important;
+}
+
+.badge-estoque-vitrine {
+  display: inline-block;
+  background-color: #eaf2f8;
+  color: #2980b9;
+  border: 1px solid #3498db;
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: bold;
+}
+
+.texto-qtd-zerada {
+  color: #e74c3c;
+}

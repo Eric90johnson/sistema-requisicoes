@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import '../../../styles/pages/painel/nova-requisicao/novaRequisicao.css';
 
 const parseValorMoeda = (valorStr) => {
@@ -15,7 +15,7 @@ const parseValorMoeda = (valorStr) => {
   return Number(limpo) || 0;
 };
 
-export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requisicoes = [] }) {
+export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requisicoes = [], produtosPreSelecionados = null }) {
   
   const lojas = [
     'Araturi', 
@@ -46,6 +46,10 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
 
   const inputCodigoRef = useRef(null);
   const inputArquivoRef = useRef(null);
+  const alertaPreenchimentoExibido = useRef(false);
+
+  // Gatilho que identifica se a tela foi aberta pelo Chat de Novidades do CD
+  const isModoVitrine = produtosPreSelecionados && produtosPreSelecionados.length > 0;
 
   const mostrarAlerta = (tipo, titulo, mensagem, onConfirm = null, onCancel = null, textoConfirmar = 'Entendi', textoCancelar = 'Cancelar') => {
     setAlerta({ visivel: true, tipo, titulo, mensagem, onConfirm, onCancel, textoConfirmar, textoCancelar });
@@ -54,6 +58,48 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
   const fecharAlerta = () => {
     setAlerta({ ...alerta, visivel: false });
   };
+
+  // --- 🤖 MOTOR DA VITRINE: Pré-preenchimento e Popup Estratégico ---
+  useEffect(() => {
+    if (isModoVitrine && !alertaPreenchimentoExibido.current && baseProdutos.length > 0) {
+      alertaPreenchimentoExibido.current = true;
+      
+      const itensAuto = produtosPreSelecionados.map(prod => {
+        const baseProd = baseProdutos.find(p => p.codigo === prod.codigo) || prod;
+        const temEstoqueDefinido = baseProd.quantidade !== undefined && baseProd.quantidade !== null;
+        const estoqueAtual = temEstoqueDefinido ? Number(baseProd.quantidade.toString().replace(',', '.')) : null;
+
+        let custoUnit = 0;
+        const campoCustoTotal = baseProd.custo || baseProd.precoCusto || baseProd.preco_custo;
+        if (campoCustoTotal && estoqueAtual > 0) {
+          const custoTotalLimpo = parseValorMoeda(campoCustoTotal);
+          custoUnit = custoTotalLimpo / estoqueAtual;
+        }
+
+        return {
+          cod: baseProd.codigo,
+          descricao: baseProd.descricao || 'Produto não encontrado',
+          quantidade: 0, // Inicia zerado para forçar a curadoria
+          estoque: estoqueAtual,
+          custoUnitario: custoUnit,
+          insuficiente: false
+        };
+      });
+
+      setItensAdicionados(itensAuto);
+      setMotivo('Reposição de estoque'); // Já sugere o motivo
+
+      mostrarAlerta(
+        'aviso',
+        'Alinhamento Comercial',
+        '⚠️ Atenção: Possivelmente nem todos estes itens serão vendidos em sua loja.\n\nPara ter certeza de quais produtos solicitar e evitar excesso de estoque, entre em contato com a gerência geral.\n\nEdite a quantidade (✏️) do que deseja e exclua (🗑️) o restante.',
+        () => fecharAlerta(),
+        null,
+        'Entendido',
+        ''
+      );
+    }
+  }, [produtosPreSelecionados, baseProdutos, isModoVitrine]);
 
   const handleMudancaCodigo = (valorDigitado) => {
     setCodigo(valorDigitado);
@@ -298,6 +344,17 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
       return; 
     }
 
+    // Trava do Delta Positivo: Impede de salvar produtos com quantidade zero
+    const itensZerados = itensAdicionados.filter(item => Number(item.quantidade) <= 0);
+    if (itensZerados.length > 0) {
+      mostrarAlerta(
+        'erro', 
+        'Quantidade Inválida', 
+        `Existem ${itensZerados.length} produto(s) na lista com quantidade zero (0 un).\n\nPara prosseguir, ajuste a quantidade correta pelo botão de editar (✏️) ou remova o produto da lista (🗑️).`
+      );
+      return;
+    }
+
     const itensComProblema = itensAdicionados.filter(item => item.insuficiente);
     if (itensComProblema.length > 0) {
       mostrarAlerta(
@@ -312,7 +369,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
       id: gerarIdSequencial(lojaPara),
       data: new Date().toLocaleDateString('pt-BR'),
       timestampCriacao: Date.now(), 
-      origem: lojaDe, // <--- NOVO: Grava a loja que fará a separação/saída
+      origem: lojaDe, 
       destino: lojaPara,
       solicitante: solicitante,
       motivo: motivoFinal,
@@ -376,8 +433,8 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
             </select>
             
             {motivo === 'Outros' && (
-              <div className="linha-dupla" style={{ marginTop: '5px' }}>
-                <div className="campo-loja" style={{ flex: 2 }}>
+              <div className="linha-dupla linha-dupla-motivo">
+                <div className="campo-loja campo-loja-flex-2">
                   <input 
                     type="text" 
                     className="input-item" 
@@ -386,7 +443,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
                     onChange={(e) => setMotivoOutro(e.target.value)} 
                   />
                 </div>
-                <div className="campo-loja" style={{ flex: 1 }}>
+                <div className="campo-loja campo-loja-flex-1">
                   <select 
                     className="input-item" 
                     value={prioridadeOutro} 
@@ -405,14 +462,14 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
         </div>
 
         <div className="cabecalho-insercao">
-          <h3 style={{ margin: 0 }}>Inserir Produtos</h3>
+          <h3 className="titulo-insercao">Inserir Produtos</h3>
           
           <div>
             <input 
               type="file" 
               accept=".csv" 
               ref={inputArquivoRef} 
-              style={{ display: 'none' }} 
+              className="input-arquivo-oculto"
               onChange={handleImportarCSV} 
             />
             <button 
@@ -448,6 +505,8 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
                   <tr>
                     <th>Cód. Produto</th>
                     <th>Descrição</th>
+                    {/* Exibe a coluna de Qtd Disponível apenas se veio do Chat */}
+                    {isModoVitrine && <th className="td-centro">Qtd. no CD</th>}
                     <th>Qtd. Solicitada</th>
                   </tr>
                 </thead>
@@ -458,7 +517,8 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
                       <td className={item.descricao === 'Produto não encontrado' ? 'texto-erro' : ''}>
                         {item.descricao}
                         
-                        {item.insuficiente && item.descricao !== 'Produto não encontrado' && (
+                        {/* Se não for modo vitrine, mantém o aviso clássico em vermelho */}
+                        {item.insuficiente && item.descricao !== 'Produto não encontrado' && !isModoVitrine && (
                           <div>
                             <span className="badge-estoque">
                               Estoque atual: {item.estoque} un
@@ -466,6 +526,16 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
                           </div>
                         )}
                       </td>
+                      
+                      {/* Célula do Estoque do CD - Visível apenas no modo Vitrine */}
+                      {isModoVitrine && (
+                        <td className="td-centro">
+                          <span className="badge-estoque-vitrine">
+                            {item.estoque !== null ? item.estoque : 0} un
+                          </span>
+                        </td>
+                      )}
+
                       <td>
                         {editandoIndex === index ? (
                           <div className="edicao-container-nova">
@@ -480,7 +550,9 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
                           </div>
                         ) : (
                           <div className="quantidade-container-nova">
-                            <strong>{item.quantidade} un</strong>
+                            <strong className={item.quantidade === 0 ? 'texto-qtd-zerada' : ''}>
+                              {item.quantidade} un
+                            </strong>
                             
                             <button 
                               className="btn-editar-item-nova" 
@@ -527,9 +599,9 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
           <div className="alerta-modal-box">
             
             <div className={`alerta-modal-header tipo-${alerta.tipo}`}>
-              {alerta.tipo === 'erro' && '🚨'}
-              {alerta.tipo === 'sucesso' && '✅'}
-              {alerta.tipo === 'aviso' && '⚠️'}
+              {alerta.tipo === 'erro' && '🚨 '}
+              {alerta.tipo === 'sucesso' && '✅ '}
+              {alerta.tipo === 'aviso' && '⚠️ '}
               {alerta.titulo}
             </div>
 

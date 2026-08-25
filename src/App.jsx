@@ -24,6 +24,9 @@ function App() {
   const [reqSelecionada, setReqSelecionada] = useState(null);
   const [abaAdminAtiva, setAbaAdminAtiva] = useState('base-dados');
 
+  // NOVO ESTADO: Guarda os produtos do Delta Positivo para passar para a Nova Requisição
+  const [produtosPreSelecionados, setProdutosPreSelecionados] = useState(null);
+
   const [baseProdutos, setBaseProdutos] = useState([]);
   const [requisicoes, setRequisicoes] = useState([]);
   const [pedidosMarketplace, setPedidosMarketplace] = useState([]);
@@ -163,6 +166,7 @@ function App() {
     } else {
       await carregarDadosDaNuvem(true);
       setTelaAtual('painel');
+      setProdutosPreSelecionados(null); // Limpa a memória após salvar
     }
   };
 
@@ -279,8 +283,12 @@ function App() {
           </div>
         ) : (
           <>
-            {telaAtual === 'painel' && <Painel aoClicarNovo={() => setTelaAtual('nova')} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
-            {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} />}
+            {/* O comando aoClicarNovo agora recebe a lista e guarda no estado, além de abrir a tela */}
+            {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
+            
+            {/* A tela NovaRequisicao agora recebe a prop produtosPreSelecionados */}
+            {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => { setTelaAtual('painel'); setProdutosPreSelecionados(null); }} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} />}
+            
             {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} recordesGlobais={recordesGlobais} />}
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}

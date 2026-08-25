@@ -109,3 +109,19 @@
   margin-top: 20px;
   font-weight: bold;
 }
+
+/* Novas classes extraídas do JSX para manter o código limpo */
+.area-upload-icone {
+  font-size: 3rem;
+  margin: 0 0 10px 0;
+}
+
+.area-upload-descricao {
+  color: #7f8c8d;
+  margin-bottom: 20px;
+}
+
+.popup-titulo-sucesso {
+  color: #27ae60;
+  margin-bottom: 10px;
+}
