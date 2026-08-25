@@ -1,0 +1,101 @@
+/* src/styles/pages/painel/romaneio/romaneio.css */
+.romaneio-container {
+  display: none; /* Oculto na tela do computador */
+}
+
+@media print {
+  /* 1. O PULO DO GATO DEFINITIVO: Esconde os elementos usando display: none */
+  /* Isso faz as caixas sumirem de verdade, matando as páginas em branco fantasmas! */
+  .cabecalho-global,
+  footer,
+  .detalhes-header,
+  .card-info,
+  .btn-salvar-progresso,
+  .festa-confete,
+  .container-notificacoes-bip {
+    display: none !important;
+  }
+
+  /* 2. Zera margens dos containers principais para a folha ficar 100% limpa */
+  .layout-container, 
+  main, 
+  .detalhes-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  /* 3. Mostra o Romaneio no fluxo normal (sem absolute) */
+  .romaneio-container {
+    display: block !important;
+    position: relative !important;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Configuração das bordas da folha de papel */
+  @page {
+    margin: 1cm;
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: white !important;
+  }
+
+  /* --- ESTILIZAÇÃO INTERNA DO ROMANEIO --- */
+  .romaneio-header {
+    text-align: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+  }
+
+  .romaneio-header h1 { 
+    font-size: 22px; 
+    margin: 0 0 5px 0; 
+  }
+  
+  .romaneio-info-grid {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+
+  .romaneio-tabela {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 40px;
+  }
+
+  .romaneio-tabela th, .romaneio-tabela td {
+    border: 1px solid #000;
+    padding: 8px;
+    text-align: left;
+    font-size: 12px;
+  }
+
+  .romaneio-tabela th {
+    background-color: #f0f0f0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .romaneio-assinaturas {
+    display: flex;
+    justify-content: center;
+    margin-top: 50px;
+    page-break-inside: avoid; /* Trava extra: impede a assinatura de ser cortada no meio na virada da página */
+  }
+
+  .assinatura-box {
+    text-align: center;
+    width: 50%;
+    border-top: 1px solid #000;
+    padding-top: 10px;
+    font-size: 14px;
+  }
+}

@@ -125,7 +125,6 @@ function App() {
       const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
       
       if (isEncarregado && usuarioLogado?.nome_completo) {
-        // Busca se já tem pedido pendente ao abrir o sistema
         const fetchPendentes = async () => {
           const { data } = await supabase.from('autorizacoes_bip')
             .select('*').eq('encarregado_destino', usuarioLogado.nome_completo).eq('status', 'pendente');
@@ -133,7 +132,6 @@ function App() {
         };
         fetchPendentes();
 
-        // Fica escutando novos pedidos chegarem na nuvem em tempo real
         canalAutorizacao = supabase.channel('notificacoes_encarregado')
           .on('postgres', { event: 'INSERT', schema: 'public', table: 'autorizacoes_bip', filter: `encarregado_destino=eq.${usuarioLogado.nome_completo}` }, (payload) => {
             if (payload.new.status === 'pendente') {
@@ -267,8 +265,10 @@ function App() {
           <>
             {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
             {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => { setTelaAtual('painel'); setProdutosPreSelecionados(null); }} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} />}
-            {/* O Componente DetalhesRequisicao agora recebe o usuarioLogado para aplicar as regras de segurança do Bip */}
-            {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} recordesGlobais={recordesGlobais} />}
+            
+            {/* O Componente DetalhesRequisicao recebe baseProdutos para repassar ao Romaneio */}
+            {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} recordesGlobais={recordesGlobais} />}
+            
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
             {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => setTelaAtual('painel')} produtos={baseProdutos} setProdutos={setBaseProdutos} />}

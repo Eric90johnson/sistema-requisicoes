@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import '../../../styles/pages/painel/detalhes/detalhes.css';
 import { supabase } from '../../../services/supabase';
+import Romaneio from '../romaneio/Romaneio';
 
-export default function DetalhesRequisicao({ req, usuarioLogado, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, recordesGlobais }) {
+export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, recordesGlobais }) {
   if (!req) return null;
 
   const [novoStatus, setNovoStatus] = useState(req.status);
@@ -32,7 +33,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, aoVoltar, aoMud
   const [novaQuantidade, setNovaQuantidade] = useState('');
   const [motivoAlteracao, setMotivoAlteracao] = useState('');
 
-  // ESTADOS DO SISTEMA DE BIP MANUAL E HIERARQUIA
   const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
   const [pedidosBip, setPedidosBip] = useState({}); 
   const [codigoManual, setCodigoManual] = useState({}); 
@@ -255,7 +255,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, aoVoltar, aoMud
       
       if (!metricasFinais) return; 
       
-      // --- NOVO CÁLCULO DE PONTOS PARA O RESUMO ---
       const tempoSegundos = metricasFinais.tempoTotalSegundos || 1;
       const itensFisicos = metricasFinais.totalItensFisicos || 0;
       const upm = (itensFisicos / tempoSegundos) * 60;
@@ -349,7 +348,12 @@ export default function DetalhesRequisicao({ req, usuarioLogado, aoVoltar, aoMud
 
       <div className="detalhes-header">
         <h2>Detalhes da Requisição {req.id}</h2>
-        <button className="btn-voltar" onClick={aoVoltar}>← Voltar ao Painel</button>
+        <div className="botoes-header-container">
+          <button className="btn-imprimir-romaneio" onClick={() => window.print()} title="Imprimir Lista de Separação">
+            🖨️ Imprimir Romaneio
+          </button>
+          <button className="btn-voltar" onClick={aoVoltar}>← Voltar ao Painel</button>
+        </div>
       </div>
 
       <div className="card-info">
@@ -452,7 +456,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, aoVoltar, aoMud
             <div className={`cronometro-relogio ${req.metricasSeparacao ? 'tempo-travado' : ''}`}>
               {formatarTempo(tempoDecorrido)}
             </div>
-            {/* --- ATUALIZADO: Mostrar Velocidade e Pontos na Tela também --- */}
             {req.metricasSeparacao && (() => {
               const tempoSeg = req.metricasSeparacao.tempoTotalSegundos || 1;
               const itensFisicos = req.metricasSeparacao.totalItensFisicos || 0;
@@ -645,6 +648,9 @@ export default function DetalhesRequisicao({ req, usuarioLogado, aoVoltar, aoMud
           </div>
         </div>
       )}
+
+      {/* RENDERIZANDO O ROMANEIO INVISÍVEL NO FINAL DA TELA */}
+      <Romaneio req={req} baseProdutos={baseProdutos} />
 
     </div>
   );
