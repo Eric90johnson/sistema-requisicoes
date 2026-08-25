@@ -318,23 +318,26 @@
 }
 
 /* O PÓDIO VISUAL (Ouro, Prata, Bronze) */
+/* O PÓDIO VISUAL (Ouro, Prata, Bronze) */
 .podio-container {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 10px;
-  height: 220px;
+  gap: 15px; /* Aumentado para respirar melhor */
+  height: 250px; /* Aumentado para caber as caixas maiores */
   margin-bottom: 40px;
 }
 
 .podio-lugar {
-  width: 120px;
+  width: 135px; /* Aumentado para não quebrar a linha de pontuações altas */
   border-radius: 8px 8px 0 0;
   color: white;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
   padding-top: 15px;
+  padding-bottom: 15px; /* Evita que o texto encoste no chão */
   box-shadow: 0 -4px 10px rgba(0,0,0,0.15);
   position: relative;
   text-align: center;
@@ -346,23 +349,37 @@
   text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
 }
 
-.podio-nome { font-weight: bold; font-size: 1rem; margin-bottom: 5px; padding: 0 5px;}
-.podio-nota { font-size: 1.3rem; font-weight: 900; background-color: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
+.podio-nome { 
+  font-weight: bold; 
+  font-size: 1rem; 
+  margin-bottom: 8px; 
+  padding: 0 5px;
+}
 
+.podio-nota { 
+  font-size: 1.15rem; /* Ajustado para caber perfeitamente na caixa */
+  font-weight: 900; 
+  background-color: rgba(255,255,255,0.2); 
+  padding: 4px 10px; 
+  border-radius: 10px; 
+  white-space: nowrap; /* Trava de segurança: impede o texto de quebrar em duas linhas */
+}
+
+/* Novas alturas calculadas para acomodar todo o conteúdo */
 .podio-ouro {
-  height: 180px;
+  height: 200px;
   background: linear-gradient(to top, #d4af37, #f1c40f);
   z-index: 3;
 }
 
 .podio-prata {
-  height: 140px;
+  height: 170px;
   background: linear-gradient(to top, #95a5a6, #bdc3c7);
   z-index: 2;
 }
 
 .podio-bronze {
-  height: 110px;
+  height: 140px;
   background: linear-gradient(to top, #a0522d, #cd7f32);
   z-index: 1;
 }
@@ -654,4 +671,57 @@
 .btn-chat-nao:hover { 
   background-color: #bdc3c7; 
   color: #2c3e50; 
+}
+
+/* ========================================================= */
+/* --- CLASSES EXTRAÍDAS DO JSX (Limpeza App e Painel) ---   */
+/* ========================================================= */
+
+.cabecalho-admin-mode {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0px;
+}
+
+.header-wrapper-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.tela-loading {
+  padding: 60px;
+  text-align: center;
+  color: var(--cor-secundaria);
+}
+
+.linha-tabela-clicavel {
+  cursor: pointer;
+}
+
+.th-com-filtro.filtro-aberto {
+  z-index: 101;
+}
+
+.chat-pergunta-bold {
+  margin-top: 10px;
+  font-weight: bold;
+}
+
+.chat-despedida-azul {
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #2980b9;
+}
+
+/* ========================================================= */
+/* --- RANKING: UNIDADES POR MINUTO (UPM) ---                */
+/* ========================================================= */
+
+.upm-destaque {
+  color: #27ae60;
+  font-weight: bold;
+  font-size: 1.1em;
 }

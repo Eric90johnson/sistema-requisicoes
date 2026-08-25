@@ -24,7 +24,6 @@ function App() {
   const [reqSelecionada, setReqSelecionada] = useState(null);
   const [abaAdminAtiva, setAbaAdminAtiva] = useState('base-dados');
 
-  // NOVO ESTADO: Guarda os produtos do Delta Positivo para passar para a Nova Requisição
   const [produtosPreSelecionados, setProdutosPreSelecionados] = useState(null);
 
   const [baseProdutos, setBaseProdutos] = useState([]);
@@ -48,14 +47,12 @@ function App() {
     setUsuarioLogado(null);
     setIsLogado(false);
     
-    // Desloga o "E-mail Invisível" da segurança do Supabase para não deixar sessões abertas
     await supabase.auth.signOut();
   };
 
   const carregarDadosDaNuvem = useCallback(async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      // 1. CARREGA AS REQUISIÇÕES
       const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false });
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
@@ -74,7 +71,6 @@ function App() {
         });
       }
 
-      // 2. CARREGA OS RECORDES
       const { data: recData } = await supabase.from('recordes_globais').select('*');
       if (recData) {
         const objRecordes = {};
@@ -84,7 +80,6 @@ function App() {
         setRecordesGlobais(objRecordes);
       }
 
-      // 3. CARREGA OS PRODUTOS (COM PAGINAÇÃO PARA +7000 LINHAS)
       let todosOsProdutos = [];
       let buscouTodos = false;
       let indexAtual = 0;
@@ -125,7 +120,6 @@ function App() {
     }
   }, []);
 
-  // MOTOR DE TEMPO REAL OFICIAL: Atualiza o sistema instantaneamente via WebSockets
   useEffect(() => {
     if (isLogado) {
       carregarDadosDaNuvem();
@@ -133,19 +127,12 @@ function App() {
       const canalAtualizacao = supabase
         .channel('mudancas-globais')
         .on('postgres', { event: '*', schema: 'public', table: 'requisicoes' }, (payload) => {
-          console.log("⚡ ALERTA REALTIME: Mudança detectada em requisições!", payload);
           carregarDadosDaNuvem(true); 
         })
         .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, (payload) => {
-          console.log("⚡ ALERTA REALTIME: Mudança detectada em produtos!", payload);
           carregarDadosDaNuvem(true); 
         })
-        .subscribe((status) => {
-          console.log("📡 Status da Conexão Supabase Realtime:", status);
-          if (status === 'SUBSCRIBED') {
-            console.log("✅ Conectado com sucesso à nuvem em tempo real!");
-          }
-        });
+        .subscribe();
 
       return () => {
         supabase.removeChannel(canalAtualizacao);
@@ -166,7 +153,7 @@ function App() {
     } else {
       await carregarDadosDaNuvem(true);
       setTelaAtual('painel');
-      setProdutosPreSelecionados(null); // Limpa a memória após salvar
+      setProdutosPreSelecionados(null);
     }
   };
 
@@ -221,17 +208,19 @@ function App() {
 
   const handleFinalizarSeparacao = async (id, tempoSegundos, responsavelSeparacao) => {
     const req = requisicoes.find(r => r.id === id);
+    // Conta quantas peças físicas reais a pessoa bipou/separou
     const totalItensFisicos = req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0);
-    const tempoSlaEsperado = totalItensFisicos * 12; 
-    let percentualEficiencia = tempoSegundos > 0 ? Math.round(((tempoSlaEsperado / tempoSegundos) * 100) - 100) : 0;
+
+    const novasMetricas = {
+      tempoTotalSegundos: tempoSegundos, 
+      totalItensFisicos: totalItensFisicos, // Salva o volume físico para a Média UPM do Painel
+      bateuRecorde: false, 
+      responsavel: responsavelSeparacao, 
+      finalizadoEm: new Date().toISOString()
+    };
 
     const chaveRecorde = `qtd_${totalItensFisicos}`;
     const recordeAtual = recordesGlobais[chaveRecorde];
-
-    const novasMetricas = {
-      tempoTotalSegundos: tempoSegundos, eficienciaPercentual: percentualEficiencia,
-      bateuRecorde: false, responsavel: responsavelSeparacao, finalizadoEm: new Date().toISOString()
-    };
 
     if (!recordeAtual || tempoSegundos < recordeAtual.tempoSegundos) {
       novasMetricas.bateuRecorde = true;
@@ -257,8 +246,8 @@ function App() {
 
   return (
     <div className="layout-container">
-      <header className="cabecalho-global" style={telaAtual === 'admin' ? { display: 'flex', flexDirection: 'column', paddingBottom: '0px' } : {}}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+      <header className={`cabecalho-global ${telaAtual === 'admin' ? 'cabecalho-admin-mode' : ''}`}>
+        <div className="header-wrapper-flex">
           <img src={logo} alt="Logo Neta Dantas" className="logo-header" />
           <h1 className="titulo-cabecalho">Painel de Requisição Interna de Produtos</h1>
           <Menu 
@@ -277,18 +266,14 @@ function App() {
       
       <main>
         {carregando ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: 'var(--cor-secundaria)' }}>
+          <div className="tela-loading">
             <h2>🔄 Conectando com a Nuvem...</h2>
             <p>Sincronizando as requisições da Neta Dantas, aguarde.</p>
           </div>
         ) : (
           <>
-            {/* O comando aoClicarNovo agora recebe a lista e guarda no estado, além de abrir a tela */}
             {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
-            
-            {/* A tela NovaRequisicao agora recebe a prop produtosPreSelecionados */}
             {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => { setTelaAtual('painel'); setProdutosPreSelecionados(null); }} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} />}
-            
             {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} recordesGlobais={recordesGlobais} />}
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}

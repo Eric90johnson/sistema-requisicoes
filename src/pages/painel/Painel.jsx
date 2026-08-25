@@ -14,14 +14,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const [filtros, setFiltros] = useState({});
   const [colunaFiltroAberta, setColunaFiltroAberta] = useState(null);
 
-  // Estados do Chat Notificação de Reposição (Delta)
   const [alertaDelta, setAlertaDelta] = useState({ visivel: false, estagio: 'pergunta', produtos: [], id: null });
 
-  // Detector de Atualizações em Tempo Real (Piscar a linha)
   const [idsDestacados, setIdsDestacados] = useState([]);
   const reqsAnterioresRef = useRef(requisicoes);
 
-  // Busca de Alertas de Reposição (CD)
   useEffect(() => {
     const buscarUltimoAlerta = async () => {
       const { data, error } = await supabase
@@ -32,7 +29,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
       if (!error && data && data.length > 0) {
         const alerta = data[0];
-        // Verifica na memória do navegador se a filial já recusou este alerta
         const jaIgnorado = localStorage.getItem(`alerta_ignorado_${alerta.id}`);
         if (!jaIgnorado) {
           setAlertaDelta({ visivel: true, estagio: 'pergunta', produtos: alerta.lista_produtos, id: alerta.id });
@@ -44,7 +40,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const handleRecusarAlerta = () => {
     setAlertaDelta(prev => ({ ...prev, estagio: 'despedida' }));
-    // Grava na memória para não perturbar mais com esse mesmo alerta
     localStorage.setItem(`alerta_ignorado_${alertaDelta.id}`, 'true');
     setTimeout(() => {
       setAlertaDelta(prev => ({ ...prev, visivel: false }));
@@ -52,10 +47,8 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   };
 
   const handleAceitarAlerta = () => {
-    // Marca como visto e envia a lista mágica para a tela de nova requisição
     localStorage.setItem(`alerta_ignorado_${alertaDelta.id}`, 'true');
     setAlertaDelta(prev => ({ ...prev, visivel: false }));
-    // Dispara a criação mandando os produtos do Delta como parâmetro
     aoClicarNovo(alertaDelta.produtos); 
   };
 
@@ -161,6 +154,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     }
   };
 
+  // --- MOTOR DE CÁLCULO DE PRODUTIVIDADE (Volume + UPM) ---
   const rankingCalculado = useMemo(() => {
     const reqsValidas = requisicoes.filter(req => {
       if (!req.metricasSeparacao) return false;
@@ -184,26 +178,39 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     const pontuacoes = {};
     reqsValidas.forEach(req => {
       const resp = req.metricasSeparacao.responsavel;
-      const ef = req.metricasSeparacao.eficienciaPercentual || 0;
+      const tempoSeg = req.metricasSeparacao.tempoTotalSegundos || 1; 
+      const itensFisicos = req.metricasSeparacao.totalItensFisicos || (req.listaItens ? req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0) : 0);
       
       const nomes = resp.split('+').map(n => n.trim());
       nomes.forEach(nome => {
         if (!nome) return;
         if (!pontuacoes[nome]) {
-          pontuacoes[nome] = { nome, totalEficiencia: 0, qtdSeparacoes: 0 };
+          pontuacoes[nome] = { nome, totalItens: 0, totalSegundos: 0, qtdSeparacoes: 0 };
         }
-        pontuacoes[nome].totalEficiencia += ef;
+        pontuacoes[nome].totalItens += itensFisicos;
+        pontuacoes[nome].totalSegundos += tempoSeg;
         pontuacoes[nome].qtdSeparacoes += 1;
       });
     });
 
-    const rankingFinal = Object.values(pontuacoes).map(p => ({
-      nome: p.nome,
-      mediaEficiencia: Math.round(p.totalEficiencia / p.qtdSeparacoes),
-      qtdSeparacoes: p.qtdSeparacoes
-    }));
+    const rankingFinal = Object.values(pontuacoes).map(p => {
+      const upm = p.totalSegundos > 0 ? ((p.totalItens / p.totalSegundos) * 60) : 0;
+      const upmFormatado = Number(upm.toFixed(1));
+      
+      // NOVA REGRA DE JUSTIÇA: Multiplica as peças pela velocidade
+      const pontuacaoFinal = Math.round(p.totalItens * upmFormatado);
 
-    rankingFinal.sort((a, b) => b.mediaEficiencia - a.mediaEficiencia);
+      return {
+        nome: p.nome,
+        upm: upmFormatado,
+        totalItens: p.totalItens,
+        qtdSeparacoes: p.qtdSeparacoes,
+        pontuacao: pontuacaoFinal
+      };
+    });
+
+    // Ordena pela Pontuação Final (Quem trabalhou mais e melhor)
+    rankingFinal.sort((a, b) => b.pontuacao - a.pontuacao); 
 
     return rankingFinal;
   }, [requisicoes, dataInicioRanking, dataFimRanking]);
@@ -213,10 +220,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     const filtroAtivo = filtros[chave];
 
     return (
-      <th 
-        className="th-com-filtro" 
-        style={{ zIndex: estaAberto ? 101 : 10 }}
-      >
+      <th className={`th-com-filtro ${estaAberto ? 'filtro-aberto' : ''}`}>
         <div 
           className="cabecalho-filtro" 
           onClick={() => setColunaFiltroAberta(estaAberto ? null : chave)}
@@ -251,7 +255,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   return (
     <div className="painel-container">
       
-      {/* 🤖 CHAT DE NOTIFICAÇÃO (VITRINE DO CD) */}
       {alertaDelta.visivel && (
         <div className="chat-notificacao-container">
           <div className="chat-notificacao-header">
@@ -262,10 +265,10 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
             {alertaDelta.estagio === 'pergunta' ? (
               <>
                 <p>Foram identificados novos produtos na base de dados ou atualização de saldo de produtos.</p>
-                <p style={{ marginTop: '10px', fontWeight: 'bold' }}>Gostaria de fazer uma nova requisição com esses produtos?</p>
+                <p className="chat-pergunta-bold">Gostaria de fazer uma nova requisição com esses produtos?</p>
               </>
             ) : (
-              <p style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 'bold', color: '#2980b9' }}>
+              <p className="chat-despedida-azul">
                 Tudo bem, quem sabe na próxima! 😉
               </p>
             )}
@@ -336,8 +339,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                     <tr 
                       key={req.id} 
                       onClick={() => aoAbrirDetalhes(req)} 
-                      style={{ cursor: 'pointer' }} 
-                      className={`linha-tabela-hover ${getLinhaPrioridadeClass(req.prioridade)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
+                      className={`linha-tabela-hover linha-tabela-clicavel ${getLinhaPrioridadeClass(req.prioridade)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
                     >
                       <td className="td-motivo-bold" title={req.motivo || ''}>
                         {req.motivo 
@@ -384,7 +386,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
         <div className="ranking-modal-overlay" onClick={() => setMostrarRanking(false)}>
           <div className="ranking-modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="ranking-modal-header">
-              <h3>🏆 Top Separadores (Índice de Eficiência)</h3>
+              <h3>🏆 Top Separadores (Pontuação de Produtividade)</h3>
               <button className="btn-fechar-ranking" onClick={() => setMostrarRanking(false)}>✖</button>
             </div>
             
@@ -412,21 +414,21 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       <div className="podio-lugar podio-prata">
                         <div className="podio-avatar">🥈</div>
                         <span className="podio-nome">{rankingCalculado[1].nome}</span>
-                        <span className="podio-nota">+{rankingCalculado[1].mediaEficiencia}%</span>
+                        <span className="podio-nota">{rankingCalculado[1].pontuacao} pts</span>
                       </div>
                     )}
                     {rankingCalculado[0] && (
                       <div className="podio-lugar podio-ouro">
                         <div className="podio-avatar">🥇</div>
                         <span className="podio-nome">{rankingCalculado[0].nome}</span>
-                        <span className="podio-nota">+{rankingCalculado[0].mediaEficiencia}%</span>
+                        <span className="podio-nota">{rankingCalculado[0].pontuacao} pts</span>
                       </div>
                     )}
                     {rankingCalculado[2] && (
                       <div className="podio-lugar podio-bronze">
                         <div className="podio-avatar">🥉</div>
                         <span className="podio-nome">{rankingCalculado[2].nome}</span>
-                        <span className="podio-nota">+{rankingCalculado[2].mediaEficiencia}%</span>
+                        <span className="podio-nota">{rankingCalculado[2].pontuacao} pts</span>
                       </div>
                     )}
                   </div>
@@ -436,8 +438,10 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       <tr>
                         <th>Posição</th>
                         <th>Colaborador</th>
-                        <th>Req. Separadas</th>
-                        <th>Média de Eficiência</th>
+                        <th>Pedidos</th>
+                        <th>Total Peças</th>
+                        <th>Velocidade</th>
+                        <th>Pontuação 🏆</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -446,8 +450,10 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                           <td>{index + 1}º</td>
                           <td>{colab.nome}</td>
                           <td>{colab.qtdSeparacoes}</td>
-                          <td className={colab.mediaEficiencia >= 0 ? 'eficiencia-positiva' : 'eficiencia-negativa'}>
-                            {colab.mediaEficiencia > 0 ? '+' : ''}{colab.mediaEficiencia}%
+                          <td>{colab.totalItens} un</td>
+                          <td>{colab.upm} un/min</td>
+                          <td className="upm-destaque">
+                            {colab.pontuacao} pts
                           </td>
                         </tr>
                       ))}
