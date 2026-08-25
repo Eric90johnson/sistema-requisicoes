@@ -32,6 +32,9 @@ function App() {
   const [recordesGlobais, setRecordesGlobais] = useState({});
   const [carregando, setCarregando] = useState(false);
 
+  // NOVO ESTADO: O "WhatsApp" do Encarregado
+  const [autorizacoesPendentes, setAutorizacoesPendentes] = useState([]);
+
   const handleLogar = (dadosUsuario) => {
     localStorage.setItem('netadantas_logado', 'true');
     if (dadosUsuario) {
@@ -46,7 +49,6 @@ function App() {
     localStorage.removeItem('netadantas_usuario');
     setUsuarioLogado(null);
     setIsLogado(false);
-    
     await supabase.auth.signOut();
   };
 
@@ -86,24 +88,13 @@ function App() {
       const tamanhoPagina = 1000;
 
       while (!buscouTodos) {
-        const { data: prodData, error } = await supabase
-          .from('base_produtos')
-          .select('*')
-          .range(indexAtual, indexAtual + tamanhoPagina - 1);
-
-        if (error) {
-          console.error("Erro na paginação de produtos:", error);
-          break;
-        }
-
+        const { data: prodData, error } = await supabase.from('base_produtos').select('*').range(indexAtual, indexAtual + tamanhoPagina - 1);
+        if (error) break;
         if (prodData && prodData.length > 0) {
           todosOsProdutos = [...todosOsProdutos, ...prodData];
           indexAtual += tamanhoPagina;
         }
-
-        if (!prodData || prodData.length < tamanhoPagina) {
-          buscouTodos = true;
-        }
+        if (!prodData || prodData.length < tamanhoPagina) { buscouTodos = true; }
       }
 
       if (todosOsProdutos.length > 0) {
@@ -112,7 +103,6 @@ function App() {
         }));
         setBaseProdutos(produtosFormatados);
       }
-      
     } catch (error) {
       console.error("Erro ao sincronizar com o Supabase:", error);
     } finally {
@@ -120,51 +110,77 @@ function App() {
     }
   }, []);
 
+  // MOTOR REALTIME DE DADOS GERAIS E DE NOTIFICAÇÕES DO ENCARREGADO
   useEffect(() => {
     if (isLogado) {
       carregarDadosDaNuvem();
 
-      const canalAtualizacao = supabase
-        .channel('mudancas-globais')
-        .on('postgres', { event: '*', schema: 'public', table: 'requisicoes' }, (payload) => {
-          carregarDadosDaNuvem(true); 
-        })
-        .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, (payload) => {
-          carregarDadosDaNuvem(true); 
-        })
+      const canalAtualizacao = supabase.channel('mudancas-globais')
+        .on('postgres', { event: '*', schema: 'public', table: 'requisicoes' }, () => { carregarDadosDaNuvem(true); })
+        .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, () => { carregarDadosDaNuvem(true); })
         .subscribe();
+
+      // Se for encarregado, liga o rádio para escutar pedidos de Bip Manual
+      let canalAutorizacao;
+      const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
+      
+      if (isEncarregado && usuarioLogado?.nome_completo) {
+        // Busca se já tem pedido pendente ao abrir o sistema
+        const fetchPendentes = async () => {
+          const { data } = await supabase.from('autorizacoes_bip')
+            .select('*').eq('encarregado_destino', usuarioLogado.nome_completo).eq('status', 'pendente');
+          if (data) setAutorizacoesPendentes(data);
+        };
+        fetchPendentes();
+
+        // Fica escutando novos pedidos chegarem na nuvem em tempo real
+        canalAutorizacao = supabase.channel('notificacoes_encarregado')
+          .on('postgres', { event: 'INSERT', schema: 'public', table: 'autorizacoes_bip', filter: `encarregado_destino=eq.${usuarioLogado.nome_completo}` }, (payload) => {
+            if (payload.new.status === 'pendente') {
+              setAutorizacoesPendentes(prev => [...prev, payload.new]);
+              tocarSomNotificacao();
+            }
+          }).subscribe();
+      }
 
       return () => {
         supabase.removeChannel(canalAtualizacao);
+        if (canalAutorizacao) supabase.removeChannel(canalAutorizacao);
       };
     }
-  }, [isLogado, carregarDadosDaNuvem]);
+  }, [isLogado, carregarDadosDaNuvem, usuarioLogado]);
+
+  const tocarSomNotificacao = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(900, ctx.currentTime);
+      osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.3);
+    } catch(e) {}
+  };
+
+  const handleAprovarBip = async (auth) => {
+    setAutorizacoesPendentes(prev => prev.filter(a => a.id !== auth.id));
+    await supabase.from('autorizacoes_bip').update({ status: 'aprovado' }).eq('id', auth.id);
+  };
+
+  const handleRecusarBip = async (auth) => {
+    setAutorizacoesPendentes(prev => prev.filter(a => a.id !== auth.id));
+    await supabase.from('autorizacoes_bip').update({ status: 'recusado' }).eq('id', auth.id);
+  };
 
   const handleSalvarRequisicao = async (novaReq) => {
     const { error } = await supabase.from('requisicoes').insert([{
-      id: novaReq.id, data: novaReq.data, timestamp_criacao: novaReq.timestampCriacao,
-      origem: novaReq.origem, destino: novaReq.destino, solicitante: novaReq.solicitante,
-      motivo: novaReq.motivo, prioridade: novaReq.prioridade, itens: novaReq.itens,
-      status: novaReq.status, lista_itens: novaReq.listaItens, historico: novaReq.historico
+      id: novaReq.id, data: novaReq.data, timestamp_criacao: novaReq.timestampCriacao, origem: novaReq.origem, destino: novaReq.destino, solicitante: novaReq.solicitante,
+      motivo: novaReq.motivo, prioridade: novaReq.prioridade, itens: novaReq.itens, status: novaReq.status, lista_itens: novaReq.listaItens, historico: novaReq.historico
     }]);
-
-    if (error) {
-      alert(`⚠️ Erro do Supabase: ${error.message}`);
-    } else {
-      await carregarDadosDaNuvem(true);
-      setTelaAtual('painel');
-      setProdutosPreSelecionados(null);
-    }
+    if (!error) { await carregarDadosDaNuvem(true); setTelaAtual('painel'); setProdutosPreSelecionados(null); }
   };
 
   const handleAlterarStatus = async (id, novoStatus, responsavel, dadosExtras = {}) => {
     const req = requisicoes.find(r => r.id === id);
     const historicoAtualizado = { ...req.historico, [novoStatus]: responsavel };
-    
-    if (novoStatus === 'Em Separação' && req.status !== 'Em Separação') {
-      historicoAtualizado.inicio_separacao = Date.now();
-    }
-
+    if (novoStatus === 'Em Separação' && req.status !== 'Em Separação') { historicoAtualizado.inicio_separacao = Date.now(); }
     const reqAtualizada = { ...req, status: novoStatus, historico: historicoAtualizado, ...dadosExtras };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
@@ -182,60 +198,37 @@ function App() {
     const statusAtual = req.status; 
     const responsavelAtual = req.historico && req.historico[statusAtual] ? req.historico[statusAtual] : '';
     if (responsavelAtual.includes(novoResponsavel)) return;
-    
     const responsavelConcatenado = responsavelAtual ? `${responsavelAtual} + ${novoResponsavel}` : novoResponsavel;
     const historicoAtualizado = { ...req.historico, [statusAtual]: responsavelConcatenado };
-    
     const reqAtualizada = { ...req, historico: historicoAtualizado };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
-
     await supabase.from('requisicoes').update({ historico: historicoAtualizado }).eq('id', id);
     await carregarDadosDaNuvem(true);
   };
 
   const handleAtualizarItens = async (id, novaListaItens) => {
-    const reqAtualizada = { 
-      ...requisicoes.find(r => r.id === id), 
-      listaItens: novaListaItens, 
-      lista_itens: novaListaItens 
-    };
+    const reqAtualizada = { ...requisicoes.find(r => r.id === id), listaItens: novaListaItens, lista_itens: novaListaItens };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
-
     await supabase.from('requisicoes').update({ lista_itens: novaListaItens }).eq('id', id);
   };
 
   const handleFinalizarSeparacao = async (id, tempoSegundos, responsavelSeparacao) => {
     const req = requisicoes.find(r => r.id === id);
-    // Conta quantas peças físicas reais a pessoa bipou/separou
     const totalItensFisicos = req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0);
-
-    const novasMetricas = {
-      tempoTotalSegundos: tempoSegundos, 
-      totalItensFisicos: totalItensFisicos, // Salva o volume físico para a Média UPM do Painel
-      bateuRecorde: false, 
-      responsavel: responsavelSeparacao, 
-      finalizadoEm: new Date().toISOString()
-    };
-
+    const novasMetricas = { tempoTotalSegundos: tempoSegundos, totalItensFisicos: totalItensFisicos, bateuRecorde: false, responsavel: responsavelSeparacao, finalizadoEm: new Date().toISOString() };
     const chaveRecorde = `qtd_${totalItensFisicos}`;
     const recordeAtual = recordesGlobais[chaveRecorde];
-
     if (!recordeAtual || tempoSegundos < recordeAtual.tempoSegundos) {
       novasMetricas.bateuRecorde = true;
-      await supabase.from('recordes_globais').upsert({
-        qtd_itens: totalItensFisicos, tempo_segundos: tempoSegundos, responsavel: responsavelSeparacao, data: new Date().toLocaleDateString()
-      });
+      await supabase.from('recordes_globais').upsert({ qtd_itens: totalItensFisicos, tempo_segundos: tempoSegundos, responsavel: responsavelSeparacao, data: new Date().toLocaleDateString() });
     }
-
     const reqAtualizada = { ...req, metricasSeparacao: novasMetricas };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
-
     await supabase.from('requisicoes').update({ metricas_separacao: novasMetricas }).eq('id', id);
     await carregarDadosDaNuvem(true);
-    
     return novasMetricas;
   };
 
@@ -274,7 +267,8 @@ function App() {
           <>
             {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
             {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => { setTelaAtual('painel'); setProdutosPreSelecionados(null); }} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} />}
-            {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} recordesGlobais={recordesGlobais} />}
+            {/* O Componente DetalhesRequisicao agora recebe o usuarioLogado para aplicar as regras de segurança do Bip */}
+            {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} recordesGlobais={recordesGlobais} />}
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
             {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => setTelaAtual('painel')} produtos={baseProdutos} setProdutos={setBaseProdutos} />}
@@ -282,6 +276,27 @@ function App() {
           </>
         )}
       </main>
+
+      {/* NOTIFICAÇÕES GLOBAIS DE ENCARREGADO (WhatsApp da Logística) */}
+      {autorizacoesPendentes.length > 0 && (
+        <div className="container-notificacoes-bip">
+          {autorizacoesPendentes.map(auth => (
+            <div key={auth.id} className="toast-autorizacao-bip">
+              <div className="toast-bip-header">🔑 Liberação de Bip Manual</div>
+              <div className="toast-bip-body">
+                <strong>{auth.solicitante_nome}</strong> não conseguiu bipar o produto abaixo e solicita digitação:<br/>
+                <br/>
+                <span>{auth.produto_descricao}</span>
+              </div>
+              <div className="toast-bip-footer">
+                <button className="btn-recusar-bip" onClick={() => handleRecusarBip(auth)}>Recusar ❌</button>
+                <button className="btn-aprovar-bip" onClick={() => handleAprovarBip(auth)}>Aprovar ✅</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <Rodape />
     </div>
   );

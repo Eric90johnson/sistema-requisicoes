@@ -8,10 +8,13 @@ export default function AdminUsuarios() {
   const [processando, setProcessando] = useState(false);
 
   // Estados do Formulário
+  const [editandoId, setEditandoId] = useState(null);
   const [nome, setNome] = useState('');
   const [username, setUsername] = useState('');
   const [senha, setSenha] = useState('');
   const [loja, setLoja] = useState('Matriz');
+  const [hierarquia, setHierarquia] = useState('Subordinado');
+  const [encarregadoResponsavel, setEncarregadoResponsavel] = useState('');
 
   // Carrega a lista de usuários assim que a aba é aberta
   useEffect(() => {
@@ -35,40 +38,86 @@ export default function AdminUsuarios() {
     }
   };
 
-  const handleCriarUsuario = async (e) => {
+  // Lista dinâmica de encarregados para alimentar o campo "Subordinado a quem?"
+  const listaEncarregados = usuarios.filter(u => u.hierarquia === 'Encarregado' || u.username === 'admin');
+
+  const resetarFormulario = () => {
+    setEditandoId(null);
+    setNome('');
+    setUsername('');
+    setSenha('');
+    setLoja('Matriz');
+    setHierarquia('Subordinado');
+    setEncarregadoResponsavel('');
+  };
+
+  const iniciarEdicao = (user) => {
+    setEditandoId(user.id);
+    setNome(user.nome_completo || '');
+    setUsername(user.username || '');
+    setSenha(user.senha || '');
+    setLoja(user.loja || 'Matriz');
+    setHierarquia(user.hierarquia || 'Subordinado');
+    setEncarregadoResponsavel(user.encarregado_responsavel || '');
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // Sobe a tela suavemente para o formulário
+  };
+
+  const handleSalvarUsuario = async (e) => {
     e.preventDefault();
     setProcessando(true);
 
     try {
-      // 1. Verifica se o username já existe para não dar erro de duplicidade
-      const existe = usuarios.find(u => u.username.toLowerCase() === username.toLowerCase());
-      if (existe) {
-        alert("Este 'Usuário (Login)' já está em uso. Escolha outro.");
+      // Regra da Hierarquia
+      const responsavelFinal = hierarquia === 'Subordinado' ? encarregadoResponsavel : null;
+
+      if (hierarquia === 'Subordinado' && !responsavelFinal) {
+        alert("Por favor, selecione a qual encarregado este usuário é subordinado.");
         setProcessando(false);
         return;
       }
 
-      // 2. Insere no Supabase
-      const { error } = await supabase.from('usuarios_sistema').insert([{
-        nome_completo: nome,
-        username: username,
-        senha: senha,
-        loja: loja
-      }]);
+      if (!editandoId) {
+        // --- MODO CRIAÇÃO ---
+        const existe = usuarios.find(u => u.username.toLowerCase() === username.toLowerCase());
+        if (existe) {
+          alert("Este 'Usuário (Login)' já está em uso. Escolha outro.");
+          setProcessando(false);
+          return;
+        }
 
-      if (error) throw error;
+        const { error } = await supabase.from('usuarios_sistema').insert([{
+          nome_completo: nome,
+          username: username,
+          senha: senha,
+          loja: loja,
+          hierarquia: hierarquia,
+          encarregado_responsavel: responsavelFinal
+        }]);
 
-      // 3. Limpa o formulário e atualiza a lista
-      setNome('');
-      setUsername('');
-      setSenha('');
-      setLoja('Matriz');
-      alert("✅ Usuário criado com sucesso!");
+        if (error) throw error;
+        alert("✅ Usuário criado com sucesso!");
+
+      } else {
+        // --- MODO EDIÇÃO ---
+        const { error } = await supabase.from('usuarios_sistema').update({
+          nome_completo: nome,
+          username: username,
+          senha: senha,
+          loja: loja,
+          hierarquia: hierarquia,
+          encarregado_responsavel: responsavelFinal
+        }).eq('id', editandoId);
+
+        if (error) throw error;
+        alert("✅ Usuário atualizado com sucesso!");
+      }
+
+      resetarFormulario();
       buscarUsuarios();
 
     } catch (erro) {
-      console.error("Erro ao criar usuário:", erro);
-      alert("Ocorreu um erro ao criar o usuário.");
+      console.error("Erro ao salvar usuário:", erro);
+      alert("Ocorreu um erro ao salvar os dados do usuário.");
     } finally {
       setProcessando(false);
     }
@@ -100,10 +149,10 @@ export default function AdminUsuarios() {
   return (
     <div className="admin-usuarios-container">
       
-      {/* SEÇÃO 1: FORMULÁRIO DE CRIAÇÃO */}
+      {/* SEÇÃO 1: FORMULÁRIO DE CRIAÇÃO / EDIÇÃO */}
       <div className="card-novo-usuario">
-        <h3><span>➕</span> Adicionar Novo Usuário</h3>
-        <form className="form-usuarios" onSubmit={handleCriarUsuario}>
+        <h3><span>{editandoId ? '✏️' : '➕'}</span> {editandoId ? 'Editar Usuário' : 'Adicionar Novo Usuário'}</h3>
+        <form className="form-usuarios" onSubmit={handleSalvarUsuario}>
           
           <div className="input-group-admin">
             <label>Nome Completo (ou Nome da Loja)</label>
@@ -122,7 +171,8 @@ export default function AdminUsuarios() {
               type="text" 
               placeholder="Ex: joao.araturi" 
               value={username} 
-              onChange={(e) => setUsername(e.target.value.replace(/\s+/g, '').toLowerCase())} // Remove espaços
+              onChange={(e) => setUsername(e.target.value.replace(/\s+/g, '').toLowerCase())}
+              disabled={editandoId && username === 'admin'} // Admin original não pode mudar o login
               required 
             />
           </div>
@@ -149,9 +199,40 @@ export default function AdminUsuarios() {
             </select>
           </div>
 
-          <button type="submit" className="btn-salvar-usuario" disabled={processando}>
-            {processando ? 'Salvando...' : 'Gravar Novo Usuário'}
-          </button>
+          <div className="input-group-admin">
+            <label>Hierarquia no Sistema</label>
+            <select value={hierarquia} onChange={(e) => setHierarquia(e.target.value)}>
+              <option value="Subordinado">Subordinado (Padrão)</option>
+              <option value="Encarregado">Encarregado (Líder/Aprovador)</option>
+            </select>
+          </div>
+
+          {hierarquia === 'Subordinado' && (
+            <div className="input-group-admin">
+              <label>Subordinado a quem?</label>
+              <select 
+                value={encarregadoResponsavel} 
+                onChange={(e) => setEncarregadoResponsavel(e.target.value)} 
+                required={hierarquia === 'Subordinado'}
+              >
+                <option value="">Selecione o Encarregado...</option>
+                {listaEncarregados.map(enc => (
+                  <option key={enc.id} value={enc.nome_completo}>{enc.nome_completo}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="botoes-form-acoes">
+            {editandoId && (
+              <button type="button" className="btn-cancelar-edicao" onClick={resetarFormulario}>
+                Cancelar
+              </button>
+            )}
+            <button type="submit" className="btn-salvar-usuario" disabled={processando}>
+              {processando ? '⏳ Salvando...' : (editandoId ? '💾 Atualizar Usuário' : '💾 Gravar Novo Usuário')}
+            </button>
+          </div>
         </form>
       </div>
 
@@ -162,41 +243,64 @@ export default function AdminUsuarios() {
         {carregando ? (
           <p>Carregando usuários...</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <div className="tabela-wrapper-admin">
             <table className="tabela-usuarios">
               <thead>
                 <tr>
-                  <th>ID</th>
                   <th>Nome</th>
                   <th>Login</th>
                   <th>Loja</th>
+                  <th>Hierarquia</th>
                   <th>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {usuarios.map(user => (
                   <tr key={user.id}>
-                    <td>#{user.id}</td>
-                    <td><strong>{user.nome_completo}</strong></td>
+                    <td>
+                      <strong>{user.nome_completo}</strong>
+                      {user.encarregado_responsavel && user.hierarquia === 'Subordinado' && (
+                        <div style={{ fontSize: '0.8rem', color: '#7f8c8d', marginTop: '3px' }}>
+                          ↪ Líder: {user.encarregado_responsavel}
+                        </div>
+                      )}
+                    </td>
                     <td>{user.username}</td>
                     <td><span className="tag-loja">{user.loja}</span></td>
                     <td>
-                      {user.username !== 'admin' ? (
+                      <span style={{ 
+                        color: user.hierarquia === 'Encarregado' ? '#27ae60' : '#34495e',
+                        fontWeight: user.hierarquia === 'Encarregado' ? 'bold' : 'normal'
+                      }}>
+                        {user.hierarquia || 'Subordinado'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="acoes-tabela-container">
                         <button 
-                          className="btn-excluir-usuario"
-                          onClick={() => handleExcluirUsuario(user.id, user.username)}
+                          className="btn-editar-usuario"
+                          onClick={() => iniciarEdicao(user)}
                         >
-                          Excluir Acesso
+                          ✏️ Editar
                         </button>
-                      ) : (
-                        <span style={{ color: '#7f8c8d', fontSize: '0.9rem' }}>Protegido</span>
-                      )}
+                        
+                        {user.username !== 'admin' ? (
+                          <button 
+                            className="btn-excluir-usuario"
+                            onClick={() => handleExcluirUsuario(user.id, user.username)}
+                          >
+                            🗑️ Excluir
+                          </button>
+                        ) : (
+                          <span className="texto-protegido">Protegido</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {usuarios.length === 0 && (
                   <tr>
-                    <td colSpan="5" style={{ textAlign: 'center' }}>Nenhum usuário encontrado.</td>
+                    <td colSpan="5" className="td-vazio-centro">Nenhum usuário encontrado.</td>
                   </tr>
                 )}
               </tbody>

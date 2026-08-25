@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import '../../../styles/pages/painel/detalhes/detalhes.css';
+import { supabase } from '../../../services/supabase';
 
-export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, recordesGlobais }) {
+export default function DetalhesRequisicao({ req, usuarioLogado, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, recordesGlobais }) {
   if (!req) return null;
 
   const [novoStatus, setNovoStatus] = useState(req.status);
@@ -31,6 +32,11 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const [novaQuantidade, setNovaQuantidade] = useState('');
   const [motivoAlteracao, setMotivoAlteracao] = useState('');
 
+  // ESTADOS DO SISTEMA DE BIP MANUAL E HIERARQUIA
+  const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
+  const [pedidosBip, setPedidosBip] = useState({}); 
+  const [codigoManual, setCodigoManual] = useState({}); 
+
   const [popupCustom, setPopupCustom] = useState({
     visivel: false, tipo: 'info', titulo: '', mensagem: '', onConfirm: null, onCancel: null
   });
@@ -38,7 +44,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
   const ultimoBipTempo = useRef(0);
   const ultimoBipTexto = useRef("");
 
-  // Verifica se TODOS os produtos já foram bipados na quantidade correta
   const todosBipados = itens.length > 0 && itens.every(item => (item.bipContagem || 0) >= Number(item.quantidade));
 
   const exibirPopup = (tipo, titulo, mensagem, onConfirm = null, onCancel = null) => {
@@ -64,6 +69,54 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     } catch(e) {}
   };
 
+  useEffect(() => {
+    setPedidosBip({});
+    setCodigoManual({});
+
+    if (!usuarioLogado || isEncarregado) return;
+
+    const fetchAuths = async () => {
+      const { data } = await supabase.from('autorizacoes_bip')
+        .select('*').eq('requisicao_id', req.id).eq('solicitante_nome', usuarioLogado.nome_completo);
+      if (data) {
+        const map = {};
+        data.forEach(d => { map[d.produto_codigo] = d.status; });
+        setPedidosBip(map);
+      }
+    };
+    fetchAuths();
+
+    const channel = supabase.channel(`auths_${req.id}_${usuarioLogado.username}`)
+      .on('postgres', { event: 'UPDATE', schema: 'public', table: 'autorizacoes_bip', filter: `solicitante_nome=eq.${usuarioLogado.nome_completo}` }, (payload) => {
+        if (payload.new.requisicao_id === req.id) {
+          setPedidosBip(prev => ({ ...prev, [payload.new.produto_codigo]: payload.new.status }));
+          
+          if (payload.new.status === 'aprovado') {
+            tocarBipSucesso();
+            exibirPopup('sucesso', 'Bip Manual Liberado!', `O encarregado liberou a digitação manual para o produto:\n\n${payload.new.produto_descricao}\n\nO teclado do sistema já foi destravado.`);
+          } else if (payload.new.status === 'recusado') {
+            tocarBipErro();
+            exibirPopup('erro', 'Liberação Recusada', `Atenção, o encarregado recusou a liberação de digitação manual para:\n\n${payload.new.produto_descricao}`);
+          }
+        }
+      }).subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [req.id, usuarioLogado, isEncarregado]);
+
+  const solicitarBipManual = async (item) => {
+    if (!usuarioLogado?.encarregado_responsavel) {
+      exibirPopup('erro', 'Sem Encarregado', 'Você não tem um Encarregado vinculado ao seu perfil.\nPeça ao administrador para atualizar o seu perfil.');
+      return;
+    }
+    setPedidosBip(prev => ({ ...prev, [item.cod]: 'pendente' }));
+    await supabase.from('autorizacoes_bip').insert([{
+      requisicao_id: req.id, produto_codigo: item.cod, produto_descricao: item.descricao,
+      solicitante_nome: usuarioLogado.nome_completo, encarregado_destino: usuarioLogado.encarregado_responsavel,
+      status: 'pendente', timestamp_criacao: Date.now()
+    }]);
+  };
+
   const dispararDesafioDeProdutividade = () => {
     const totalItensFisicos = itens.reduce((acc, item) => acc + Number(item.quantidade), 0);
     const chaveRecorde = `qtd_${totalItensFisicos}`;
@@ -84,7 +137,6 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     let intervalo;
     if (req.status === 'Em Separação' && !req.metricasSeparacao) {
       const horaInicioBanco = req.historico?.inicio_separacao;
-      
       if (horaInicioBanco) {
         setCronometroRodando(true);
         intervalo = setInterval(() => {
@@ -114,26 +166,12 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     if (itemCameraAtiva !== null) {
       setTimeout(() => {
         if (!isComponentMounted) return;
-
         scanner = new Html5Qrcode('leitor-camera-modal', {
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.CODE_39
-          ]
+          formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.CODE_39]
         });
+        const configCamera = { fps: 10, qrbox: { width: 250, height: 100 } };
 
-        const configCamera = { 
-          fps: 10, 
-          qrbox: { width: 250, height: 100 }
-        };
-
-        // CORREÇÃO DEFINITIVA: Utiliza o padrão nativo seguro para evitar qualquer tela branca
-        scanner.start(
-          { facingMode: "environment" }, 
-          configCamera,
+        scanner.start({ facingMode: "environment" }, configCamera,
           (decodedText) => {
             const agora = Date.now();
             if (decodedText === ultimoBipTexto.current && (agora - ultimoBipTempo.current < 1500)) return;
@@ -152,15 +190,12 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
     
     return () => { 
       isComponentMounted = false;
-      if (scanner) {
-        scanner.stop().then(() => {
-          scanner.clear();
-        }).catch(err => console.error("Erro ao parar a câmera:", err)); 
-      }
+      if (scanner) { scanner.stop().then(() => { scanner.clear(); }).catch(err => console.error("Erro ao parar a câmera:", err)); }
     };
   }, [itemCameraAtiva]); 
 
   const processarBipagem = (index, decodedText) => {
+    if (!decodedText || !decodedText.trim()) return;
     const itensAtuais = itensRef.current; 
     const itemAtual = itensAtuais[index];
     
@@ -220,7 +255,18 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
       
       if (!metricasFinais) return; 
       
-      let msgFinal = `Separação Concluída!\n\nTempo Total: ${formatarTempo(metricasFinais.tempoTotalSegundos)}\nNível de Eficiência: ${metricasFinais.eficienciaPercentual > 0 ? '+' : ''}${metricasFinais.eficienciaPercentual}%`;
+      // --- NOVO CÁLCULO DE PONTOS PARA O RESUMO ---
+      const tempoSegundos = metricasFinais.tempoTotalSegundos || 1;
+      const itensFisicos = metricasFinais.totalItensFisicos || 0;
+      const upm = (itensFisicos / tempoSegundos) * 60;
+      const upmFormatado = Number(upm.toFixed(1));
+      const pontosGanhos = Math.round(itensFisicos * upmFormatado);
+
+      let msgFinal = `Separação Concluída!\n\n`;
+      msgFinal += `📦 Total Bipado: ${itensFisicos} un\n`;
+      msgFinal += `⏱️ Tempo Gasto: ${formatarTempo(tempoSegundos)}\n`;
+      msgFinal += `⚡ Velocidade Média: ${upmFormatado} UPM\n\n`;
+      msgFinal += `🏆 PONTOS CONQUISTADOS: +${pontosGanhos} pts`;
       
       if (metricasFinais.bateuRecorde) {
         setMostrarFesta(true);
@@ -368,7 +414,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
           </div>
         )}
 
-        <div className="controle-status" style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="controle-status controle-status-container">
           <strong>Atualizar Status:</strong>
           
           <select className="select-status" value={novoStatus} onChange={(e) => setNovoStatus(e.target.value)}>
@@ -380,35 +426,17 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             <option value="Recebimento">Recebimento</option>
           </select>
           
-          <input 
-            type="text" 
-            placeholder="Nome do Responsável" 
-            style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc', flex: '1', minWidth: '150px' }} 
-            value={responsavel} 
-            onChange={(e) => setResponsavel(e.target.value)} 
-          />
+          <input type="text" placeholder="Nome do Responsável" className="input-responsavel" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} />
 
           {novoStatus === 'Saída de produtos' && (
-            <input 
-              type="text" 
-              placeholder="Nº da Req. no Sistema" 
-              style={{ padding: '10px', borderRadius: '6px', border: '2px solid #3498db', flex: '1', minWidth: '180px' }} 
-              value={numReqExterna} 
-              onChange={(e) => setNumReqExterna(e.target.value)} 
-            />
+            <input type="text" placeholder="Nº da Req. no Sistema" className="input-req-externa" value={numReqExterna} onChange={(e) => setNumReqExterna(e.target.value)} />
           )}
 
           {novoStatus === 'Faturamento' && (
-            <input 
-              type="text" 
-              placeholder="Nº da Nota Fiscal" 
-              style={{ padding: '10px', borderRadius: '6px', border: '2px solid #e67e22', flex: '1', minWidth: '180px' }} 
-              value={notaFiscal} 
-              onChange={(e) => setNotaFiscal(e.target.value)} 
-            />
+            <input type="text" placeholder="Nº da Nota Fiscal" className="input-nota-fiscal" value={notaFiscal} onChange={(e) => setNotaFiscal(e.target.value)} />
           )}
           
-          <button style={{ padding: '10px 20px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }} onClick={confirmarMudanca}>
+          <button className="btn-confirmar-status" onClick={confirmarMudanca}>
             Confirmar Status
           </button>
         </div>
@@ -424,27 +452,34 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
             <div className={`cronometro-relogio ${req.metricasSeparacao ? 'tempo-travado' : ''}`}>
               {formatarTempo(tempoDecorrido)}
             </div>
-            {req.metricasSeparacao && (
-              <div className="cronometro-eficiencia" style={{ color: req.metricasSeparacao.eficienciaPercentual >= 0 ? '#27ae60' : '#e74c3c' }}>
-                Eficiência: {req.metricasSeparacao.eficienciaPercentual > 0 ? '+' : ''}{req.metricasSeparacao.eficienciaPercentual}% 
-                {req.metricasSeparacao.bateuRecorde && ' 🏆 (RECORDE)'}
-              </div>
-            )}
+            {/* --- ATUALIZADO: Mostrar Velocidade e Pontos na Tela também --- */}
+            {req.metricasSeparacao && (() => {
+              const tempoSeg = req.metricasSeparacao.tempoTotalSegundos || 1;
+              const itensFisicos = req.metricasSeparacao.totalItensFisicos || 0;
+              const upm = (itensFisicos / tempoSeg) * 60;
+              const upmFormat = Number(upm.toFixed(1));
+              const pts = Math.round(itensFisicos * upmFormat);
+
+              return (
+                <div className="cronometro-eficiencia" style={{ color: '#27ae60' }}>
+                  ⚡ {upmFormat} UPM | 🏆 +{pts} pts
+                  {req.metricasSeparacao.bateuRecorde && ' (RECORDE)'}
+                </div>
+              );
+            })()}
           </div>
         )}
 
-        <h3 style={{ marginTop: '20px' }}>Lista de Produtos ({req.itens} itens)</h3>
-        <p style={{ fontSize: '0.9rem', color: '#7f8c8d', marginBottom: '15px' }}>
-          Clique na linha do produto para expandir as opções de leitura e edição.
-        </p>
+        <h3 className="titulo-lista-produtos">Lista de Produtos ({req.itens} itens)</h3>
+        <p className="subtitulo-lista-produtos">Clique na linha do produto para expandir as opções de leitura e edição.</p>
         
         <div className="tabela-wrapper">
           <table className="tabela-itens">
             <thead>
-              <tr style={{ borderBottom: '2px solid #eee' }}>
-                <th style={{ padding: '10px' }}>Código</th>
-                <th style={{ padding: '10px' }}>Descrição</th>
-                <th style={{ padding: '10px', textAlign: 'center' }}>Quantidade</th>
+              <tr className="tabela-itens-header-tr">
+                <th className="th-tabela-itens">Código</th>
+                <th className="th-tabela-itens">Descrição</th>
+                <th className="th-tabela-itens td-tabela-itens-centro">Quantidade</th>
               </tr>
             </thead>
             <tbody>
@@ -453,12 +488,14 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                 const completo = contagemBipada >= Number(item.quantidade);
                 const estaExpandido = linhaExpandida === index;
 
+                const statusBip = isEncarregado ? 'aprovado' : pedidosBip[item.cod];
+
                 return (
                   <React.Fragment key={index}>
-                    <tr className="tr-clicavel" onClick={() => alternarExpansao(index)} style={{ borderBottom: estaExpandido ? 'none' : '1px solid #eee', backgroundColor: completo ? '#e8f8f5' : 'transparent', fontWeight: completo ? 'bold' : 'normal' }}>
-                      <td style={{ padding: '15px 10px' }}><strong>{item.cod}</strong></td>
-                      <td style={{ padding: '15px 10px' }}>{item.descricao}</td>
-                      <td style={{ padding: '15px 10px', textAlign: 'center', color: completo ? '#27ae60' : 'inherit' }}>{item.quantidade} un</td>
+                    <tr className={`tr-clicavel ${estaExpandido ? 'linha-expandida-ativa' : ''} ${completo ? 'linha-item-completo' : 'linha-item-normal'}`} onClick={() => alternarExpansao(index)}>
+                      <td className="td-tabela-itens"><strong>{item.cod}</strong></td>
+                      <td className="td-tabela-itens">{item.descricao}</td>
+                      <td className={`td-tabela-itens td-tabela-itens-centro ${completo ? 'texto-verde-sucesso' : ''}`}>{item.quantidade} un</td>
                     </tr>
                     
                     {estaExpandido && (
@@ -468,7 +505,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                             
                             {modoExpansao === 'resumo' && (
                               <div className="info-bipagem-resumo">
-                                <span className="qtd-destaque" style={{ color: completo ? '#27ae60' : '#333' }}>
+                                <span className={`qtd-destaque ${completo ? 'qtd-destaque-completo' : 'qtd-destaque-pendente'}`}>
                                   Separado: {contagemBipada} / {item.quantidade} un
                                 </span>
                                 
@@ -481,6 +518,34 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                                     <button className="btn-acao-expandida btn-acao-camera" onClick={() => setItemCameraAtiva(index)}>
                                       📷 Bipar Código
                                     </button>
+                                    
+                                    {statusBip === 'aprovado' ? (
+                                      <div className="container-bip-manual">
+                                        <input 
+                                          type="text" 
+                                          className="input-bip-manual" 
+                                          placeholder="Digite o cód. barras..."
+                                          value={codigoManual[item.cod] || ''}
+                                          onChange={(e) => setCodigoManual({...codigoManual, [item.cod]: e.target.value})}
+                                        />
+                                        <button className="btn-confirmar-bip-manual" onClick={() => {
+                                          processarBipagem(index, codigoManual[item.cod]);
+                                          setCodigoManual({...codigoManual, [item.cod]: ''});
+                                        }}>Validar</button>
+                                      </div>
+                                    ) : statusBip === 'pendente' ? (
+                                      <span className="badge-status-bip pendente">⏳ Aguardando Encarregado...</span>
+                                    ) : statusBip === 'recusado' ? (
+                                      <>
+                                        <span className="badge-status-bip recusado">❌ Recusado</span>
+                                        <button className="btn-acao-expandida btn-acao-chave" onClick={() => solicitarBipManual(item)}>🔑 Solicitar Novamente</button>
+                                      </>
+                                    ) : (
+                                      <button className="btn-acao-expandida btn-acao-chave" onClick={() => solicitarBipManual(item)}>
+                                        🔑 Digitação Manual
+                                      </button>
+                                    )}
+
                                     <button className="btn-acao-expandida btn-acao-editar" onClick={() => setModoExpansao('edicao')}>
                                       ✏️ Editar Qtd
                                     </button>
@@ -488,7 +553,7 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
                                 )}
                                 
                                 {req.status === 'Em Separação' && !req.metricasSeparacao && contagemBipada > 0 && (
-                                  <button className="btn-resetar-bip" onClick={() => resetarBipagem(index)} style={{ marginTop: '10px' }}>
+                                  <button className="btn-resetar-bip btn-resetar-margin" onClick={() => resetarBipagem(index)}>
                                     Zerar Leitura Deste Item
                                   </button>
                                 )}
@@ -497,21 +562,10 @@ export default function DetalhesRequisicao({ req, aoVoltar, aoMudarStatus, aoAtu
 
                             {modoExpansao === 'edicao' && (
                               <div className="edicao-container">
-                                <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>Ajuste de Quantidade Física</p>
+                                <p className="titulo-ajuste-qtd">Ajuste de Quantidade Física</p>
                                 <div className="edicao-linha">
-                                  <input 
-                                    type="number" 
-                                    className="input-qtd-edit" 
-                                    value={novaQuantidade} 
-                                    onChange={(e) => setNovaQuantidade(e.target.value)} 
-                                  />
-                                  <input 
-                                    type="text" 
-                                    className="input-obs-edit" 
-                                    placeholder="Motivo da alteração..." 
-                                    value={motivoAlteracao} 
-                                    onChange={(e) => setMotivoAlteracao(e.target.value)} 
-                                  />
+                                  <input type="number" className="input-qtd-edit" value={novaQuantidade} onChange={(e) => setNovaQuantidade(e.target.value)} />
+                                  <input type="text" className="input-obs-edit" placeholder="Motivo da alteração..." value={motivoAlteracao} onChange={(e) => setMotivoAlteracao(e.target.value)} />
                                   <button className="btn-acao-edit" onClick={() => salvarEdicao(index)} title="Salvar">✔️</button>
                                   <button className="btn-acao-edit" onClick={() => setModoExpansao('resumo')} title="Cancelar">❌</button>
                                 </div>

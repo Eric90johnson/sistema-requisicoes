@@ -105,3 +105,69 @@ body {
   font-weight: bold; /* Deixa o texto mais forte enquanto pisca */
   color: #1e8449; /* Escurece a fonte para dar contraste com o verde */
 }
+
+/* ========================================================= */
+/* --- NOTIFICAÇÕES GLOBAIS DE AUTORIZAÇÃO (ENCARREGADO) --- */
+/* ========================================================= */
+
+.container-notificacoes-bip {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.toast-autorizacao-bip {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  width: 320px;
+  overflow: hidden;
+  animation: slideInRight 0.3s ease-out;
+  border-left: 6px solid #f39c12;
+}
+
+.toast-bip-header {
+  background: #2c3e50;
+  color: white;
+  padding: 12px 15px;
+  font-weight: bold;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toast-bip-body {
+  padding: 15px;
+  font-size: 0.95rem;
+  color: #333;
+  line-height: 1.4;
+}
+
+.toast-bip-body strong { color: #d35400; font-size: 1.05rem; }
+.toast-bip-body span { font-weight: bold; color: #2980b9; }
+
+.toast-bip-footer {
+  display: flex;
+  padding: 0 15px 15px;
+  gap: 10px;
+}
+
+.btn-recusar-bip {
+  flex: 1; background: #e74c3c; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s;
+}
+.btn-recusar-bip:hover { background: #c0392b; }
+
+.btn-aprovar-bip {
+  flex: 1; background: #27ae60; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s;
+}
+.btn-aprovar-bip:hover { background: #219653; }
+
+@keyframes slideInRight {
+  from { transform: translateX(120%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}

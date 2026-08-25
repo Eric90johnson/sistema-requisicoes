@@ -591,3 +591,60 @@
 }
 
 .popup-custom-content.info .popup-custom-header { background-color: #3498db; }
+
+/* ========================================================= */
+/* --- CLASSES EXTRAÍDAS DO JSX (Limpeza de Código) ---      */
+/* ========================================================= */
+
+.controle-status-container {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.input-responsavel { padding: 10px; border-radius: 6px; border: 1px solid #ccc; flex: 1; min-width: 150px; }
+.input-req-externa { padding: 10px; border-radius: 6px; border: 2px solid #3498db; flex: 1; min-width: 180px; }
+.input-nota-fiscal { padding: 10px; border-radius: 6px; border: 2px solid #e67e22; flex: 1; min-width: 180px; }
+.btn-confirmar-status { padding: 10px 20px; background-color: #27ae60; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+.btn-confirmar-status:hover { background-color: #219653; }
+
+.titulo-lista-produtos { margin-top: 20px; }
+.subtitulo-lista-produtos { font-size: 0.9rem; color: #7f8c8d; margin-bottom: 15px; }
+
+.tabela-itens-header-tr { border-bottom: 2px solid #eee; }
+.th-tabela-itens { padding: 10px; }
+.td-tabela-itens { padding: 15px 10px; }
+.td-tabela-itens-centro { text-align: center; }
+
+.linha-item-completo { background-color: #e8f8f5 !important; font-weight: bold; }
+.linha-item-normal { border-bottom: 1px solid #eee; }
+.linha-expandida-ativa { border-bottom: none; }
+
+.texto-verde-sucesso { color: #27ae60; }
+.qtd-destaque-completo { color: #27ae60; }
+.qtd-destaque-pendente { color: #333; }
+
+.btn-resetar-margin { margin-top: 10px; }
+.titulo-ajuste-qtd { font-weight: bold; margin-bottom: 5px; }
+
+
+/* ========================================================= */
+/* --- CONTROLES DE BIP MANUAL / AUTORIZAÇÃO ---             */
+/* ========================================================= */
+
+.btn-acao-chave { background-color: #f39c12; color: white; }
+.btn-acao-chave:hover { background-color: #e67e22; }
+
+.badge-status-bip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 10px 15px; border-radius: 6px; font-weight: bold; color: white; font-size: 0.9rem;
+}
+.badge-status-bip.pendente { background-color: #f1c40f; color: #333; }
+.badge-status-bip.recusado { background-color: #e74c3c; }
+
+.container-bip-manual {
+  display: flex; gap: 10px; align-items: center; background: #eaf2f8; padding: 10px; border-radius: 6px; border: 1px dashed #3498db; width: 100%; justify-content: center;
+}
+.input-bip-manual { padding: 10px; border: 2px solid #3498db; border-radius: 6px; outline: none; width: 200px; font-size: 1rem; text-align: center;}
+.btn-confirmar-bip-manual { padding: 10px 20px; background-color: #2980b9; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+.btn-confirmar-bip-manual:hover { background-color: #1c5980; }

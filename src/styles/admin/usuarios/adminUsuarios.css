@@ -155,3 +155,78 @@
     grid-column: span 1;
   }
 }
+
+/* ========================================================= */
+/* --- CLASSES EXTRAÍDAS DO JSX (Limpeza de Código) ---      */
+/* ========================================================= */
+
+.tabela-wrapper-admin {
+  overflow-x: auto;
+}
+
+.texto-protegido {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+  font-weight: bold;
+}
+
+.td-vazio-centro {
+  text-align: center;
+  padding: 30px;
+  color: #7f8c8d;
+  font-style: italic;
+}
+
+/* ========================================================= */
+/* --- NOVOS BOTÕES (EDIÇÃO E CANCELAMENTO) ---              */
+/* ========================================================= */
+
+.botoes-form-acoes {
+  grid-column: span 2;
+  display: flex;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.btn-cancelar-edicao {
+  background-color: #95a5a6;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+}
+
+.btn-cancelar-edicao:hover {
+  background-color: #7f8c8d;
+}
+
+.btn-salvar-usuario {
+  flex: 2; /* O botão de salvar fica maior que o de cancelar */
+  margin-top: 0; /* Remove a margem antiga pois agora está no container flex */
+}
+
+.acoes-tabela-container {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-editar-usuario {
+  background-color: #f39c12;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.btn-editar-usuario:hover {
+  background-color: #d35400;
+}
