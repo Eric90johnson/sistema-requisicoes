@@ -18,7 +18,7 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
   const [nomeEditorEdicao, setNomeEditorEdicao] = useState('');
   const [modoEditarReq, setModoEditarReq] = useState(false);
 
-  // NOVO: Apenas guarda o texto da nova observação que será adicionada
+  // CORREÇÃO: O estado correto para adicionar notas ao histórico
   const [novaObs, setNovaObs] = useState('');
 
   const [tempoDecorrido, setTempoDecorrido] = useState(0);
@@ -348,19 +348,17 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
       case 'Faturamento': return 'status-faturado'; 
       case 'Transporte': return 'status-enviado'; 
       case 'Recebimento': return 'status-recebido'; 
+      case 'Cancelada': return 'status-pendente'; 
       default: return 'status-pendente'; 
     }
   };
 
-  // --- CIRURGIA: PREPARAÇÃO DA LISTA DE OBSERVAÇÕES ---
   const obsBrutas = req.historico?.observacoesGerais;
   let listaObservacoes = [];
 
-  // Se já for uma lista no formato novo, usamos ela
   if (Array.isArray(obsBrutas)) {
     listaObservacoes = obsBrutas;
   } 
-  // Proteção: Se for uma observação antiga salva como texto, converte ela pra lista dinamicamente
   else if (typeof obsBrutas === 'string' && obsBrutas.trim() !== '') {
     listaObservacoes = [{
       id_obs: 'legado',
@@ -432,7 +430,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
             </div>
           )}
 
-          {/* NOVO LAYOUT DO HISTÓRICO DE OBSERVAÇÕES (TIPO CHAT/LISTA) */}
           <div className="info-item obs-geral-box">
             <label>📝 Histórico de Observações / Instruções</label>
             
@@ -455,7 +452,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
               )}
             </div>
 
-            {/* Caixa de nova mensagem liberada enquanto não for faturado/enviado */}
             {(req.status === 'Pendente' || req.status === 'Em Separação') && (
               <div className="obs-add-mode">
                 <textarea 
@@ -475,7 +471,7 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
         {req.status === 'Pendente' && (
           <div className="box-assumir-tarefa box-editar-req">
             <div className="assumir-info">
-              <span><strong>Modo de Edição:</strong> Altere quantidades, adicione novos produtos ou remova itens. A requisição ficará oculta do painel durante a edição.</span>
+              <span><strong>Modo de Edição:</strong> Altere quantidades, adicione novos produtos, remova itens ou cancele a requisição. A requisição ficará oculta do painel durante a edição.</span>
               {req.historico?.['Última Edição'] && (
                 <div style={{fontSize: '0.8rem', marginTop: '5px', color: '#8e44ad'}}>
                   Última edição: {req.historico['Última Edição']}

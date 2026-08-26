@@ -193,6 +193,30 @@ function App() {
     setProdutosPreSelecionados(null);
   };
 
+  // --- NOVO: FUNÇÃO PARA ABORTAR A REQUISIÇÃO DEFINITIVAMENTE ---
+  const handleCancelarRequisicao = async (id, nomeCancelador) => {
+    const req = requisicoes.find(r => r.id === id);
+    const dataCancelamento = new Date().toLocaleString('pt-BR');
+    
+    // Adiciona ao histórico quem cancelou e quando
+    const historicoAtualizado = { 
+      ...req.historico, 
+      'Cancelamento': `Por ${nomeCancelador} em ${dataCancelamento}` 
+    };
+
+    const { error } = await supabase.from('requisicoes').update({
+      status: 'Cancelada', 
+      historico: historicoAtualizado
+    }).eq('id', id);
+
+    if (!error) {
+      setReqEmEdicao(null);
+      await carregarDadosDaNuvem(true); 
+      setTelaAtual('painel'); 
+    }
+  };
+  // ----------------------------------------------------------------
+
   const handleSalvarRequisicao = async (novaReq, isEdicao = false) => {
     if (isEdicao) {
       const { error } = await supabase.from('requisicoes').update({
@@ -221,16 +245,13 @@ function App() {
     }
   };
 
-  // --- CIRURGIA DE LISTA: Agora salva em formato de histórico / Array ---
   const handleAtualizarObservacoes = async (id, novaDescricaoObs, autorDaObs) => {
     const req = requisicoes.find(r => r.id === id);
     
-    // Recupera a lista antiga (se não existir, cria um array vazio)
     const listaAntiga = Array.isArray(req.historico?.observacoesGerais) 
       ? req.historico.observacoesGerais 
       : [];
 
-    // Cria o novo "card" de observação com data e autor
     const novaObsObj = {
       id_obs: Date.now(),
       texto: novaDescricaoObs,
@@ -238,19 +259,14 @@ function App() {
       data: new Date().toLocaleString('pt-BR')
     };
 
-    // Junta a lista antiga com a nova observação
     const novaListaGeral = [...listaAntiga, novaObsObj];
-    
     const historicoAtualizado = { ...req.historico, observacoesGerais: novaListaGeral };
     
-    // Atualiza a tela instantaneamente
     setRequisicoes(requisicoes.map(r => r.id === id ? { ...r, historico: historicoAtualizado } : r));
     if (reqSelecionada?.id === id) setReqSelecionada({ ...reqSelecionada, historico: historicoAtualizado });
 
-    // Salva na nuvem
     await supabase.from('requisicoes').update({ historico: historicoAtualizado }).eq('id', id);
   };
-  // -------------------------------------------------------------------------
 
   const handleAlterarStatus = async (id, novoStatus, responsavel, dadosExtras = {}) => {
     const req = requisicoes.find(r => r.id === id);
@@ -359,7 +375,10 @@ function App() {
         ) : (
           <>
             {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes.filter(r => r.status !== 'Em Edição')} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
-            {telaAtual === 'nova' && <NovaRequisicao aoVoltar={handleCancelarEdicao} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} reqEmEdicao={reqEmEdicao} />}
+            
+            {/* NOVO: A tela recebe a prop aoCancelarReq */}
+            {telaAtual === 'nova' && <NovaRequisicao aoVoltar={handleCancelarEdicao} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} aoCancelarReq={handleCancelarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} reqEmEdicao={reqEmEdicao} />}
+            
             {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} aoIniciarEdicao={handleIniciarEdicao} aoAtualizarObservacoes={handleAtualizarObservacoes} recordesGlobais={recordesGlobais} />}
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}

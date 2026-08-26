@@ -81,7 +81,9 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const temPedidoPendente = pedidosMarketplace.some(ped => ped.status === 'Pendente');
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
-  const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebimento');
+  
+  // --- CIRURGIA AQUI: Oculta as requisições "Recebimento" e "Cancelada" do Painel ---
+  const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebimento' && req.status !== 'Cancelada');
 
   const getNomeLojaCurto = (nomeLoja) => {
     if (!nomeLoja) return '-';
@@ -141,6 +143,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       case 'Faturamento': return 'status-faturado';
       case 'Transporte': return 'status-enviado';
       case 'Recebimento': return 'status-recebido';
+      case 'Cancelada': return 'status-pendente';
       default: return 'status-pendente';
     }
   };

@@ -15,7 +15,8 @@ const parseValorMoeda = (valorStr) => {
   return Number(limpo) || 0;
 };
 
-export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requisicoes = [], produtosPreSelecionados = null, reqEmEdicao = null }) {
+// Adicionada a prop aoCancelarReq
+export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCancelarReq, requisicoes = [], produtosPreSelecionados = null, reqEmEdicao = null }) {
   
   const lojas = [
     'Araturi', 
@@ -32,7 +33,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
   const [motivoOutro, setMotivoOutro] = useState('');
   const [prioridadeOutro, setPrioridadeOutro] = useState('3'); 
   
-  // --- NOVO: Sistema de Histórico de Observações em formato de Lista ---
+  // --- Sistema de Histórico de Observações em formato de Lista ---
   const [listaObservacoes, setListaObservacoes] = useState([]); 
   const [novaObs, setNovaObs] = useState(''); 
 
@@ -96,7 +97,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
     setAlerta({ ...alerta, visivel: false });
   };
 
-  // --- NOVO: Funções de manipulação das observações no form ---
+  // --- Funções de manipulação das observações no form ---
   const handleAdicionarObservacao = () => {
     if (!novaObs.trim()) {
       mostrarAlerta('aviso', 'Atenção', 'Digite alguma instrução ou observação antes de adicionar.');
@@ -406,7 +407,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
       return; 
     }
 
-    // Trava de segurança: usuário digitou algo mas esqueceu de clicar em adicionar
     if (novaObs.trim() !== '') {
       mostrarAlerta('aviso', 'Observação Pendente', 'Você digitou uma instrução no campo de observação, mas esqueceu de clicar em "Adicionar Observação".\n\nPor favor, adicione-a à lista ou apague o texto antes de gravar.');
       return;
@@ -460,6 +460,24 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
       aoSalvar(novaRequisicao, !!reqEmEdicao);
     });
   };
+
+  // --- NOVO: LÓGICA DE CONFIRMAÇÃO DO CANCELAMENTO ---
+  const handleBotaoCancelar = () => {
+    mostrarAlerta(
+      'aviso',
+      'Cancelar Requisição',
+      `Tem certeza que deseja CANCELAR definitivamente a requisição ${reqEmEdicao.id}?\n\nEsta ação mudará o status dela para "Cancelada", ela sairá da fila de trabalho, e seu nome ficará registrado no histórico de cancelamento.`,
+      () => {
+        fecharAlerta();
+        const nomeCancelador = reqEmEdicao.editorTemporario || solicitante || 'Usuário Não Identificado';
+        aoCancelarReq(reqEmEdicao.id, nomeCancelador);
+      },
+      () => fecharAlerta(),
+      'Sim, Cancelar',
+      'Não, Voltar'
+    );
+  };
+  // ---------------------------------------------------
 
   const valorTotalRequisicao = itensAdicionados.reduce((total, item) => {
     return total + ((item.custoUnitario || 0) * item.quantidade);
@@ -534,11 +552,9 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
             )}
           </div>
           
-          {/* NOVO LAYOUT DO HISTÓRICO DE OBSERVAÇÕES (TIPO CHAT) */}
           <div className="campo-loja obs-geral-box" style={{ marginTop: '10px' }}>
             <label>📝 Observações Gerais / Instruções da Requisição:</label>
 
-            {/* Lista das observações já adicionadas */}
             {listaObservacoes.length > 0 && (
               <div className="lista-observacoes-wrapper">
                 <ul className="lista-obs-ul">
@@ -562,7 +578,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
               </div>
             )}
 
-            {/* Campo para adicionar nova */}
             <div className="obs-add-mode">
               <textarea 
                 className="obs-textarea-nova" 
@@ -669,6 +684,13 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
         )}
         
         <div className="rodape-formulario">
+          {/* NOVO: BOTÃO DE CANCELAR REQUISIÇÃO APARECE APENAS NA EDIÇÃO */}
+          {reqEmEdicao && (
+            <button className="btn-cancelar-req" onClick={handleBotaoCancelar}>
+              🗑️ Cancelar Requisição
+            </button>
+          )}
+
           <button className="btn-salvar" onClick={finalizarRequisicao}>
             {reqEmEdicao ? 'Salvar Alterações' : 'Gravar Requisição'}
           </button>

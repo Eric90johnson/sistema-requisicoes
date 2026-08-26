@@ -75,7 +75,7 @@
   background-color: #fff;
 }
 
-/* NOVO: Ajuste de cor e peso para o campo de prioridade para destacá-lo */
+/* Ajuste de cor e peso para o campo de prioridade para destacá-lo */
 .campo-loja select[title="Defina o nível de urgência desta requisição"] {
   border: 2px solid #3498db;
   color: #2c3e50;
@@ -297,9 +297,11 @@
   }
 }
 
+/* Ajuste no rodapé para organizar os dois botões juntos */
 .rodape-formulario {
   display: flex;
   justify-content: flex-end;
+  gap: 15px;
   border-top: 1px solid #eee;
   padding-top: 20px;
 }
@@ -319,6 +321,30 @@
 
 .btn-salvar:active { transform: scale(0.98); }
 
+/* ========================================================= */
+/* --- BOTÃO DE CANCELAR REQUISIÇÃO (TELA DE EDIÇÃO) ---     */
+/* ========================================================= */
+
+.btn-cancelar-req {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 14px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1.1rem;
+  box-shadow: 0 4px 6px rgba(231, 76, 60, 0.2);
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.btn-cancelar-req:hover {
+  background-color: #c0392b;
+}
+
+.btn-cancelar-req:active {
+  transform: scale(0.98);
+}
 
 .alerta-modal-overlay {
   position: fixed;
@@ -463,8 +489,8 @@
 }
 
 .lista-observacoes-wrapper {
-  margin-top: 5px;
-  margin-bottom: 15px;
+  margin-top: 15px;
+  margin-bottom: 20px;
   max-height: 250px;
   overflow-y: auto;
   padding-right: 5px;
@@ -526,7 +552,7 @@
   padding: 12px;
   border-radius: 6px;
   border: 1px solid #3498db;
-  min-height: 60px;
+  min-height: 70px;
   font-family: inherit;
   resize: vertical;
 }
@@ -535,7 +561,7 @@
   background-color: #27ae60;
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 12px 20px;
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
