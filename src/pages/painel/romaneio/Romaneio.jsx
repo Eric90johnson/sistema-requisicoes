@@ -8,7 +8,6 @@ export default function Romaneio({ req, baseProdutos = [] }) {
 
   // Função inteligente que busca o código de barras cruzando com a base de dados
   const buscarCodigoBarras = (item) => {
-    // 1. Tenta buscar na base de produtos cruzando o código
     if (baseProdutos && baseProdutos.length > 0) {
       const produtoBase = baseProdutos.find(p => 
         String(p.codigo) === String(item.cod) || 
@@ -21,10 +20,24 @@ export default function Romaneio({ req, baseProdutos = [] }) {
         return produtoBase.codigoBarra || produtoBase.codigo_barra;
       }
     }
-    
-    // 2. Se a requisição já tiver salvo ou for bip manual, usa o que tem
     return item.codigoBarra || item.codigo_barra || item.bipReferencia || '-';
   };
+
+  // --- NOVA INTELIGÊNCIA: Prepara a lista de observações ---
+  const obsBrutas = req.historico?.observacoesGerais;
+  let listaObservacoes = [];
+  
+  if (Array.isArray(obsBrutas)) {
+    listaObservacoes = obsBrutas;
+  } else if (typeof obsBrutas === 'string' && obsBrutas.trim() !== '') {
+    // Se for uma requisição antiga, converte o texto livre para o formato da tabela
+    listaObservacoes = [{
+      id_obs: 'legado',
+      texto: obsBrutas,
+      autor: 'Sistema (Nota Antiga)',
+      data: req.data || ''
+    }];
+  }
 
   return (
     <div className="romaneio-container" id="romaneio-print-area">
@@ -44,6 +57,7 @@ export default function Romaneio({ req, baseProdutos = [] }) {
         </div>
       </div>
 
+      {/* TABELA PRINCIPAL DE ITENS */}
       <table className="romaneio-tabela">
         <thead>
           <tr>
@@ -66,6 +80,40 @@ export default function Romaneio({ req, baseProdutos = [] }) {
           ))}
         </tbody>
       </table>
+
+      {/* NOVO: TABELA DE OBSERVAÇÕES E INSTRUÇÕES (Renderiza apenas se houver notas) */}
+      {listaObservacoes.length > 0 && (
+        <div className="romaneio-observacoes">
+          <table className="romaneio-tabela">
+            <thead>
+              <tr>
+                <th colSpan="2" style={{ textAlign: 'center', fontSize: '14px', backgroundColor: '#e2e2e2' }}>
+                  Observações e Instruções
+                </th>
+              </tr>
+              <tr>
+                <th style={{ width: '15%', textAlign: 'center' }}>Obs.</th>
+                <th style={{ width: '85%' }}>Descrição da Observação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaObservacoes.map((obs, index) => (
+                <tr key={obs.id_obs || index}>
+                  <td style={{ textAlign: 'center', fontWeight: 'bold' }}>Obs. {index + 1}</td>
+                  <td>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{obs.texto}</div>
+                    {obs.autor && (
+                      <div style={{ fontSize: '10px', color: '#555', marginTop: '4px' }}>
+                        Adicionado por: {obs.autor} em {obs.data}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Assinatura Centralizada Exclusiva para o Estoquista */}
       <div className="romaneio-assinaturas" style={{ justifyContent: 'center' }}>

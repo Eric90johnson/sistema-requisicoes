@@ -5,7 +5,6 @@
 
 @media print {
   /* 1. O PULO DO GATO DEFINITIVO: Esconde os elementos usando display: none */
-  /* Isso faz as caixas sumirem de verdade, matando as páginas em branco fantasmas! */
   .cabecalho-global,
   footer,
   .detalhes-header,
@@ -68,7 +67,7 @@
   .romaneio-tabela {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 40px;
+    margin-bottom: 20px; /* Margem reduzida para dar espaço à tabela de observações */
   }
 
   .romaneio-tabela th, .romaneio-tabela td {
@@ -84,10 +83,17 @@
     print-color-adjust: exact;
   }
 
+  /* NOVO: Garante que o bloco de observações fique junto na mesma folha */
+  .romaneio-observacoes {
+    margin-top: 10px;
+    margin-bottom: 40px;
+    page-break-inside: avoid; 
+  }
+
   .romaneio-assinaturas {
     display: flex;
     justify-content: center;
-    margin-top: 50px;
+    margin-top: 30px;
     page-break-inside: avoid; /* Trava extra: impede a assinatura de ser cortada no meio na virada da página */
   }
 

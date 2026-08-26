@@ -25,6 +25,7 @@ function App() {
   const [abaAdminAtiva, setAbaAdminAtiva] = useState('base-dados');
 
   const [produtosPreSelecionados, setProdutosPreSelecionados] = useState(null);
+  const [reqEmEdicao, setReqEmEdicao] = useState(null); 
 
   const [baseProdutos, setBaseProdutos] = useState([]);
   const [requisicoes, setRequisicoes] = useState([]);
@@ -51,11 +52,9 @@ function App() {
     await supabase.auth.signOut();
   };
 
-  // ADICIONADO O PARÂMETRO "rapido" PARA NÃO SOBRECARREGAR O BANCO NA TV
   const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      // 1. Sempre busca as requisições (É leve e precisa ser em tempo real)
       const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false });
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
@@ -74,10 +73,8 @@ function App() {
         });
       }
 
-      // TRAVA DE SEGURANÇA: Se for a atualização de 5 segundos da TV, para aqui!
       if (rapido) return;
 
-      // 2. Só baixa Recordes e a Base Inteira de Produtos no carregamento completo
       const { data: recData } = await supabase.from('recordes_globais').select('*');
       if (recData) {
         const objRecordes = {};
@@ -144,7 +141,6 @@ function App() {
           }).subscribe();
       }
 
-      // ATUALIZAÇÃO FANTASMA DA TV A CADA 5 SEGUNDOS (Modo Rápido Ativado)
       const intervaloAtualizacao = setInterval(() => {
         carregarDadosDaNuvem(true, true); 
       }, 5000);
@@ -176,13 +172,85 @@ function App() {
     await supabase.from('autorizacoes_bip').update({ status: 'recusado' }).eq('id', auth.id);
   };
 
-  const handleSalvarRequisicao = async (novaReq) => {
-    const { error } = await supabase.from('requisicoes').insert([{
-      id: novaReq.id, data: novaReq.data, timestamp_criacao: novaReq.timestampCriacao, origem: novaReq.origem, destino: novaReq.destino, solicitante: novaReq.solicitante,
-      motivo: novaReq.motivo, prioridade: novaReq.prioridade, itens: novaReq.itens, status: novaReq.status, lista_itens: novaReq.listaItens, historico: novaReq.historico
-    }]);
-    if (!error) { await carregarDadosDaNuvem(true); setTelaAtual('painel'); setProdutosPreSelecionados(null); }
+  const handleIniciarEdicao = async (id, nomeEditor) => {
+    const req = requisicoes.find(r => r.id === id);
+    const reqEditando = { ...req, editorTemporario: nomeEditor };
+    
+    await supabase.from('requisicoes').update({ status: 'Em Edição' }).eq('id', id);
+    
+    setReqEmEdicao(reqEditando);
+    setTelaAtual('nova');
+    carregarDadosDaNuvem(true, true);
   };
+
+  const handleCancelarEdicao = async () => {
+    if (reqEmEdicao) {
+      await supabase.from('requisicoes').update({ status: 'Pendente' }).eq('id', reqEmEdicao.id);
+      setReqEmEdicao(null);
+      carregarDadosDaNuvem(true, true);
+    }
+    setTelaAtual('painel');
+    setProdutosPreSelecionados(null);
+  };
+
+  const handleSalvarRequisicao = async (novaReq, isEdicao = false) => {
+    if (isEdicao) {
+      const { error } = await supabase.from('requisicoes').update({
+        origem: novaReq.origem,
+        destino: novaReq.destino,
+        solicitante: novaReq.solicitante,
+        motivo: novaReq.motivo,
+        prioridade: novaReq.prioridade,
+        itens: novaReq.itens,
+        status: 'Pendente', 
+        lista_itens: novaReq.listaItens,
+        historico: novaReq.historico
+      }).eq('id', novaReq.id);
+
+      if (!error) { 
+        setReqEmEdicao(null);
+        await carregarDadosDaNuvem(true); 
+        setTelaAtual('painel'); 
+      }
+    } else {
+      const { error } = await supabase.from('requisicoes').insert([{
+        id: novaReq.id, data: novaReq.data, timestamp_criacao: novaReq.timestampCriacao, origem: novaReq.origem, destino: novaReq.destino, solicitante: novaReq.solicitante,
+        motivo: novaReq.motivo, prioridade: novaReq.prioridade, itens: novaReq.itens, status: novaReq.status, lista_itens: novaReq.listaItens, historico: novaReq.historico
+      }]);
+      if (!error) { await carregarDadosDaNuvem(true); setTelaAtual('painel'); setProdutosPreSelecionados(null); }
+    }
+  };
+
+  // --- CIRURGIA DE LISTA: Agora salva em formato de histórico / Array ---
+  const handleAtualizarObservacoes = async (id, novaDescricaoObs, autorDaObs) => {
+    const req = requisicoes.find(r => r.id === id);
+    
+    // Recupera a lista antiga (se não existir, cria um array vazio)
+    const listaAntiga = Array.isArray(req.historico?.observacoesGerais) 
+      ? req.historico.observacoesGerais 
+      : [];
+
+    // Cria o novo "card" de observação com data e autor
+    const novaObsObj = {
+      id_obs: Date.now(),
+      texto: novaDescricaoObs,
+      autor: autorDaObs,
+      data: new Date().toLocaleString('pt-BR')
+    };
+
+    // Junta a lista antiga com a nova observação
+    const novaListaGeral = [...listaAntiga, novaObsObj];
+    
+    const historicoAtualizado = { ...req.historico, observacoesGerais: novaListaGeral };
+    
+    // Atualiza a tela instantaneamente
+    setRequisicoes(requisicoes.map(r => r.id === id ? { ...r, historico: historicoAtualizado } : r));
+    if (reqSelecionada?.id === id) setReqSelecionada({ ...reqSelecionada, historico: historicoAtualizado });
+
+    // Salva na nuvem
+    await supabase.from('requisicoes').update({ historico: historicoAtualizado }).eq('id', id);
+  };
+  // -------------------------------------------------------------------------
 
   const handleAlterarStatus = async (id, novoStatus, responsavel, dadosExtras = {}) => {
     const req = requisicoes.find(r => r.id === id);
@@ -225,17 +293,35 @@ function App() {
     const req = requisicoes.find(r => r.id === id);
     const totalItensFisicos = req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0);
     const novasMetricas = { tempoTotalSegundos: tempoSegundos, totalItensFisicos: totalItensFisicos, bateuRecorde: false, responsavel: responsavelSeparacao, finalizadoEm: new Date().toISOString() };
+    
     const chaveRecorde = `qtd_${totalItensFisicos}`;
     const recordeAtual = recordesGlobais[chaveRecorde];
+    
     if (!recordeAtual || tempoSegundos < recordeAtual.tempoSegundos) {
       novasMetricas.bateuRecorde = true;
       await supabase.from('recordes_globais').upsert({ qtd_itens: totalItensFisicos, tempo_segundos: tempoSegundos, responsavel: responsavelSeparacao, data: new Date().toLocaleDateString() });
     }
-    const reqAtualizada = { ...req, metricasSeparacao: novasMetricas };
+
+    const novoStatusAutomatico = 'Separado';
+    const historicoAtualizado = { ...req.historico, [novoStatusAutomatico]: responsavelSeparacao };
+
+    const reqAtualizada = { 
+      ...req, 
+      metricasSeparacao: novasMetricas,
+      status: novoStatusAutomatico,
+      historico: historicoAtualizado 
+    };
+
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
-    await supabase.from('requisicoes').update({ metricas_separacao: novasMetricas }).eq('id', id);
-    await carregarDadosDaNuvem(true);
+
+    await supabase.from('requisicoes').update({ 
+      metricas_separacao: novasMetricas,
+      status: novoStatusAutomatico,
+      historico: historicoAtualizado
+    }).eq('id', id);
+
+    await carregarDadosDaNuvem(true, true);
     return novasMetricas;
   };
 
@@ -272,9 +358,9 @@ function App() {
           </div>
         ) : (
           <>
-            {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
-            {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => { setTelaAtual('painel'); setProdutosPreSelecionados(null); }} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} />}
-            {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} recordesGlobais={recordesGlobais} />}
+            {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes.filter(r => r.status !== 'Em Edição')} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
+            {telaAtual === 'nova' && <NovaRequisicao aoVoltar={handleCancelarEdicao} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} reqEmEdicao={reqEmEdicao} />}
+            {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} aoIniciarEdicao={handleIniciarEdicao} aoAtualizarObservacoes={handleAtualizarObservacoes} recordesGlobais={recordesGlobais} />}
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
             {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => setTelaAtual('painel')} produtos={baseProdutos} setProdutos={setBaseProdutos} />}

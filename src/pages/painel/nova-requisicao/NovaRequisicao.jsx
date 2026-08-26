@@ -15,7 +15,7 @@ const parseValorMoeda = (valorStr) => {
   return Number(limpo) || 0;
 };
 
-export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requisicoes = [], produtosPreSelecionados = null }) {
+export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requisicoes = [], produtosPreSelecionados = null, reqEmEdicao = null }) {
   
   const lojas = [
     'Araturi', 
@@ -31,6 +31,10 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
   const [motivo, setMotivo] = useState('');
   const [motivoOutro, setMotivoOutro] = useState('');
   const [prioridadeOutro, setPrioridadeOutro] = useState('3'); 
+  
+  // --- NOVO: Sistema de Histórico de Observações em formato de Lista ---
+  const [listaObservacoes, setListaObservacoes] = useState([]); 
+  const [novaObs, setNovaObs] = useState(''); 
 
   const [codigo, setCodigo] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -48,8 +52,41 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
   const inputArquivoRef = useRef(null);
   const alertaPreenchimentoExibido = useRef(false);
 
-  // Gatilho que identifica se a tela foi aberta pelo Chat de Novidades do CD
   const isModoVitrine = produtosPreSelecionados && produtosPreSelecionados.length > 0;
+
+  useEffect(() => {
+    if (reqEmEdicao) {
+      setLojaDe(reqEmEdicao.origem);
+      setLojaPara(reqEmEdicao.destino);
+      setSolicitante(reqEmEdicao.solicitante);
+      
+      const isMotivoPadrao = ['Rota para clientes', 'Reposição de estoque', 'Produtos para provadores'].includes(reqEmEdicao.motivo);
+      if (isMotivoPadrao) {
+        setMotivo(reqEmEdicao.motivo);
+      } else {
+        setMotivo('Outros');
+        setMotivoOutro(reqEmEdicao.motivo);
+        setPrioridadeOutro(reqEmEdicao.prioridade?.toString() || '3');
+      }
+      
+      setItensAdicionados(reqEmEdicao.listaItens || []);
+      
+      // Carrega o histórico antigo de notas, se existir
+      let obsExistentes = [];
+      if (Array.isArray(reqEmEdicao.historico?.observacoesGerais)) {
+        obsExistentes = reqEmEdicao.historico.observacoesGerais;
+      } else if (typeof reqEmEdicao.historico?.observacoesGerais === 'string' && reqEmEdicao.historico.observacoesGerais.trim() !== '') {
+        obsExistentes = [{
+          id_obs: Date.now() + Math.random(),
+          texto: reqEmEdicao.historico.observacoesGerais,
+          autor: 'Sistema (Nota Antiga)',
+          data: reqEmEdicao.data
+        }];
+      }
+      setListaObservacoes(obsExistentes);
+      setNovaObs('');
+    }
+  }, [reqEmEdicao]);
 
   const mostrarAlerta = (tipo, titulo, mensagem, onConfirm = null, onCancel = null, textoConfirmar = 'Entendi', textoCancelar = 'Cancelar') => {
     setAlerta({ visivel: true, tipo, titulo, mensagem, onConfirm, onCancel, textoConfirmar, textoCancelar });
@@ -59,7 +96,32 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
     setAlerta({ ...alerta, visivel: false });
   };
 
-  // --- 🤖 MOTOR DA VITRINE: Pré-preenchimento e Popup Estratégico ---
+  // --- NOVO: Funções de manipulação das observações no form ---
+  const handleAdicionarObservacao = () => {
+    if (!novaObs.trim()) {
+      mostrarAlerta('aviso', 'Atenção', 'Digite alguma instrução ou observação antes de adicionar.');
+      return;
+    }
+
+    const nomeAutor = solicitante.trim() ? solicitante.trim() : 'Solicitante (Não preenchido)';
+    const dataAtualString = new Date().toLocaleString('pt-BR');
+
+    const novaObsObj = {
+      id_obs: Date.now() + Math.random(),
+      texto: novaObs,
+      autor: reqEmEdicao ? `[Edição] ${nomeAutor}` : nomeAutor,
+      data: dataAtualString
+    };
+
+    setListaObservacoes([...listaObservacoes, novaObsObj]);
+    setNovaObs('');
+  };
+
+  const handleRemoverObservacao = (id_obs) => {
+    setListaObservacoes(listaObservacoes.filter(obs => obs.id_obs !== id_obs));
+  };
+  // -------------------------------------------------------------
+
   useEffect(() => {
     if (isModoVitrine && !alertaPreenchimentoExibido.current && baseProdutos.length > 0) {
       alertaPreenchimentoExibido.current = true;
@@ -79,7 +141,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
         return {
           cod: baseProd.codigo,
           descricao: baseProd.descricao || 'Produto não encontrado',
-          quantidade: 0, // Inicia zerado para forçar a curadoria
+          quantidade: 0, 
           estoque: estoqueAtual,
           custoUnitario: custoUnit,
           insuficiente: false
@@ -87,7 +149,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
       });
 
       setItensAdicionados(itensAuto);
-      setMotivo('Reposição de estoque'); // Já sugere o motivo
+      setMotivo('Reposição de estoque'); 
 
       mostrarAlerta(
         'aviso',
@@ -103,7 +165,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
 
   const handleMudancaCodigo = (valorDigitado) => {
     setCodigo(valorDigitado);
-    const produtoEncontrado = baseProdutos.find((prod) => prod.codigo === valorDigitado);
+    const produtoEncontrado = baseProdutos.find((prod) => String(prod.codigo) === String(valorDigitado));
     if (produtoEncontrado) {
       setDescricao(`${produtoEncontrado.descricao}`);
     } else {
@@ -117,7 +179,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
       return; 
     }
     
-    const produto = baseProdutos.find((p) => p.codigo === codigo);
+    const produto = baseProdutos.find((p) => String(p.codigo) === String(codigo));
     const temEstoqueDefinido = produto && produto.quantidade !== undefined && produto.quantidade !== null;
     const estoqueAtual = temEstoqueDefinido ? Number(produto.quantidade.toString().replace(',', '.')) : null;
     const qtdSolicitada = Number(quantidade);
@@ -344,7 +406,12 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
       return; 
     }
 
-    // Trava do Delta Positivo: Impede de salvar produtos com quantidade zero
+    // Trava de segurança: usuário digitou algo mas esqueceu de clicar em adicionar
+    if (novaObs.trim() !== '') {
+      mostrarAlerta('aviso', 'Observação Pendente', 'Você digitou uma instrução no campo de observação, mas esqueceu de clicar em "Adicionar Observação".\n\nPor favor, adicione-a à lista ou apague o texto antes de gravar.');
+      return;
+    }
+
     const itensZerados = itensAdicionados.filter(item => Number(item.quantidade) <= 0);
     if (itensZerados.length > 0) {
       mostrarAlerta(
@@ -365,24 +432,32 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
       return; 
     }
 
+    const dataAtualString = new Date().toLocaleString('pt-BR');
+    const nomeEditorFinal = reqEmEdicao ? reqEmEdicao.editorTemporario : solicitante;
+    
+    // Anexa a lista pronta no histórico
+    const novoHistorico = reqEmEdicao 
+      ? { ...reqEmEdicao.historico, observacoesGerais: listaObservacoes, 'Última Edição': `Por ${nomeEditorFinal} em ${dataAtualString}` }
+      : { observacoesGerais: listaObservacoes };
+
     const novaRequisicao = {
-      id: gerarIdSequencial(lojaPara),
-      data: new Date().toLocaleDateString('pt-BR'),
-      timestampCriacao: Date.now(), 
+      id: reqEmEdicao ? reqEmEdicao.id : gerarIdSequencial(lojaPara),
+      data: reqEmEdicao ? reqEmEdicao.data : new Date().toLocaleDateString('pt-BR'),
+      timestampCriacao: reqEmEdicao ? reqEmEdicao.timestampCriacao : Date.now(), 
       origem: lojaDe, 
       destino: lojaPara,
       solicitante: solicitante,
       motivo: motivoFinal,
       prioridade: grauPrioridade, 
       itens: itensAdicionados.length,
-      status: 'Pendente',
+      status: 'Pendente', 
       listaItens: itensAdicionados,
-      historico: {} 
+      historico: novoHistorico
     };
 
-    mostrarAlerta('sucesso', 'Requisição Concluída!', `A requisição ${novaRequisicao.id} foi gravada e já está disponível no painel.`, () => {
+    mostrarAlerta('sucesso', reqEmEdicao ? 'Edição Concluída!' : 'Requisição Concluída!', `A requisição ${novaRequisicao.id} foi ${reqEmEdicao ? 'atualizada' : 'gravada'} com sucesso!`, () => {
       fecharAlerta();
-      aoSalvar(novaRequisicao);
+      aoSalvar(novaRequisicao, !!reqEmEdicao);
     });
   };
 
@@ -393,7 +468,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
   return (
     <div className="nova-req-container">
       <div className="nova-req-header">
-        <h2>Criar Nova Requisição</h2>
+        <h2>{reqEmEdicao ? `✏️ Editar Requisição ${reqEmEdicao.id}` : 'Criar Nova Requisição'}</h2>
         <button className="btn-voltar" onClick={aoVoltar}>← Cancelar</button>
       </div>
 
@@ -459,24 +534,60 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
             )}
           </div>
           
+          {/* NOVO LAYOUT DO HISTÓRICO DE OBSERVAÇÕES (TIPO CHAT) */}
+          <div className="campo-loja obs-geral-box" style={{ marginTop: '10px' }}>
+            <label>📝 Observações Gerais / Instruções da Requisição:</label>
+
+            {/* Lista das observações já adicionadas */}
+            {listaObservacoes.length > 0 && (
+              <div className="lista-observacoes-wrapper">
+                <ul className="lista-obs-ul">
+                  {listaObservacoes.map((obs) => (
+                    <li key={obs.id_obs} className="item-obs-li">
+                      <div className="obs-meta">
+                        <strong>{obs.autor}</strong> em {obs.data}
+                      </div>
+                      <div className="obs-conteudo">{obs.texto}</div>
+                      <button
+                        type="button"
+                        className="btn-remover-obs"
+                        onClick={() => handleRemoverObservacao(obs.id_obs)}
+                        title="Remover esta observação"
+                      >
+                        🗑️
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Campo para adicionar nova */}
+            <div className="obs-add-mode">
+              <textarea 
+                className="obs-textarea-nova" 
+                placeholder={reqEmEdicao ? "Ex: Alterei a quantidade do produto X..." : "Ex: Cuidado com os produtos de vidro. Embalar separadamente..."}
+                value={novaObs} 
+                onChange={(e) => setNovaObs(e.target.value)} 
+              />
+              <button 
+                type="button" 
+                className="btn-adicionar-obs-lista" 
+                onClick={handleAdicionarObservacao}
+              >
+                ➕ Adicionar Observação
+              </button>
+            </div>
+          </div>
+
         </div>
 
         <div className="cabecalho-insercao">
           <h3 className="titulo-insercao">Inserir Produtos</h3>
           
           <div>
-            <input 
-              type="file" 
-              accept=".csv" 
-              ref={inputArquivoRef} 
-              className="input-arquivo-oculto"
-              onChange={handleImportarCSV} 
-            />
-            <button 
-              className="btn-importar" 
-              onClick={() => inputArquivoRef.current.click()}
-              title="Importe um arquivo contendo apenas 'Código' e 'Quantidade' separados por vírgula"
-            >
+            <input type="file" accept=".csv" ref={inputArquivoRef} className="input-arquivo-oculto" onChange={handleImportarCSV} />
+            <button className="btn-importar" onClick={() => inputArquivoRef.current.click()} title="Importe um arquivo contendo apenas 'Código' e 'Quantidade' separados por vírgula">
               📁 Importar Planilha CSV
             </button>
           </div>
@@ -492,9 +603,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
           <div className="col-curta">
             <input type="number" className="input-item" placeholder="Qtd" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && adicionarNaLista()} />
           </div>
-          <button className="btn-adicionar" onClick={adicionarNaLista}>
-            Adicionar ↓
-          </button>
+          <button className="btn-adicionar" onClick={adicionarNaLista}>Adicionar ↓</button>
         </div>
 
         {itensAdicionados.length > 0 && (
@@ -505,7 +614,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
                   <tr>
                     <th>Cód. Produto</th>
                     <th>Descrição</th>
-                    {/* Exibe a coluna de Qtd Disponível apenas se veio do Chat */}
                     {isModoVitrine && <th className="td-centro">Qtd. no CD</th>}
                     <th>Qtd. Solicitada</th>
                   </tr>
@@ -516,58 +624,29 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
                       <td><strong>{item.cod}</strong></td>
                       <td className={item.descricao === 'Produto não encontrado' ? 'texto-erro' : ''}>
                         {item.descricao}
-                        
-                        {/* Se não for modo vitrine, mantém o aviso clássico em vermelho */}
                         {item.insuficiente && item.descricao !== 'Produto não encontrado' && !isModoVitrine && (
-                          <div>
-                            <span className="badge-estoque">
-                              Estoque atual: {item.estoque} un
-                            </span>
-                          </div>
+                          <div><span className="badge-estoque">Estoque atual: {item.estoque} un</span></div>
                         )}
                       </td>
                       
-                      {/* Célula do Estoque do CD - Visível apenas no modo Vitrine */}
                       {isModoVitrine && (
                         <td className="td-centro">
-                          <span className="badge-estoque-vitrine">
-                            {item.estoque !== null ? item.estoque : 0} un
-                          </span>
+                          <span className="badge-estoque-vitrine">{item.estoque !== null ? item.estoque : 0} un</span>
                         </td>
                       )}
 
                       <td>
                         {editandoIndex === index ? (
                           <div className="edicao-container-nova">
-                            <input 
-                              type="number" 
-                              className="input-qtd-edit-nova" 
-                              value={novaQuantidadeEdit} 
-                              onChange={(e) => setNovaQuantidadeEdit(e.target.value)} 
-                            />
+                            <input type="number" className="input-qtd-edit-nova" value={novaQuantidadeEdit} onChange={(e) => setNovaQuantidadeEdit(e.target.value)} />
                             <button className="btn-acao-edit-nova" onClick={() => salvarEdicao(index)} title="Salvar">✔️</button>
                             <button className="btn-acao-edit-nova" onClick={cancelarEdicao} title="Cancelar">❌</button>
                           </div>
                         ) : (
                           <div className="quantidade-container-nova">
-                            <strong className={item.quantidade === 0 ? 'texto-qtd-zerada' : ''}>
-                              {item.quantidade} un
-                            </strong>
-                            
-                            <button 
-                              className="btn-editar-item-nova" 
-                              onClick={() => iniciarEdicao(index, item.quantidade)}
-                              title="Editar quantidade"
-                            >
-                              ✏️
-                            </button>
-                            <button 
-                              className="btn-remover-item-nova" 
-                              onClick={() => removerDaLista(index)}
-                              title="Remover item"
-                            >
-                              🗑️
-                            </button>
+                            <strong className={item.quantidade === 0 ? 'texto-qtd-zerada' : ''}>{item.quantidade} un</strong>
+                            <button className="btn-editar-item-nova" onClick={() => iniciarEdicao(index, item.quantidade)} title="Editar quantidade">✏️</button>
+                            <button className="btn-remover-item-nova" onClick={() => removerDaLista(index)} title="Remover item">🗑️</button>
                           </div>
                         )}
                       </td>
@@ -590,7 +669,9 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
         )}
         
         <div className="rodape-formulario">
-          <button className="btn-salvar" onClick={finalizarRequisicao}>Gravar Requisição</button>
+          <button className="btn-salvar" onClick={finalizarRequisicao}>
+            {reqEmEdicao ? 'Salvar Alterações' : 'Gravar Requisição'}
+          </button>
         </div>
       </div>
 
@@ -606,28 +687,14 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, requi
             </div>
 
             <div className="alerta-modal-body">
-              {alerta.mensagem.split('\n').map((linha, i) => (
-                <span key={i}>
-                  {linha}
-                  <br/>
-                </span>
-              ))}
+              {alerta.mensagem.split('\n').map((linha, i) => (<span key={i}>{linha}<br/></span>))}
             </div>
 
             <div className="alerta-modal-footer">
               {alerta.onCancel && (
-                <button className="btn-alerta btn-alerta-cancelar" onClick={alerta.onCancel}>
-                  {alerta.textoCancelar}
-                </button>
+                <button className="btn-alerta btn-alerta-cancelar" onClick={alerta.onCancel}>{alerta.textoCancelar}</button>
               )}
-              
-              <button 
-                className={`btn-alerta btn-alerta-confirmar tipo-${alerta.tipo}`} 
-                onClick={() => {
-                  if (alerta.onConfirm) alerta.onConfirm();
-                  else fecharAlerta();
-                }}
-              >
+              <button className={`btn-alerta btn-alerta-confirmar tipo-${alerta.tipo}`} onClick={() => { if (alerta.onConfirm) alerta.onConfirm(); else fecharAlerta(); }}>
                 {alerta.textoConfirmar}
               </button>
             </div>

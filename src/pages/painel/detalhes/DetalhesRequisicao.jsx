@@ -4,7 +4,7 @@ import '../../../styles/pages/painel/detalhes/detalhes.css';
 import { supabase } from '../../../services/supabase';
 import Romaneio from '../romaneio/Romaneio';
 
-export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, recordesGlobais }) {
+export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, aoIniciarEdicao, aoAtualizarObservacoes, recordesGlobais }) {
   if (!req) return null;
 
   const [novoStatus, setNovoStatus] = useState(req.status);
@@ -15,6 +15,12 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
   const [nomeAssumir, setNomeAssumir] = useState('');
   const [modoAssumir, setModoAssumir] = useState(false);
 
+  const [nomeEditorEdicao, setNomeEditorEdicao] = useState('');
+  const [modoEditarReq, setModoEditarReq] = useState(false);
+
+  // NOVO: Apenas guarda o texto da nova observação que será adicionada
+  const [novaObs, setNovaObs] = useState('');
+
   const [tempoDecorrido, setTempoDecorrido] = useState(0);
   const [cronometroRodando, setCronometroRodando] = useState(false);
   const [mostrarFesta, setMostrarFesta] = useState(false);
@@ -22,6 +28,7 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
   const [itens, setItens] = useState(req.listaItens || []);
   
   const itensRef = useRef(itens);
+  
   useEffect(() => {
     setItens(req.listaItens || []);
     itensRef.current = req.listaItens || [];
@@ -254,6 +261,8 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
       const metricasFinais = await aoFinalizarSeparacao(req.id, tempoDecorrido, respAtual);
       
       if (!metricasFinais) return; 
+
+      setNovoStatus('Separado');
       
       const tempoSegundos = metricasFinais.tempoTotalSegundos || 1;
       const itensFisicos = metricasFinais.totalItensFisicos || 0;
@@ -334,12 +343,43 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     switch (status) { 
       case 'Pendente': return 'status-pendente'; 
       case 'Em Separação': return 'status-separacao'; 
+      case 'Separado': return 'status-separado';
       case 'Saída de produtos': return 'status-separado'; 
       case 'Faturamento': return 'status-faturado'; 
       case 'Transporte': return 'status-enviado'; 
       case 'Recebimento': return 'status-recebido'; 
       default: return 'status-pendente'; 
     }
+  };
+
+  // --- CIRURGIA: PREPARAÇÃO DA LISTA DE OBSERVAÇÕES ---
+  const obsBrutas = req.historico?.observacoesGerais;
+  let listaObservacoes = [];
+
+  // Se já for uma lista no formato novo, usamos ela
+  if (Array.isArray(obsBrutas)) {
+    listaObservacoes = obsBrutas;
+  } 
+  // Proteção: Se for uma observação antiga salva como texto, converte ela pra lista dinamicamente
+  else if (typeof obsBrutas === 'string' && obsBrutas.trim() !== '') {
+    listaObservacoes = [{
+      id_obs: 'legado',
+      texto: obsBrutas,
+      autor: 'Sistema (Nota Antiga)',
+      data: req.data || 'Data anterior'
+    }];
+  }
+
+  const handleAdicionarObservacaoLista = () => {
+    if (!novaObs.trim()) { 
+      exibirPopup('aviso', 'Atenção', 'Digite alguma instrução ou observação antes de adicionar.'); 
+      return; 
+    }
+    const autorAtual = usuarioLogado?.nome_completo || usuarioLogado?.username || 'Usuário Não Identificado';
+    
+    aoAtualizarObservacoes(req.id, novaObs, autorAtual);
+    setNovaObs('');
+    exibirPopup('sucesso', 'Salvo', 'A observação foi registrada no histórico!');
   };
 
   return (
@@ -391,7 +431,79 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
               <span style={{ color: '#e67e22' }}>{req.notaFiscal}</span>
             </div>
           )}
+
+          {/* NOVO LAYOUT DO HISTÓRICO DE OBSERVAÇÕES (TIPO CHAT/LISTA) */}
+          <div className="info-item obs-geral-box">
+            <label>📝 Histórico de Observações / Instruções</label>
+            
+            <div className="lista-observacoes-wrapper">
+              {listaObservacoes.length > 0 ? (
+                <ul className="lista-obs-ul">
+                  {listaObservacoes.map((obs, i) => (
+                    <li key={obs.id_obs || i} className="item-obs-li">
+                      <div className="obs-meta">
+                        <strong>{obs.autor}</strong> em {obs.data}
+                      </div>
+                      <div className="obs-conteudo">{obs.texto}</div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="obs-readonly">
+                  <span className="obs-vazia">Nenhuma instrução adicional registrada nesta requisição.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Caixa de nova mensagem liberada enquanto não for faturado/enviado */}
+            {(req.status === 'Pendente' || req.status === 'Em Separação') && (
+              <div className="obs-add-mode">
+                <textarea 
+                  className="obs-textarea-nova" 
+                  value={novaObs} 
+                  onChange={e => setNovaObs(e.target.value)} 
+                  placeholder="Escreva uma nova observação ou instrução para esta requisição..." 
+                />
+                <button className="btn-adicionar-obs-lista" onClick={handleAdicionarObservacaoLista}>
+                  ➕ Adicionar Observação
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+
+        {req.status === 'Pendente' && (
+          <div className="box-assumir-tarefa box-editar-req">
+            <div className="assumir-info">
+              <span><strong>Modo de Edição:</strong> Altere quantidades, adicione novos produtos ou remova itens. A requisição ficará oculta do painel durante a edição.</span>
+              {req.historico?.['Última Edição'] && (
+                <div style={{fontSize: '0.8rem', marginTop: '5px', color: '#8e44ad'}}>
+                  Última edição: {req.historico['Última Edição']}
+                </div>
+              )}
+            </div>
+            
+            {!modoEditarReq ? (
+              <button className="btn-assumir btn-editar-roxo" onClick={() => setModoEditarReq(true)}>
+                ✏️ Editar Requisição Completa
+              </button>
+            ) : (
+              <div className="linha-assumir">
+                <input 
+                  type="text" 
+                  placeholder="Digite seu nome para auditar..." 
+                  value={nomeEditorEdicao} 
+                  onChange={(e) => setNomeEditorEdicao(e.target.value)} 
+                />
+                <button className="btn-confirmar-assumir btn-roxo-escuro" onClick={() => {
+                  if (!nomeEditorEdicao.trim()) { exibirPopup('aviso', 'Atenção', 'Digite seu nome obrigatoriamente para registrar a edição!'); return; }
+                  aoIniciarEdicao(req.id, nomeEditorEdicao);
+                }}>Prosseguir para Edição</button>
+                <button className="btn-cancelar-assumir" onClick={() => { setModoEditarReq(false); setNomeEditorEdicao(''); }}>Cancelar</button>
+              </div>
+            )}
+          </div>
+        )}
 
         {req.status === 'Em Separação' && (
           <div className="box-assumir-tarefa">
@@ -424,6 +536,7 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
           <select className="select-status" value={novoStatus} onChange={(e) => setNovoStatus(e.target.value)}>
             <option value="Pendente">Pendente</option>
             <option value="Em Separação">Em Separação</option>
+            <option value="Separado">Separado</option>
             <option value="Saída de produtos">Saída de produtos</option>
             <option value="Faturamento">Faturamento</option>
             <option value="Transporte">Transporte</option>
@@ -649,9 +762,7 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
         </div>
       )}
 
-      {/* RENDERIZANDO O ROMANEIO INVISÍVEL NO FINAL DA TELA */}
       <Romaneio req={req} baseProdutos={baseProdutos} />
-
     </div>
   );
 }
