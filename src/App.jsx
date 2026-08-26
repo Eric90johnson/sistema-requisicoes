@@ -32,7 +32,6 @@ function App() {
   const [recordesGlobais, setRecordesGlobais] = useState({});
   const [carregando, setCarregando] = useState(false);
 
-  // NOVO ESTADO: O "WhatsApp" do Encarregado
   const [autorizacoesPendentes, setAutorizacoesPendentes] = useState([]);
 
   const handleLogar = (dadosUsuario) => {
@@ -52,9 +51,11 @@ function App() {
     await supabase.auth.signOut();
   };
 
-  const carregarDadosDaNuvem = useCallback(async (silencioso = false) => {
+  // ADICIONADO O PARÂMETRO "rapido" PARA NÃO SOBRECARREGAR O BANCO NA TV
+  const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false) => {
     if (!silencioso) setCarregando(true);
     try {
+      // 1. Sempre busca as requisições (É leve e precisa ser em tempo real)
       const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false });
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
@@ -73,6 +74,10 @@ function App() {
         });
       }
 
+      // TRAVA DE SEGURANÇA: Se for a atualização de 5 segundos da TV, para aqui!
+      if (rapido) return;
+
+      // 2. Só baixa Recordes e a Base Inteira de Produtos no carregamento completo
       const { data: recData } = await supabase.from('recordes_globais').select('*');
       if (recData) {
         const objRecordes = {};
@@ -110,7 +115,6 @@ function App() {
     }
   }, []);
 
-  // MOTOR REALTIME DE DADOS GERAIS E DE NOTIFICAÇÕES DO ENCARREGADO
   useEffect(() => {
     if (isLogado) {
       carregarDadosDaNuvem();
@@ -120,7 +124,6 @@ function App() {
         .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, () => { carregarDadosDaNuvem(true); })
         .subscribe();
 
-      // Se for encarregado, liga o rádio para escutar pedidos de Bip Manual
       let canalAutorizacao;
       const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
       
@@ -141,9 +144,15 @@ function App() {
           }).subscribe();
       }
 
+      // ATUALIZAÇÃO FANTASMA DA TV A CADA 5 SEGUNDOS (Modo Rápido Ativado)
+      const intervaloAtualizacao = setInterval(() => {
+        carregarDadosDaNuvem(true, true); 
+      }, 5000);
+
       return () => {
         supabase.removeChannel(canalAtualizacao);
         if (canalAutorizacao) supabase.removeChannel(canalAutorizacao);
+        clearInterval(intervaloAtualizacao);
       };
     }
   }, [isLogado, carregarDadosDaNuvem, usuarioLogado]);
@@ -265,10 +274,7 @@ function App() {
           <>
             {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
             {telaAtual === 'nova' && <NovaRequisicao aoVoltar={() => { setTelaAtual('painel'); setProdutosPreSelecionados(null); }} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} />}
-            
-            {/* O Componente DetalhesRequisicao recebe baseProdutos para repassar ao Romaneio */}
             {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} recordesGlobais={recordesGlobais} />}
-            
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
             {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => setTelaAtual('painel')} produtos={baseProdutos} setProdutos={setBaseProdutos} />}
@@ -277,7 +283,6 @@ function App() {
         )}
       </main>
 
-      {/* NOTIFICAÇÕES GLOBAIS DE ENCARREGADO (WhatsApp da Logística) */}
       {autorizacoesPendentes.length > 0 && (
         <div className="container-notificacoes-bip">
           {autorizacoesPendentes.map(auth => (
