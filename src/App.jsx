@@ -112,20 +112,17 @@ function App() {
     }
   }, []);
 
-  // --- CIRURGIA DE NOTIFICAÇÕES (SYNC FANTASMA DE 5 SEGUNDOS) ---
+  // --- CIRURGIA DE REDE: Loop Sequencial Inteligente (Smart Polling) ---
   useEffect(() => {
-    if (isLogado) {
-      carregarDadosDaNuvem();
+    if (!isLogado) return;
 
-      const canalAtualizacao = supabase.channel('mudancas-globais')
-        .on('postgres', { event: '*', schema: 'public', table: 'requisicoes' }, () => { carregarDadosDaNuvem(true); })
-        .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, () => { carregarDadosDaNuvem(true); })
-        .subscribe();
+    carregarDadosDaNuvem();
 
-      const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
-      
-      const fetchPendentes = async () => {
-        if (isEncarregado && usuarioLogado?.nome_completo) {
+    const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
+    
+    const fetchPendentes = async () => {
+      if (isEncarregado && usuarioLogado?.nome_completo) {
+        try {
           const { data, error } = await supabase.from('autorizacoes_bip')
             .select('*')
             .eq('encarregado_destino', usuarioLogado.nome_completo)
@@ -133,31 +130,46 @@ function App() {
           
           if (!error && data) {
             setAutorizacoesPendentes(prev => {
-              // Verifica se existe alguma notificação nova para poder tocar o som
               const hasNew = data.some(novaAuth => !prev.some(p => p.id === novaAuth.id));
               if (hasNew) tocarSomNotificacao();
               return data;
             });
           }
+        } catch (e) {
+          // Engole o erro silenciosamente se a internet oscilar
         }
-      };
+      }
+    };
 
-      // Carrega na primeira vez
-      fetchPendentes();
+    fetchPendentes();
 
-      // Coloca no relógio de 5 segundos para buscar ativamente (Inquebrável a quedas de internet)
-      const intervaloAtualizacao = setInterval(() => {
-        carregarDadosDaNuvem(true, true); 
-        fetchPendentes(); 
-      }, 5000);
+    let isMounted = true;
+    let timerId = null;
 
-      return () => {
-        supabase.removeChannel(canalAtualizacao);
-        clearInterval(intervaloAtualizacao);
-      };
-    }
+    const loopSincronizacao = async () => {
+      if (!isMounted) return;
+      
+      try {
+        await carregarDadosDaNuvem(true, true);
+        await fetchPendentes();
+      } catch (e) {
+        // Ignora falhas de rede no polling e tenta na próxima rodada
+      }
+      
+      // Só agenda a PRÓXIMA busca depois que a atual terminar
+      if (isMounted) {
+        timerId = setTimeout(loopSincronizacao, 5000);
+      }
+    };
+
+    timerId = setTimeout(loopSincronizacao, 5000);
+
+    return () => {
+      isMounted = false;
+      if (timerId) clearTimeout(timerId);
+    };
   }, [isLogado, carregarDadosDaNuvem, usuarioLogado]);
-  // ---------------------------------------------------------------
+  // ---------------------------------------------------------------------
 
   const tocarSomNotificacao = () => {
     try {

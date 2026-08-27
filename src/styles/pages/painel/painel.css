@@ -93,7 +93,7 @@
 }
 
 .contador-requisicoes .numero-destaque {
-  background-color: #e74c3c; /* Vermelho para chamar a atenção para a fila de trabalho */
+  background-color: #e74c3c; 
   color: white;
   padding: 3px 10px;
   border-radius: 12px;
@@ -125,7 +125,7 @@
 /* --- NOVO: TABELA COM ROLAGEM VERTICAL --- */
 .tabela-container-scroll {
   width: 100%;
-  max-height: 55vh; /* Controla a altura máxima gerando o scroll */
+  max-height: 55vh; 
   overflow-y: auto;
   overflow-x: auto;
   border-radius: 8px;
@@ -133,7 +133,6 @@
   background-color: var(--cor-branca);
 }
 
-/* Estilização bonita da barra de rolagem */
 .tabela-container-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -156,7 +155,6 @@
   border-collapse: collapse;
 }
 
-/* --- NOVO: FIXANDO O CABEÇALHO (STICKY) --- */
 .tabela-requisicoes th {
   position: sticky;
   top: 0;
@@ -195,8 +193,8 @@
 .status-separacao, 
 .status-separado, 
 .status-faturado, 
-.status-enviado, 
-.status-recebido {
+.status-recebido,
+.status-enviado {
   background-color: transparent !important;
   color: #000000 !important;
 }
@@ -317,19 +315,17 @@
   cursor: pointer; font-weight: bold;
 }
 
-/* O PÓDIO VISUAL (Ouro, Prata, Bronze) */
-/* O PÓDIO VISUAL (Ouro, Prata, Bronze) */
 .podio-container {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 15px; /* Aumentado para respirar melhor */
-  height: 250px; /* Aumentado para caber as caixas maiores */
+  gap: 15px; 
+  height: 250px; 
   margin-bottom: 40px;
 }
 
 .podio-lugar {
-  width: 135px; /* Aumentado para não quebrar a linha de pontuações altas */
+  width: 135px; 
   border-radius: 8px 8px 0 0;
   color: white;
   display: flex;
@@ -337,7 +333,7 @@
   align-items: center;
   justify-content: flex-start;
   padding-top: 15px;
-  padding-bottom: 15px; /* Evita que o texto encoste no chão */
+  padding-bottom: 15px; 
   box-shadow: 0 -4px 10px rgba(0,0,0,0.15);
   position: relative;
   text-align: center;
@@ -357,15 +353,14 @@
 }
 
 .podio-nota { 
-  font-size: 1.15rem; /* Ajustado para caber perfeitamente na caixa */
+  font-size: 1.15rem; 
   font-weight: 900; 
   background-color: rgba(255,255,255,0.2); 
   padding: 4px 10px; 
   border-radius: 10px; 
-  white-space: nowrap; /* Trava de segurança: impede o texto de quebrar em duas linhas */
+  white-space: nowrap; 
 }
 
-/* Novas alturas calculadas para acomodar todo o conteúdo */
 .podio-ouro {
   height: 200px;
   background: linear-gradient(to top, #d4af37, #f1c40f);
@@ -384,7 +379,6 @@
   z-index: 1;
 }
 
-/* Tabela de Classificação Inferior */
 .tabela-ranking {
   width: 100%;
   border-collapse: collapse;

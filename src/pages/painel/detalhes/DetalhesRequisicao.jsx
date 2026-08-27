@@ -75,7 +75,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     } catch(e) {}
   };
 
-  // --- CIRURGIA AQUI: Remoção do WebSocket e adoção do Sync Fantasma (5s) ---
   const pedidosBipAntigoRef = useRef({});
 
   useEffect(() => {
@@ -98,7 +97,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
           mapNovo[d.produto_codigo] = d.status;
           const statusAntigo = pedidosBipAntigoRef.current[d.produto_codigo];
           
-          // Se o status mudou na nuvem, dispara o alerta visual e sonoro
           if (statusAntigo && statusAntigo !== d.status) {
             if (d.status === 'aprovado') {
               tocarBipSucesso();
@@ -115,17 +113,14 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
       }
     };
 
-    // Carrega a primeira vez ao abrir
     fetchAuths();
 
-    // Roda silenciosamente a cada 5 segundos
     const intervaloAuth = setInterval(() => {
       fetchAuths();
     }, 5000);
 
     return () => clearInterval(intervaloAuth);
   }, [req.id, usuarioLogado, isEncarregado]);
-  // -------------------------------------------------------------------------
 
   const solicitarBipManual = async (item) => {
     if (!usuarioLogado?.encarregado_responsavel) {
@@ -176,11 +171,14 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     return () => clearInterval(intervalo);
   }, [req.status, req.historico, req.metricasSeparacao]);
 
+  // --- CIRURGIA AQUI: Formatação alterada para incluir Horas (HH:MM:SS) ---
   const formatarTempo = (segundos) => {
-    const m = Math.floor(segundos / 60).toString().padStart(2, '0');
+    const h = Math.floor(segundos / 3600).toString().padStart(2, '0');
+    const m = Math.floor((segundos % 3600) / 60).toString().padStart(2, '0');
     const s = (segundos % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
+    return `${h}:${m}:${s}`;
   };
+  // ------------------------------------------------------------------------
 
   useEffect(() => {
     let scanner = null;

@@ -19,39 +19,50 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const [idsDestacados, setIdsDestacados] = useState([]);
   const reqsAnterioresRef = useRef(requisicoes);
 
-  // --- CIRURGIA AQUI: O alerta agora checa de 5 em 5 segundos, sem depender de refresh! ---
+  // --- CIRURGIA DE REDE AQUI: Smart Polling com setTimeout para evitar ERR_CONNECTION_CLOSED ---
   useEffect(() => {
-    const buscarUltimoAlerta = async () => {
-      const { data, error } = await supabase
-        .from('alertas_reposicao')
-        .select('*')
-        .order('data_criacao', { ascending: false })
-        .limit(1);
+    let isMounted = true;
+    let timerId = null;
 
-      if (!error && data && data.length > 0) {
-        const alerta = data[0];
-        const jaIgnorado = localStorage.getItem(`alerta_ignorado_${alerta.id}`);
-        if (!jaIgnorado) {
-          // Só mostra se ele ainda não estiver visível na tela
-          setAlertaDelta(prev => {
-            if (prev.id !== alerta.id) {
-              return { visivel: true, estagio: 'pergunta', produtos: alerta.lista_produtos, id: alerta.id };
-            }
-            return prev;
-          });
+    const loopBuscaAlerta = async () => {
+      if (!isMounted) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('alertas_reposicao')
+          .select('*')
+          .order('data_criacao', { ascending: false })
+          .limit(1);
+
+        if (!error && data && data.length > 0) {
+          const alerta = data[0];
+          const jaIgnorado = localStorage.getItem(`alerta_ignorado_${alerta.id}`);
+          if (!jaIgnorado) {
+            setAlertaDelta(prev => {
+              if (prev.id !== alerta.id) {
+                return { visivel: true, estagio: 'pergunta', produtos: alerta.lista_produtos, id: alerta.id };
+              }
+              return prev;
+            });
+          }
         }
+      } catch (e) {
+        // Ignora falhas de rede silenciosamente e tenta na próxima rodada
+      }
+
+      // Só agenda a PRÓXIMA busca depois que a atual terminar completamente
+      if (isMounted) {
+        timerId = setTimeout(loopBuscaAlerta, 5000);
       }
     };
 
-    // Roda na primeira vez
-    buscarUltimoAlerta();
+    // Inicia o loop
+    loopBuscaAlerta();
 
-    // Roda silenciosamente a cada 5 segundos
-    const intervaloBuscaAlerta = setInterval(() => {
-      buscarUltimoAlerta();
-    }, 5000);
-
-    return () => clearInterval(intervaloBuscaAlerta);
+    return () => {
+      isMounted = false;
+      if (timerId) clearTimeout(timerId);
+    };
   }, []);
   // -----------------------------------------------------------------------------------------
 
@@ -135,6 +146,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       if (aDestacado && !bDestacado) return -1; 
       if (!aDestacado && bDestacado) return 1;  
 
+      const aTransporte = a.status === 'Transporte';
+      const bTransporte = b.status === 'Transporte';
+      if (aTransporte && !bTransporte) return 1;
+      if (!aTransporte && bTransporte) return -1;
+
       const prioA = a.prioridade || 3; 
       const prioB = b.prioridade || 3;
       if (prioA !== prioB) return prioA - prioB; 
@@ -157,15 +173,17 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       case 'Em Separação': return 'status-separacao';
       case 'Saída de produtos': return 'status-separado';
       case 'Faturamento': return 'status-faturado';
-      case 'Transporte': return 'status-enviado';
+      case 'Transporte': return 'status-pendente'; 
       case 'Recebimento': return 'status-recebido';
       case 'Cancelada': return 'status-pendente';
       default: return 'status-pendente';
     }
   };
 
-  const getLinhaPrioridadeClass = (prioridade) => {
-    switch (prioridade) {
+  const getLinhaPrioridadeClass = (req) => {
+    if (req.status === 'Transporte') return 'prioridade-baixa';
+    
+    switch (req.prioridade) {
       case 1: return 'prioridade-alta';   
       case 2: return 'prioridade-media';  
       case 3: return 'prioridade-baixa';  
@@ -355,7 +373,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                     <tr 
                       key={req.id} 
                       onClick={() => aoAbrirDetalhes(req)} 
-                      className={`linha-tabela-hover linha-tabela-clicavel ${getLinhaPrioridadeClass(req.prioridade)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
+                      className={`linha-tabela-hover linha-tabela-clicavel ${getLinhaPrioridadeClass(req)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
                     >
                       <td className="td-motivo-bold" title={req.motivo || ''}>
                         {req.motivo 
