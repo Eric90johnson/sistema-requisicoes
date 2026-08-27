@@ -112,6 +112,7 @@ function App() {
     }
   }, []);
 
+  // --- CIRURGIA DE NOTIFICAÇÕES (SYNC FANTASMA DE 5 SEGUNDOS) ---
   useEffect(() => {
     if (isLogado) {
       carregarDadosDaNuvem();
@@ -121,37 +122,42 @@ function App() {
         .on('postgres', { event: '*', schema: 'public', table: 'base_produtos' }, () => { carregarDadosDaNuvem(true); })
         .subscribe();
 
-      let canalAutorizacao;
       const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
       
-      if (isEncarregado && usuarioLogado?.nome_completo) {
-        const fetchPendentes = async () => {
-          const { data } = await supabase.from('autorizacoes_bip')
-            .select('*').eq('encarregado_destino', usuarioLogado.nome_completo).eq('status', 'pendente');
-          if (data) setAutorizacoesPendentes(data);
-        };
-        fetchPendentes();
+      const fetchPendentes = async () => {
+        if (isEncarregado && usuarioLogado?.nome_completo) {
+          const { data, error } = await supabase.from('autorizacoes_bip')
+            .select('*')
+            .eq('encarregado_destino', usuarioLogado.nome_completo)
+            .eq('status', 'pendente');
+          
+          if (!error && data) {
+            setAutorizacoesPendentes(prev => {
+              // Verifica se existe alguma notificação nova para poder tocar o som
+              const hasNew = data.some(novaAuth => !prev.some(p => p.id === novaAuth.id));
+              if (hasNew) tocarSomNotificacao();
+              return data;
+            });
+          }
+        }
+      };
 
-        canalAutorizacao = supabase.channel('notificacoes_encarregado')
-          .on('postgres', { event: 'INSERT', schema: 'public', table: 'autorizacoes_bip', filter: `encarregado_destino=eq.${usuarioLogado.nome_completo}` }, (payload) => {
-            if (payload.new.status === 'pendente') {
-              setAutorizacoesPendentes(prev => [...prev, payload.new]);
-              tocarSomNotificacao();
-            }
-          }).subscribe();
-      }
+      // Carrega na primeira vez
+      fetchPendentes();
 
+      // Coloca no relógio de 5 segundos para buscar ativamente (Inquebrável a quedas de internet)
       const intervaloAtualizacao = setInterval(() => {
         carregarDadosDaNuvem(true, true); 
+        fetchPendentes(); 
       }, 5000);
 
       return () => {
         supabase.removeChannel(canalAtualizacao);
-        if (canalAutorizacao) supabase.removeChannel(canalAutorizacao);
         clearInterval(intervaloAtualizacao);
       };
     }
   }, [isLogado, carregarDadosDaNuvem, usuarioLogado]);
+  // ---------------------------------------------------------------
 
   const tocarSomNotificacao = () => {
     try {
@@ -193,12 +199,10 @@ function App() {
     setProdutosPreSelecionados(null);
   };
 
-  // --- NOVO: FUNÇÃO PARA ABORTAR A REQUISIÇÃO DEFINITIVAMENTE ---
   const handleCancelarRequisicao = async (id, nomeCancelador) => {
     const req = requisicoes.find(r => r.id === id);
     const dataCancelamento = new Date().toLocaleString('pt-BR');
     
-    // Adiciona ao histórico quem cancelou e quando
     const historicoAtualizado = { 
       ...req.historico, 
       'Cancelamento': `Por ${nomeCancelador} em ${dataCancelamento}` 
@@ -215,7 +219,6 @@ function App() {
       setTelaAtual('painel'); 
     }
   };
-  // ----------------------------------------------------------------
 
   const handleSalvarRequisicao = async (novaReq, isEdicao = false) => {
     if (isEdicao) {
@@ -374,11 +377,8 @@ function App() {
           </div>
         ) : (
           <>
-            {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes.filter(r => r.status !== 'Em Edição')} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
-            
-            {/* NOVO: A tela recebe a prop aoCancelarReq */}
+            {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes.filter(r => r.status !== 'Em Edição' && r.status !== 'Cancelada')} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
             {telaAtual === 'nova' && <NovaRequisicao aoVoltar={handleCancelarEdicao} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} aoCancelarReq={handleCancelarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} reqEmEdicao={reqEmEdicao} />}
-            
             {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} aoIniciarEdicao={handleIniciarEdicao} aoAtualizarObservacoes={handleAtualizarObservacoes} recordesGlobais={recordesGlobais} />}
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}

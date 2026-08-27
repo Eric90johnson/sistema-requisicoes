@@ -18,7 +18,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
   const [nomeEditorEdicao, setNomeEditorEdicao] = useState('');
   const [modoEditarReq, setModoEditarReq] = useState(false);
 
-  // CORREÇÃO: O estado correto para adicionar notas ao histórico
   const [novaObs, setNovaObs] = useState('');
 
   const [tempoDecorrido, setTempoDecorrido] = useState(0);
@@ -76,40 +75,57 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     } catch(e) {}
   };
 
+  // --- CIRURGIA AQUI: Remoção do WebSocket e adoção do Sync Fantasma (5s) ---
+  const pedidosBipAntigoRef = useRef({});
+
   useEffect(() => {
     setPedidosBip({});
     setCodigoManual({});
+    pedidosBipAntigoRef.current = {};
 
     if (!usuarioLogado || isEncarregado) return;
 
     const fetchAuths = async () => {
-      const { data } = await supabase.from('autorizacoes_bip')
-        .select('*').eq('requisicao_id', req.id).eq('solicitante_nome', usuarioLogado.nome_completo);
-      if (data) {
-        const map = {};
-        data.forEach(d => { map[d.produto_codigo] = d.status; });
-        setPedidosBip(map);
+      const { data, error } = await supabase.from('autorizacoes_bip')
+        .select('*')
+        .eq('requisicao_id', req.id)
+        .eq('solicitante_nome', usuarioLogado.nome_completo);
+
+      if (!error && data) {
+        const mapNovo = {};
+        
+        data.forEach(d => {
+          mapNovo[d.produto_codigo] = d.status;
+          const statusAntigo = pedidosBipAntigoRef.current[d.produto_codigo];
+          
+          // Se o status mudou na nuvem, dispara o alerta visual e sonoro
+          if (statusAntigo && statusAntigo !== d.status) {
+            if (d.status === 'aprovado') {
+              tocarBipSucesso();
+              exibirPopup('sucesso', 'Bip Manual Liberado!', `O encarregado liberou a digitação manual para o produto:\n\n${d.produto_descricao}\n\nO teclado do sistema já foi destravado.`);
+            } else if (d.status === 'recusado') {
+              tocarBipErro();
+              exibirPopup('erro', 'Liberação Recusada', `Atenção, o encarregado recusou a liberação de digitação manual para:\n\n${d.produto_descricao}`);
+            }
+          }
+        });
+
+        pedidosBipAntigoRef.current = mapNovo;
+        setPedidosBip(mapNovo);
       }
     };
+
+    // Carrega a primeira vez ao abrir
     fetchAuths();
 
-    const channel = supabase.channel(`auths_${req.id}_${usuarioLogado.username}`)
-      .on('postgres', { event: 'UPDATE', schema: 'public', table: 'autorizacoes_bip', filter: `solicitante_nome=eq.${usuarioLogado.nome_completo}` }, (payload) => {
-        if (payload.new.requisicao_id === req.id) {
-          setPedidosBip(prev => ({ ...prev, [payload.new.produto_codigo]: payload.new.status }));
-          
-          if (payload.new.status === 'aprovado') {
-            tocarBipSucesso();
-            exibirPopup('sucesso', 'Bip Manual Liberado!', `O encarregado liberou a digitação manual para o produto:\n\n${payload.new.produto_descricao}\n\nO teclado do sistema já foi destravado.`);
-          } else if (payload.new.status === 'recusado') {
-            tocarBipErro();
-            exibirPopup('erro', 'Liberação Recusada', `Atenção, o encarregado recusou a liberação de digitação manual para:\n\n${payload.new.produto_descricao}`);
-          }
-        }
-      }).subscribe();
+    // Roda silenciosamente a cada 5 segundos
+    const intervaloAuth = setInterval(() => {
+      fetchAuths();
+    }, 5000);
 
-    return () => supabase.removeChannel(channel);
+    return () => clearInterval(intervaloAuth);
   }, [req.id, usuarioLogado, isEncarregado]);
+  // -------------------------------------------------------------------------
 
   const solicitarBipManual = async (item) => {
     if (!usuarioLogado?.encarregado_responsavel) {

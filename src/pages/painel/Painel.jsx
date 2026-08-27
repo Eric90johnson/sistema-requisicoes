@@ -19,6 +19,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const [idsDestacados, setIdsDestacados] = useState([]);
   const reqsAnterioresRef = useRef(requisicoes);
 
+  // --- CIRURGIA AQUI: O alerta agora checa de 5 em 5 segundos, sem depender de refresh! ---
   useEffect(() => {
     const buscarUltimoAlerta = async () => {
       const { data, error } = await supabase
@@ -31,12 +32,28 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
         const alerta = data[0];
         const jaIgnorado = localStorage.getItem(`alerta_ignorado_${alerta.id}`);
         if (!jaIgnorado) {
-          setAlertaDelta({ visivel: true, estagio: 'pergunta', produtos: alerta.lista_produtos, id: alerta.id });
+          // Só mostra se ele ainda não estiver visível na tela
+          setAlertaDelta(prev => {
+            if (prev.id !== alerta.id) {
+              return { visivel: true, estagio: 'pergunta', produtos: alerta.lista_produtos, id: alerta.id };
+            }
+            return prev;
+          });
         }
       }
     };
+
+    // Roda na primeira vez
     buscarUltimoAlerta();
+
+    // Roda silenciosamente a cada 5 segundos
+    const intervaloBuscaAlerta = setInterval(() => {
+      buscarUltimoAlerta();
+    }, 5000);
+
+    return () => clearInterval(intervaloBuscaAlerta);
   }, []);
+  // -----------------------------------------------------------------------------------------
 
   const handleRecusarAlerta = () => {
     setAlertaDelta(prev => ({ ...prev, estagio: 'despedida' }));
@@ -82,7 +99,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const temPedidoPendente = pedidosMarketplace.some(ped => ped.status === 'Pendente');
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
   
-  // --- CIRURGIA AQUI: Oculta as requisições "Recebimento" e "Cancelada" do Painel ---
   const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebimento' && req.status !== 'Cancelada');
 
   const getNomeLojaCurto = (nomeLoja) => {
@@ -157,7 +173,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     }
   };
 
-  // --- MOTOR DE CÁLCULO DE PRODUTIVIDADE (Volume + UPM) ---
   const rankingCalculado = useMemo(() => {
     const reqsValidas = requisicoes.filter(req => {
       if (!req.metricasSeparacao) return false;
@@ -200,7 +215,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       const upm = p.totalSegundos > 0 ? ((p.totalItens / p.totalSegundos) * 60) : 0;
       const upmFormatado = Number(upm.toFixed(1));
       
-      // NOVA REGRA DE JUSTIÇA: Multiplica as peças pela velocidade
       const pontuacaoFinal = Math.round(p.totalItens * upmFormatado);
 
       return {
@@ -212,7 +226,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       };
     });
 
-    // Ordena pela Pontuação Final (Quem trabalhou mais e melhor)
     rankingFinal.sort((a, b) => b.pontuacao - a.pontuacao); 
 
     return rankingFinal;
