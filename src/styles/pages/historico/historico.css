@@ -44,7 +44,7 @@
   border-radius: 8px;
   margin-bottom: 25px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 15px;
   border: 1px solid #eee;
 }
@@ -66,6 +66,12 @@
   border: 1px solid #ccc;
   border-radius: 5px;
   font-size: 0.95rem;
+  background-color: #fff;
+}
+
+.select-filtro-historico {
+  cursor: pointer;
+  outline-color: var(--cor-primaria);
 }
 
 .btn-limpar {
@@ -78,6 +84,7 @@
   font-weight: bold;
   height: 40px;
   align-self: flex-end;
+  transition: background-color 0.2s;
 }
 
 .btn-limpar:hover {
@@ -107,4 +114,72 @@
 
 .btn-exportar:hover {
   background-color: #219150;
+}
+
+/* ========================================================= */
+/* --- NOVO: ESTILOS PARA AS LINHAS EXPANSÍVEIS ---          */
+/* ========================================================= */
+
+.tr-clicavel-historico {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tr-clicavel-historico:hover {
+  background-color: #f4f9fc !important;
+}
+
+.linha-ativa-historico {
+  background-color: #eaf2f8 !important;
+}
+
+.linha-ativa-historico td {
+  border-bottom: none !important; /* Remove a linha de baixo para grudar na expansão */
+}
+
+.linha-expandida-historico td {
+  background-color: #fcfcfc;
+  padding: 0 !important;
+  border-bottom: 2px solid #3498db !important;
+}
+
+.conteudo-expandido-historico {
+  padding: 20px;
+  border-left: 5px solid #3498db;
+}
+
+.conteudo-expandido-historico h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #2c3e50;
+  font-size: 1.05rem;
+}
+
+/* Sub-tabela de produtos */
+.subtabela-historico {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: white;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.subtabela-historico th {
+  background-color: #eaf2f8;
+  color: #2980b9;
+  padding: 12px 10px;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.subtabela-historico td {
+  padding: 10px;
+  border-bottom: 1px solid #f1f2f6;
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.subtabela-historico tr:last-child td {
+  border-bottom: none;
 }
