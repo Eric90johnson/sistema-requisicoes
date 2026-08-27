@@ -19,7 +19,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const [idsDestacados, setIdsDestacados] = useState([]);
   const reqsAnterioresRef = useRef(requisicoes);
 
-  // --- CIRURGIA DE REDE AQUI: Smart Polling com setTimeout para evitar ERR_CONNECTION_CLOSED ---
   useEffect(() => {
     let isMounted = true;
     let timerId = null;
@@ -50,13 +49,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
         // Ignora falhas de rede silenciosamente e tenta na próxima rodada
       }
 
-      // Só agenda a PRÓXIMA busca depois que a atual terminar completamente
       if (isMounted) {
         timerId = setTimeout(loopBuscaAlerta, 5000);
       }
     };
 
-    // Inicia o loop
     loopBuscaAlerta();
 
     return () => {
@@ -64,7 +61,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       if (timerId) clearTimeout(timerId);
     };
   }, []);
-  // -----------------------------------------------------------------------------------------
 
   const handleRecusarAlerta = () => {
     setAlertaDelta(prev => ({ ...prev, estagio: 'despedida' }));
@@ -375,12 +371,14 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       onClick={() => aoAbrirDetalhes(req)} 
                       className={`linha-tabela-hover linha-tabela-clicavel ${getLinhaPrioridadeClass(req)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
                     >
+                      {/* Voltou ao padrão clean: apenas o texto do motivo e a prioridade embaixo */}
                       <td className="td-motivo-bold" title={req.motivo || ''}>
                         {req.motivo 
                           ? (req.motivo.length > 25 ? `${req.motivo.substring(0, 25)}...` : req.motivo) 
                           : '-'} 
                         {req.prioridade && <span className="span-prioridade-subtexto">Prioridade {req.prioridade}</span>}
                       </td>
+                      
                       <td>{req.id}</td>
                       <td><span className={`status-badge ${getStatusClass(req.status)}`}>{req.status}</span></td>
                       <td>{req.data}</td>

@@ -15,7 +15,6 @@ const parseValorMoeda = (valorStr) => {
   return Number(limpo) || 0;
 };
 
-// Adicionada a prop aoCancelarReq
 export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCancelarReq, requisicoes = [], produtosPreSelecionados = null, reqEmEdicao = null }) {
   
   const lojas = [
@@ -33,7 +32,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
   const [motivoOutro, setMotivoOutro] = useState('');
   const [prioridadeOutro, setPrioridadeOutro] = useState('3'); 
   
-  // --- Sistema de Histórico de Observações em formato de Lista ---
   const [listaObservacoes, setListaObservacoes] = useState([]); 
   const [novaObs, setNovaObs] = useState(''); 
 
@@ -61,7 +59,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
       setLojaPara(reqEmEdicao.destino);
       setSolicitante(reqEmEdicao.solicitante);
       
-      const isMotivoPadrao = ['Rota para clientes', 'Reposição de estoque', 'Produtos para provadores'].includes(reqEmEdicao.motivo);
+      const isMotivoPadrao = ['Rota para clientes', 'Reposição de estoque', 'Produtos para provadores', 'Reposição Interna'].includes(reqEmEdicao.motivo);
       if (isMotivoPadrao) {
         setMotivo(reqEmEdicao.motivo);
       } else {
@@ -72,7 +70,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
       
       setItensAdicionados(reqEmEdicao.listaItens || []);
       
-      // Carrega o histórico antigo de notas, se existir
       let obsExistentes = [];
       if (Array.isArray(reqEmEdicao.historico?.observacoesGerais)) {
         obsExistentes = reqEmEdicao.historico.observacoesGerais;
@@ -97,7 +94,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
     setAlerta({ ...alerta, visivel: false });
   };
 
-  // --- Funções de manipulação das observações no form ---
   const handleAdicionarObservacao = () => {
     if (!novaObs.trim()) {
       mostrarAlerta('aviso', 'Atenção', 'Digite alguma instrução ou observação antes de adicionar.');
@@ -121,7 +117,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
   const handleRemoverObservacao = (id_obs) => {
     setListaObservacoes(listaObservacoes.filter(obs => obs.id_obs !== id_obs));
   };
-  // -------------------------------------------------------------
 
   useEffect(() => {
     if (isModoVitrine && !alertaPreenchimentoExibido.current && baseProdutos.length > 0) {
@@ -381,26 +376,33 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
 
     let motivoFinal = motivo;
     let grauPrioridade = 3; 
-
-    if (!motivo) { 
-      mostrarAlerta('erro', 'Campo Obrigatório', 'Selecione o motivo da transferência antes de prosseguir.'); 
-      return; 
-    }
-
-    if (motivo === 'Rota para clientes') {
-      grauPrioridade = 1;
-    } else if (motivo === 'Reposição de estoque') {
-      grauPrioridade = 2;
-    } else if (motivo === 'Produtos para provadores') {
-      grauPrioridade = 3;
-    } else if (motivo === 'Outros') {
-      if (!motivoOutro.trim()) {
-        mostrarAlerta('erro', 'Campo Obrigatório', 'Você selecionou "Outros". Por favor, especifique o motivo escrevendo na caixa abaixo.'); 
+    
+    // --- CIRURGIA AQUI: Gatilho Automático de Reposição Interna ---
+    if (lojaDe === lojaPara) {
+      motivoFinal = 'Reposição Interna';
+      grauPrioridade = 3; // Mantém prioridade baixa para não furar fila do CD principal
+    } else {
+      if (!motivo) { 
+        mostrarAlerta('erro', 'Campo Obrigatório', 'Selecione o motivo da transferência antes de prosseguir.'); 
         return; 
       }
-      motivoFinal = motivoOutro;
-      grauPrioridade = Number(prioridadeOutro);
+
+      if (motivo === 'Rota para clientes') {
+        grauPrioridade = 1;
+      } else if (motivo === 'Reposição de estoque') {
+        grauPrioridade = 2;
+      } else if (motivo === 'Produtos para provadores') {
+        grauPrioridade = 3;
+      } else if (motivo === 'Outros') {
+        if (!motivoOutro.trim()) {
+          mostrarAlerta('erro', 'Campo Obrigatório', 'Você selecionou "Outros". Por favor, especifique o motivo escrevendo na caixa abaixo.'); 
+          return; 
+        }
+        motivoFinal = motivoOutro;
+        grauPrioridade = Number(prioridadeOutro);
+      }
     }
+    // ----------------------------------------------------------------
 
     if (itensAdicionados.length === 0) { 
       mostrarAlerta('erro', 'Lista Vazia', 'Adicione pelo menos um produto na lista antes de gravar a requisição.'); 
@@ -435,7 +437,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
     const dataAtualString = new Date().toLocaleString('pt-BR');
     const nomeEditorFinal = reqEmEdicao ? reqEmEdicao.editorTemporario : solicitante;
     
-    // Anexa a lista pronta no histórico
     const novoHistorico = reqEmEdicao 
       ? { ...reqEmEdicao.historico, observacoesGerais: listaObservacoes, 'Última Edição': `Por ${nomeEditorFinal} em ${dataAtualString}` }
       : { observacoesGerais: listaObservacoes };
@@ -461,7 +462,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
     });
   };
 
-  // --- NOVO: LÓGICA DE CONFIRMAÇÃO DO CANCELAMENTO ---
   const handleBotaoCancelar = () => {
     mostrarAlerta(
       'aviso',
@@ -477,7 +477,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
       'Não, Voltar'
     );
   };
-  // ---------------------------------------------------
 
   const valorTotalRequisicao = itensAdicionados.reduce((total, item) => {
     return total + ((item.custoUnitario || 0) * item.quantidade);
@@ -515,42 +514,45 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
             </div>
           </div>
 
-          <div className="campo-loja">
-            <label>Motivo da Transferência:</label>
-            <select className="input-item" value={motivo} onChange={(e) => setMotivo(e.target.value)}>
-              <option value="">Selecione um motivo...</option>
-              <option value="Rota para clientes">Rota para clientes (Prioridade Alta)</option>
-              <option value="Reposição de estoque">Reposição de estoque (Prioridade Média)</option>
-              <option value="Produtos para provadores">Produtos para provadores (Prioridade Baixa)</option>
-              <option value="Outros">Outros (Especificar)</option>
-            </select>
-            
-            {motivo === 'Outros' && (
-              <div className="linha-dupla linha-dupla-motivo">
-                <div className="campo-loja campo-loja-flex-2">
-                  <input 
-                    type="text" 
-                    className="input-item" 
-                    placeholder="Especifique o motivo da requisição..." 
-                    value={motivoOutro} 
-                    onChange={(e) => setMotivoOutro(e.target.value)} 
-                  />
+          {/* Oculta o motivo se for a mesma loja (Reposição Interna) */}
+          {lojaDe !== lojaPara && (
+            <div className="campo-loja">
+              <label>Motivo da Transferência:</label>
+              <select className="input-item" value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+                <option value="">Selecione um motivo...</option>
+                <option value="Rota para clientes">Rota para clientes (Prioridade Alta)</option>
+                <option value="Reposição de estoque">Reposição de estoque (Prioridade Média)</option>
+                <option value="Produtos para provadores">Produtos para provadores (Prioridade Baixa)</option>
+                <option value="Outros">Outros (Especificar)</option>
+              </select>
+              
+              {motivo === 'Outros' && (
+                <div className="linha-dupla linha-dupla-motivo">
+                  <div className="campo-loja campo-loja-flex-2">
+                    <input 
+                      type="text" 
+                      className="input-item" 
+                      placeholder="Especifique o motivo da requisição..." 
+                      value={motivoOutro} 
+                      onChange={(e) => setMotivoOutro(e.target.value)} 
+                    />
+                  </div>
+                  <div className="campo-loja campo-loja-flex-1">
+                    <select 
+                      className="input-item" 
+                      value={prioridadeOutro} 
+                      onChange={(e) => setPrioridadeOutro(e.target.value)}
+                      title="Defina o nível de urgência desta requisição"
+                    >
+                      <option value="1">Prioridade 1 (Alta / Urgente)</option>
+                      <option value="2">Prioridade 2 (Média)</option>
+                      <option value="3">Prioridade 3 (Baixa)</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="campo-loja campo-loja-flex-1">
-                  <select 
-                    className="input-item" 
-                    value={prioridadeOutro} 
-                    onChange={(e) => setPrioridadeOutro(e.target.value)}
-                    title="Defina o nível de urgência desta requisição"
-                  >
-                    <option value="1">Prioridade 1 (Alta / Urgente)</option>
-                    <option value="2">Prioridade 2 (Média)</option>
-                    <option value="3">Prioridade 3 (Baixa)</option>
-                  </select>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
           
           <div className="campo-loja obs-geral-box" style={{ marginTop: '10px' }}>
             <label>📝 Observações Gerais / Instruções da Requisição:</label>
@@ -684,7 +686,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
         )}
         
         <div className="rodape-formulario">
-          {/* NOVO: BOTÃO DE CANCELAR REQUISIÇÃO APARECE APENAS NA EDIÇÃO */}
           {reqEmEdicao && (
             <button className="btn-cancelar-req" onClick={handleBotaoCancelar}>
               🗑️ Cancelar Requisição

@@ -171,14 +171,12 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     return () => clearInterval(intervalo);
   }, [req.status, req.historico, req.metricasSeparacao]);
 
-  // --- CIRURGIA AQUI: Formatação alterada para incluir Horas (HH:MM:SS) ---
   const formatarTempo = (segundos) => {
     const h = Math.floor(segundos / 3600).toString().padStart(2, '0');
     const m = Math.floor((segundos % 3600) / 60).toString().padStart(2, '0');
     const s = (segundos % 60).toString().padStart(2, '0');
     return `${h}:${m}:${s}`;
   };
-  // ------------------------------------------------------------------------
 
   useEffect(() => {
     let scanner = null;
@@ -547,9 +545,16 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
             <option value="Pendente">Pendente</option>
             <option value="Em Separação">Em Separação</option>
             <option value="Separado">Separado</option>
-            <option value="Saída de produtos">Saída de produtos</option>
-            <option value="Faturamento">Faturamento</option>
-            <option value="Transporte">Transporte</option>
+            
+            {/* CIRURGIA AQUI: Oculta etapas burocráticas se for Reposição Interna */}
+            {req.motivo !== 'Reposição Interna' && (
+              <>
+                <option value="Saída de produtos">Saída de produtos</option>
+                <option value="Faturamento">Faturamento</option>
+                <option value="Transporte">Transporte</option>
+              </>
+            )}
+            
             <option value="Recebimento">Recebimento</option>
           </select>
           
