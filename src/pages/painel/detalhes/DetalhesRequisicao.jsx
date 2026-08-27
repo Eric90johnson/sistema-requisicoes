@@ -267,6 +267,9 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     exibirPopup('info', 'Progresso Salvo', 'As quantidades bipadas já estão gravadas na nuvem de forma segura.\n\nAtenção: O cronômetro CONTINUA CORRENDO. Você pode sair desta tela e voltar mais tarde para finalizar a separação.');
   };
 
+  // --- BLINDAGEN GLOBAL DO COMPONENTE ---
+  const isReposicaoInterna = req.motivo === 'Reposição Interna' || (req.origem && req.destino && req.origem === req.destino);
+
   const finalizarSeparacaoValidada = async () => {
     if (todosBipados) {
       const respAtual = req.historico['Em Separação'] || 'Equipe Desconhecida';
@@ -283,12 +286,10 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
       
       let pontosGanhos = Math.round(itensFisicos * upmFormatado);
 
-      // --- MULTIPLICAÇÃO POR 2 SE FOR REPOSIÇÃO INTERNA ---
-      const isReposicaoInterna = req.motivo === 'Reposição Interna' || req.origem === req.destino;
+      // Usando a constante global para não duplicar código
       if (isReposicaoInterna) {
         pontosGanhos *= 2;
       }
-      // ----------------------------------------------------
 
       let msgFinal = `Separação Concluída!\n\n`;
       msgFinal += `📦 Total Bipado: ${itensFisicos} un\n`;
@@ -399,8 +400,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     setNovaObs('');
     exibirPopup('sucesso', 'Salvo', 'A observação foi registrada no histórico!');
   };
-
-  const isReposicaoInterna = req.motivo === 'Reposição Interna' || req.origem === req.destino;
 
   return (
     <div className="detalhes-container">
@@ -598,6 +597,7 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
               const itensFisicos = req.metricasSeparacao.totalItensFisicos || 0;
               const upm = (itensFisicos / tempoSeg) * 60;
               const upmFormat = Number(upm.toFixed(1));
+              
               let pts = Math.round(itensFisicos * upmFormat);
 
               if (isReposicaoInterna) {

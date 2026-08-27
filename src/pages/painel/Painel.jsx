@@ -1,7 +1,9 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import '../../styles/pages/painel/painel.css';
+import '../../styles/pages/painel/ranking/ranking.css'; // IMPORTAÇÃO DO NOVO CSS DO RANKING
 import PainelMarketplace from '../marketplace/painel/PainelMarketplace'; 
 import { supabase } from '../../services/supabase';
+import { calcularRanking } from './utils/calculadoraRanking';
 
 export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, pedidosMarketplace = [], aoAbrirDetalhes }) {
   
@@ -10,6 +12,10 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const [mostrarRanking, setMostrarRanking] = useState(false);
   const [dataInicioRanking, setDataInicioRanking] = useState('');
   const [dataFimRanking, setDataFimRanking] = useState('');
+  
+  // Estados do Extrato e Alertas visuais
+  const [colaboradorExpandido, setColaboradorExpandido] = useState(null);
+  const [mostrarAvisoData, setMostrarAvisoData] = useState(false); // NOVO ESTADO
 
   const [filtros, setFiltros] = useState({});
   const [colunaFiltroAberta, setColunaFiltroAberta] = useState(null);
@@ -45,9 +51,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
             });
           }
         }
-      } catch (e) {
-        // Ignora falhas de rede silenciosamente e tenta na próxima rodada
-      }
+      } catch (e) {}
 
       if (isMounted) {
         timerId = setTimeout(loopBuscaAlerta, 5000);
@@ -178,7 +182,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const getLinhaPrioridadeClass = (req) => {
     if (req.status === 'Transporte') return 'prioridade-baixa';
-    
     switch (req.prioridade) {
       case 1: return 'prioridade-alta';   
       case 2: return 'prioridade-media';  
@@ -188,62 +191,27 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   };
 
   const rankingCalculado = useMemo(() => {
-    const reqsValidas = requisicoes.filter(req => {
-      if (!req.metricasSeparacao) return false;
-      
-      if (dataInicioRanking || dataFimRanking) {
-        const dataFimReal = req.metricasSeparacao.finalizadoEm ? new Date(req.metricasSeparacao.finalizadoEm) : null;
-        if (!dataFimReal) return false;
-        
-        if (dataInicioRanking) {
-          const inicio = new Date(`${dataInicioRanking}T00:00:00`);
-          if (dataFimReal < inicio) return false;
-        }
-        if (dataFimRanking) {
-          const fim = new Date(`${dataFimRanking}T23:59:59`);
-          if (dataFimReal > fim) return false;
-        }
-      }
-      return true;
-    });
-
-    const pontuacoes = {};
-    reqsValidas.forEach(req => {
-      const resp = req.metricasSeparacao.responsavel;
-      const tempoSeg = req.metricasSeparacao.tempoTotalSegundos || 1; 
-      const itensFisicos = req.metricasSeparacao.totalItensFisicos || (req.listaItens ? req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0) : 0);
-      
-      const nomes = resp.split('+').map(n => n.trim());
-      nomes.forEach(nome => {
-        if (!nome) return;
-        if (!pontuacoes[nome]) {
-          pontuacoes[nome] = { nome, totalItens: 0, totalSegundos: 0, qtdSeparacoes: 0 };
-        }
-        pontuacoes[nome].totalItens += itensFisicos;
-        pontuacoes[nome].totalSegundos += tempoSeg;
-        pontuacoes[nome].qtdSeparacoes += 1;
-      });
-    });
-
-    const rankingFinal = Object.values(pontuacoes).map(p => {
-      const upm = p.totalSegundos > 0 ? ((p.totalItens / p.totalSegundos) * 60) : 0;
-      const upmFormatado = Number(upm.toFixed(1));
-      
-      const pontuacaoFinal = Math.round(p.totalItens * upmFormatado);
-
-      return {
-        nome: p.nome,
-        upm: upmFormatado,
-        totalItens: p.totalItens,
-        qtdSeparacoes: p.qtdSeparacoes,
-        pontuacao: pontuacaoFinal
-      };
-    });
-
-    rankingFinal.sort((a, b) => b.pontuacao - a.pontuacao); 
-
-    return rankingFinal;
+    return calcularRanking(requisicoes, dataInicioRanking, dataFimRanking);
   }, [requisicoes, dataInicioRanking, dataFimRanking]);
+
+  const formatarTempo = (segundos) => {
+    const h = Math.floor(segundos / 3600).toString().padStart(2, '0');
+    const m = Math.floor((segundos % 3600) / 60).toString().padStart(2, '0');
+    const s = (segundos % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
+
+  // --- Função Ajustada com o novo Alerta Visual ---
+  const handleExpandirColaborador = (nomeColaborador) => {
+    if (!dataInicioRanking && !dataFimRanking) {
+      setMostrarAvisoData(true);
+      // Remove o aviso automaticamente após 5 segundos
+      setTimeout(() => setMostrarAvisoData(false), 5000);
+      return;
+    }
+    setMostrarAvisoData(false);
+    setColaboradorExpandido(prev => prev === nomeColaborador ? null : nomeColaborador);
+  };
 
   const RenderHeaderFiltro = ({ titulo, chave, opcoes }) => {
     const estaAberto = colunaFiltroAberta === chave;
@@ -324,7 +292,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
         </button>
 
         <div className="ranking-btn-container">
-          <button className="btn-ranking-abrir" onClick={() => setMostrarRanking(true)}>🏆 Ranking da Equipe</button>
+          <button className="btn-ranking-abrir" onClick={() => { setMostrarRanking(true); setColaboradorExpandido(null); setMostrarAvisoData(false); }}>🏆 Ranking da Equipe</button>
         </div>
       </div>
 
@@ -371,7 +339,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       onClick={() => aoAbrirDetalhes(req)} 
                       className={`linha-tabela-hover linha-tabela-clicavel ${getLinhaPrioridadeClass(req)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
                     >
-                      {/* Voltou ao padrão clean: apenas o texto do motivo e a prioridade embaixo */}
                       <td className="td-motivo-bold" title={req.motivo || ''}>
                         {req.motivo 
                           ? (req.motivo.length > 25 ? `${req.motivo.substring(0, 25)}...` : req.motivo) 
@@ -426,14 +393,22 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
               <div className="ranking-filtros">
                 <div className="filtro-grupo">
                   <label>Data Início:</label>
-                  <input type="date" value={dataInicioRanking} onChange={(e) => setDataInicioRanking(e.target.value)} />
+                  <input type="date" value={dataInicioRanking} onChange={(e) => {setDataInicioRanking(e.target.value); setMostrarAvisoData(false);}} />
                 </div>
                 <div className="filtro-grupo">
                   <label>Data Fim:</label>
-                  <input type="date" value={dataFimRanking} onChange={(e) => setDataFimRanking(e.target.value)} />
+                  <input type="date" value={dataFimRanking} onChange={(e) => {setDataFimRanking(e.target.value); setMostrarAvisoData(false);}} />
                 </div>
-                <button className="btn-limpar-ranking" onClick={() => {setDataInicioRanking(''); setDataFimRanking('');}}>Limpar</button>
+                <button className="btn-limpar-ranking" onClick={() => {setDataInicioRanking(''); setDataFimRanking(''); setColaboradorExpandido(null); setMostrarAvisoData(false);}}>Limpar</button>
               </div>
+
+              {/* RENDERIZAÇÃO DO NOVO ALERTA VISUAL */}
+              {mostrarAvisoData && (
+                <div className="alerta-filtro-periodo">
+                  <span>⚠️</span>
+                  Selecione uma Data de Início e/ou Fim para visualizar o extrato detalhado do colaborador.
+                </div>
+              )}
 
               {rankingCalculado.length === 0 ? (
                 <div className="div-vazia-ranking">
@@ -472,22 +447,73 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                         <th>Colaborador</th>
                         <th>Pedidos</th>
                         <th>Total Peças</th>
-                        <th>Velocidade</th>
+                        <th>Velocidade Média</th>
                         <th>Pontuação 🏆</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rankingCalculado.map((colab, index) => (
-                        <tr key={index} className={index === 0 ? 'linha-ranking-primeiro' : 'linha-ranking-normal'}>
-                          <td>{index + 1}º</td>
-                          <td>{colab.nome}</td>
-                          <td>{colab.qtdSeparacoes}</td>
-                          <td>{colab.totalItens} un</td>
-                          <td>{colab.upm} un/min</td>
-                          <td className="upm-destaque">
-                            {colab.pontuacao} pts
-                          </td>
-                        </tr>
+                        <React.Fragment key={index}>
+                          <tr 
+                            className={`linha-tabela-clicavel ${index === 0 ? 'linha-ranking-primeiro' : 'linha-ranking-normal'}`}
+                            onClick={() => handleExpandirColaborador(colab.nome)}
+                            title="Clique para ver o extrato de pontuação"
+                          >
+                            <td>{index + 1}º</td>
+                            <td><strong>{colab.nome}</strong></td>
+                            <td>{colab.qtdSeparacoes}</td>
+                            <td>{colab.totalItens} un</td>
+                            <td>{colab.upm} un/min</td>
+                            <td className="upm-destaque">
+                              {colab.pontuacao} pts
+                            </td>
+                          </tr>
+                          
+                          {/* LINHA EXPANDIDA DO EXTRATO DE PONTUAÇÃO */}
+                          {colaboradorExpandido === colab.nome && (
+                            <tr style={{ backgroundColor: '#f9fafd' }}>
+                              <td colSpan="6" style={{ padding: '20px', borderBottom: '2px solid #bdc3c7' }}>
+                                <div style={{ border: '1px solid #dcdde1', borderRadius: '8px', padding: '15px', backgroundColor: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                  <h4 style={{ margin: '0 0 15px 0', color: '#2c3e50', borderBottom: '1px solid #ecf0f1', paddingBottom: '8px' }}>
+                                    🧾 Extrato de Pedidos — {colab.nome}
+                                  </h4>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
+                                    <thead>
+                                      <tr style={{ backgroundColor: '#f4f6f8', color: '#7f8c8d' }}>
+                                        <th style={{ padding: '10px' }}>Nº Req</th>
+                                        <th style={{ padding: '10px' }}>Tipo (Motivo)</th>
+                                        <th style={{ padding: '10px' }}>Tempo de Separação</th>
+                                        <th style={{ padding: '10px' }}>Itens Bipados</th>
+                                        <th style={{ padding: '10px' }}>UPM Real</th>
+                                        <th style={{ padding: '10px', color: '#e67e22' }}>Pontos Ganhos</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {colab.historicoReqs.map(h => (
+                                        <tr key={h.id} style={{ borderBottom: '1px solid #ecf0f1' }}>
+                                          <td style={{ padding: '10px' }}><strong>{h.id}</strong></td>
+                                          <td style={{ padding: '10px' }}>
+                                            {h.isReposicaoInterna ? (
+                                              <span style={{ color: '#8e44ad', fontWeight: 'bold' }}>⭐ Reposição Interna (x2)</span>
+                                            ) : (
+                                              <span>{h.motivo}</span>
+                                            )}
+                                          </td>
+                                          <td style={{ padding: '10px' }}>{formatarTempo(h.tempoSegundos)}</td>
+                                          <td style={{ padding: '10px' }}>{h.itensFisicos} un</td>
+                                          <td style={{ padding: '10px' }}>{h.upm} un/min</td>
+                                          <td style={{ padding: '10px', fontWeight: 'bold', color: '#27ae60' }}>
+                                            +{h.pontos} pts
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
