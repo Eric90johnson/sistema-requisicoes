@@ -280,7 +280,15 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
       const itensFisicos = metricasFinais.totalItensFisicos || 0;
       const upm = (itensFisicos / tempoSegundos) * 60;
       const upmFormatado = Number(upm.toFixed(1));
-      const pontosGanhos = Math.round(itensFisicos * upmFormatado);
+      
+      let pontosGanhos = Math.round(itensFisicos * upmFormatado);
+
+      // --- MULTIPLICAÇÃO POR 2 SE FOR REPOSIÇÃO INTERNA ---
+      const isReposicaoInterna = req.motivo === 'Reposição Interna' || req.origem === req.destino;
+      if (isReposicaoInterna) {
+        pontosGanhos *= 2;
+      }
+      // ----------------------------------------------------
 
       let msgFinal = `Separação Concluída!\n\n`;
       msgFinal += `📦 Total Bipado: ${itensFisicos} un\n`;
@@ -392,7 +400,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     exibirPopup('sucesso', 'Salvo', 'A observação foi registrada no histórico!');
   };
 
-  // --- BLINDAGEN DUPLA: Identifica se é Reposição Interna pelo motivo OU se origem == destino ---
   const isReposicaoInterna = req.motivo === 'Reposição Interna' || req.origem === req.destino;
 
   return (
@@ -549,7 +556,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
             <option value="Em Separação">Em Separação</option>
             <option value="Separado">Separado</option>
             
-            {/* BLINDAGEN DUPLA: Oculta etapas se for Reposição Interna OU se origem == destino */}
             {!isReposicaoInterna && (
               <>
                 <option value="Saída de produtos">Saída de produtos</option>
@@ -592,7 +598,11 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
               const itensFisicos = req.metricasSeparacao.totalItensFisicos || 0;
               const upm = (itensFisicos / tempoSeg) * 60;
               const upmFormat = Number(upm.toFixed(1));
-              const pts = Math.round(itensFisicos * upmFormat);
+              let pts = Math.round(itensFisicos * upmFormat);
+
+              if (isReposicaoInterna) {
+                pts *= 2;
+              }
 
               return (
                 <div className="cronometro-eficiencia" style={{ color: '#27ae60' }}>

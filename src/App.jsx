@@ -27,6 +27,9 @@ function App() {
   const [produtosPreSelecionados, setProdutosPreSelecionados] = useState(null);
   const [reqEmEdicao, setReqEmEdicao] = useState(null); 
 
+  // Estado para gerenciar os itens da pré-requisição vindos da Base de Dados
+  const [itensPreRequisicao, setItensPreRequisicao] = useState([]);
+
   const [baseProdutos, setBaseProdutos] = useState([]);
   const [requisicoes, setRequisicoes] = useState([]);
   const [pedidosMarketplace, setPedidosMarketplace] = useState([]);
@@ -112,7 +115,7 @@ function App() {
     }
   }, []);
 
-  // --- CIRURGIA DE REDE: Loop Sequencial Inteligente (Smart Polling) ---
+  // Smart Polling
   useEffect(() => {
     if (!isLogado) return;
 
@@ -135,9 +138,7 @@ function App() {
               return data;
             });
           }
-        } catch (e) {
-          // Engole o erro silenciosamente se a internet oscilar
-        }
+        } catch (e) {}
       }
     };
 
@@ -148,15 +149,11 @@ function App() {
 
     const loopSincronizacao = async () => {
       if (!isMounted) return;
-      
       try {
         await carregarDadosDaNuvem(true, true);
         await fetchPendentes();
-      } catch (e) {
-        // Ignora falhas de rede no polling e tenta na próxima rodada
-      }
+      } catch (e) {}
       
-      // Só agenda a PRÓXIMA busca depois que a atual terminar
       if (isMounted) {
         timerId = setTimeout(loopSincronizacao, 5000);
       }
@@ -169,7 +166,6 @@ function App() {
       if (timerId) clearTimeout(timerId);
     };
   }, [isLogado, carregarDadosDaNuvem, usuarioLogado]);
-  // ---------------------------------------------------------------------
 
   const tocarSomNotificacao = () => {
     try {
@@ -359,6 +355,24 @@ function App() {
   const abrirDetalhes = (req) => { setReqSelecionada(req); setTelaAtual('detalhes'); };
   const handleSalvarPedidosMarketplace = (novosPedidos) => { setPedidosMarketplace([...novosPedidos, ...pedidosMarketplace]); setTelaAtual('painel'); };
 
+  // Funções da Pré-requisição (Base de Dados)
+  const handleAdicionarPreRequisicao = (produto) => {
+    setItensPreRequisicao(prev => {
+      if (prev.some(p => String(p.codigo) === String(produto.codigo))) return prev;
+      return [...prev, produto];
+    });
+  };
+
+  const handleRemoverPreRequisicao = (codigoProd) => {
+    setItensPreRequisicao(prev => prev.filter(p => String(p.codigo) !== String(codigoProd)));
+  };
+
+  const handleIrParaPreRequisicao = () => {
+    setProdutosPreSelecionados(itensPreRequisicao);
+    setItensPreRequisicao([]); 
+    setTelaAtual('nova');
+  };
+
   if (!isLogado) return <Login aoLogar={handleLogar} />;
 
   return (
@@ -394,7 +408,17 @@ function App() {
             {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} aoIniciarEdicao={handleIniciarEdicao} aoAtualizarObservacoes={handleAtualizarObservacoes} recordesGlobais={recordesGlobais} />}
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
-            {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => setTelaAtual('painel')} produtos={baseProdutos} setProdutos={setBaseProdutos} />}
+            {telaAtual === 'base-dados' && (
+              <BaseDados 
+                aoVoltar={() => setTelaAtual('painel')} 
+                produtos={baseProdutos} 
+                setProdutos={setBaseProdutos} 
+                itensPreRequisicao={itensPreRequisicao}
+                aoAdicionarPreRequisicao={handleAdicionarPreRequisicao}
+                aoRemoverPreRequisicao={handleRemoverPreRequisicao}
+                aoIrParaPreRequisicao={handleIrParaPreRequisicao}
+              />
+            )}
             {telaAtual === 'admin' && usuarioLogado?.username === 'admin' && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
           </>
         )}

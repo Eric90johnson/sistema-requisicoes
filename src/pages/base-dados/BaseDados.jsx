@@ -1,27 +1,35 @@
-import { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import '../../styles/pages/base-dados/baseDados.css';
 
-export default function BaseDados({ aoVoltar, produtos }) {
-  // NOVOS ESTADOS: Múltiplas barras de pesquisa independentes
+const parseValorMoeda = (valorStr) => {
+  if (!valorStr) return 0;
+  if (typeof valorStr === 'number') return valorStr;
+  let limpo = valorStr.toString().replace(/[^\d.,-]/g, '');
+  if (limpo.includes('.') && limpo.includes(',')) {
+    limpo = limpo.replace(/\./g, '');
+  }
+  limpo = limpo.replace(',', '.');
+  return Number(limpo) || 0;
+};
+
+export default function BaseDados({ aoVoltar, produtos, itensPreRequisicao = [], aoAdicionarPreRequisicao, aoRemoverPreRequisicao, aoIrParaPreRequisicao }) {
   const [buscaCodigo, setBuscaCodigo] = useState('');
   const [buscaDescricao, setBuscaDescricao] = useState('');
   const [buscaCodigoBarra, setBuscaCodigoBarra] = useState('');
   const [buscaMarca, setBuscaMarca] = useState('');
 
-  // Estados dos Filtros Avançados (Menu Excel)
+  const [linhaExpandida, setLinhaExpandida] = useState(null);
+
   const [menuAberto, setMenuAberto] = useState(null);
   const [filtrosAtivos, setFiltrosAtivos] = useState({});
   const [ordenacao, setOrdenacao] = useState({ coluna: null, direcao: null });
   
-  // Estados temporários do menu
   const [filtroTemporario, setFiltroTemporario] = useState([]);
   const [valoresUnicosMenu, setValoresUnicosMenu] = useState([]);
   const [buscaMenu, setBuscaMenu] = useState('');
 
-  // Estado para a Renderização Progressiva (Lazy Load)
   const [itensVisiveis, setItensVisiveis] = useState(50);
 
-  // Estado para armazenar a largura individual de cada coluna
   const [larguras, setLarguras] = useState({
     codigo: 180,
     descricao: 350,
@@ -39,7 +47,6 @@ export default function BaseDados({ aoVoltar, produtos }) {
   const startX = useRef(0);
   const startLargura = useRef(0);
 
-  // 1. Funções de Redimensionamento das Colunas
   const iniciarRedimensionamento = (e, coluna) => {
     arrastandoCol.current = coluna;
     startX.current = e.pageX;
@@ -52,7 +59,6 @@ export default function BaseDados({ aoVoltar, produtos }) {
   const moverRedimensionamento = (e) => {
     if (!arrastandoCol.current) return;
     const delta = e.pageX - startX.current;
-    
     const novaLargura = Math.max(45, startLargura.current + delta); 
     
     const thElement = document.getElementById(`th-${arrastandoCol.current}`);
@@ -77,14 +83,10 @@ export default function BaseDados({ aoVoltar, produtos }) {
       if (thElement) {
         const larguraFinal = parseInt(thElement.style.width, 10);
         if (!isNaN(larguraFinal)) {
-          setLarguras(prev => ({
-            ...prev,
-            [arrastandoCol.current]: larguraFinal
-          }));
+          setLarguras(prev => ({ ...prev, [arrastandoCol.current]: larguraFinal }));
         }
       }
     }
-
     arrastandoCol.current = null;
     document.removeEventListener('mousemove', moverRedimensionamento);
     document.removeEventListener('mouseup', pararRedimensionamento);
@@ -97,7 +99,6 @@ export default function BaseDados({ aoVoltar, produtos }) {
     };
   }, []);
 
-  // 2. Funções do Menu Excel
   const abrirMenu = (coluna) => {
     let tempProdutos = produtos;
     Object.keys(filtrosAtivos).forEach(col => {
@@ -167,10 +168,8 @@ export default function BaseDados({ aoVoltar, produtos }) {
     }
   };
 
-  // 3. LÓGICA FINAL: Cruzamento de Filtros e Ordenação
   let produtosFiltrados = [...produtos];
 
-  // APLICA AS BUSCAS ESPECÍFICAS (Filtros independentes)
   if (buscaCodigo.trim() !== '') {
     const termo = buscaCodigo.toLowerCase();
     produtosFiltrados = produtosFiltrados.filter(p => p.codigo && p.codigo.toLowerCase().includes(termo));
@@ -188,14 +187,12 @@ export default function BaseDados({ aoVoltar, produtos }) {
     produtosFiltrados = produtosFiltrados.filter(p => p.marca && p.marca.toLowerCase().includes(termo));
   }
   
-  // Aplica os filtros de coluna (Excel)
   Object.keys(filtrosAtivos).forEach(col => {
     if (filtrosAtivos[col]) {
       produtosFiltrados = produtosFiltrados.filter(p => filtrosAtivos[col].includes(p[col]));
     }
   });
 
-  // Aplica a ordenação
   if (ordenacao.coluna) {
     produtosFiltrados.sort((a, b) => {
       let valA = a[ordenacao.coluna];
@@ -242,11 +239,7 @@ export default function BaseDados({ aoVoltar, produtos }) {
         style={{ width: `${larguras[chave]}px`, minWidth: `${larguras[chave]}px` }} 
       >
         <div className="th-excel">
-          
-          <span className="th-titulo-texto" title={titulo}>
-            {titulo}
-          </span>
-          
+          <span className="th-titulo-texto" title={titulo}>{titulo}</span>
           <button 
             className="btn-filtro-excel" 
             onClick={() => abrirMenu(chave)}
@@ -278,7 +271,6 @@ export default function BaseDados({ aoVoltar, produtos }) {
             </>
           )}
         </div>
-        
         <div className="resizer" onMouseDown={(e) => iniciarRedimensionamento(e, chave)}></div>
       </th>
     );
@@ -296,22 +288,52 @@ export default function BaseDados({ aoVoltar, produtos }) {
 
   const temBuscaAtiva = buscaCodigo || buscaDescricao || buscaCodigoBarra || buscaMarca;
 
+  const toggleExpandirLinha = (codigoProd) => {
+    setLinhaExpandida(prev => (prev === codigoProd ? null : codigoProd));
+  };
+
+  const isProdutoNaPreRequisicao = (codigoProd) => {
+    return itensPreRequisicao.some(item => String(item.codigo) === String(codigoProd));
+  };
+
   return (
     <div className="base-dados-container">
-      <div className="base-dados-header">
+      <div className="base-dados-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Consulta de Estoque e Produtos</h2>
-        <button className="btn-voltar" onClick={aoVoltar}>← Voltar ao Painel</button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {itensPreRequisicao.length > 0 && (
+            <button 
+              className="btn-ir-pre-requisicao"
+              onClick={aoIrParaPreRequisicao}
+              style={{
+                backgroundColor: '#27ae60',
+                color: 'white',
+                border: 'none',
+                padding: '10px 18px',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+              }}
+            >
+              🛒 Ir para Pré-requisição ({itensPreRequisicao.length})
+            </button>
+          )}
+          <button className="btn-voltar" onClick={aoVoltar}>← Voltar ao Painel</button>
+        </div>
       </div>
 
       <div className="acoes-base" style={{ padding: '15px', backgroundColor: '#e8f4f8', borderLeft: '4px solid #3498db', marginBottom: '20px', borderRadius: '4px' }}>
         <p style={{ margin: 0, color: '#2c3e50' }}>
-          <strong>Aviso:</strong> Esta tela é exclusiva para consulta. A atualização da base de dados é realizada periodicamente pelo administrador do sistema.
+          <strong>Dica de Loja:</strong> Clique em qualquer linha do produto para selecioná-lo e adicioná-lo à sua pré-requisição de reposição interna.
         </p>
       </div>
 
       {produtos.length > 0 ? (
         <>
-          {/* Múltiplas Caixas de Pesquisa */}
           <div style={{ marginBottom: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
             <input 
               type="text" 
@@ -378,19 +400,73 @@ export default function BaseDados({ aoVoltar, produtos }) {
               </thead>
               <tbody>
                 {produtosParaExibir.length > 0 ? (
-                  produtosParaExibir.map((prod, index) => (
-                    <tr key={index}>
-                      <td title={prod.codigo}><strong>{prod.codigo}</strong></td>
-                      <td title={prod.descricao}>{prod.descricao}</td> 
-                      <td title={prod.codigoBarra}>{prod.codigoBarra}</td>
-                      <td title={prod.ncm}>{prod.ncm}</td>
-                      <td title={prod.fornecedor}>{prod.fornecedor}</td>
-                      <td title={prod.marca}>{prod.marca}</td>
-                      <td style={{ color: '#27ae60', fontWeight: 'bold' }}>{prod.quantidade}</td>
-                      <td>R$ {prod.precoVenda}</td>
-                      <td>R$ {prod.precoCusto}</td>
-                    </tr>
-                  ))
+                  produtosParaExibir.map((prod, index) => {
+                    const estaExpandido = linhaExpandida === prod.codigo;
+                    const jaAdicionado = isProdutoNaPreRequisicao(prod.codigo);
+
+                    return (
+                      <React.Fragment key={prod.codigo || index}>
+                        <tr 
+                          onClick={() => toggleExpandirLinha(prod.codigo)}
+                          style={{ cursor: 'pointer', backgroundColor: estaExpandido ? '#f0f8ff' : (jaAdicionado ? '#f4fcf5' : 'inherit') }}
+                          title="Clique para expandir e adicionar à pré-requisição"
+                        >
+                          <td title={prod.codigo}><strong>{prod.codigo}</strong> {jaAdicionado && '✅'}</td>
+                          <td title={prod.descricao}>{prod.descricao}</td> 
+                          <td title={prod.codigoBarra}>{prod.codigoBarra}</td>
+                          <td title={prod.ncm}>{prod.ncm}</td>
+                          <td title={prod.fornecedor}>{prod.fornecedor}</td>
+                          <td title={prod.marca}>{prod.marca}</td>
+                          <td style={{ color: '#27ae60', fontWeight: 'bold' }}>{prod.quantidade}</td>
+                          <td>R$ {prod.precoVenda}</td>
+                          <td>R$ {prod.precoCusto}</td>
+                        </tr>
+
+                        {estaExpandido && (
+                          <tr style={{ backgroundColor: '#f9fafd' }}>
+                            <td colSpan="9" style={{ padding: '15px 20px', borderBottom: '2px solid #3498db', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+                                {jaAdicionado ? (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); aoRemoverPreRequisicao(prod.codigo); }}
+                                    style={{
+                                      backgroundColor: '#e74c3c',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '10px 20px',
+                                      borderRadius: '6px',
+                                      fontWeight: 'bold',
+                                      cursor: 'pointer',
+                                      fontSize: '0.95rem'
+                                    }}
+                                  >
+                                    ❌ Remover da Pré-requisição
+                                  </button>
+                                ) : (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); aoAdicionarPreRequisicao(prod); }}
+                                    style={{
+                                      backgroundColor: '#2980b9',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '10px 24px',
+                                      borderRadius: '6px',
+                                      fontWeight: 'bold',
+                                      cursor: 'pointer',
+                                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                      fontSize: '0.95rem'
+                                    }}
+                                  >
+                                    ➕ Adicionar à Pré-requisição
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan="9" style={{ textAlign: 'center', padding: '50px', color: '#888' }}>
