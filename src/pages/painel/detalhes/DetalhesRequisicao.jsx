@@ -392,6 +392,9 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     exibirPopup('sucesso', 'Salvo', 'A observação foi registrada no histórico!');
   };
 
+  // --- BLINDAGEN DUPLA: Identifica se é Reposição Interna pelo motivo OU se origem == destino ---
+  const isReposicaoInterna = req.motivo === 'Reposição Interna' || req.origem === req.destino;
+
   return (
     <div className="detalhes-container">
       {mostrarFesta && <div className="festa-confete">🎉🏆🎉</div>} 
@@ -546,8 +549,8 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
             <option value="Em Separação">Em Separação</option>
             <option value="Separado">Separado</option>
             
-            {/* CIRURGIA AQUI: Oculta etapas burocráticas se for Reposição Interna */}
-            {req.motivo !== 'Reposição Interna' && (
+            {/* BLINDAGEN DUPLA: Oculta etapas se for Reposição Interna OU se origem == destino */}
+            {!isReposicaoInterna && (
               <>
                 <option value="Saída de produtos">Saída de produtos</option>
                 <option value="Faturamento">Faturamento</option>
