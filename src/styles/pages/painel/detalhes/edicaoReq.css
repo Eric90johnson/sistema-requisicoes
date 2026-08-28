@@ -1,0 +1,87 @@
+/* ========================================================= */
+/* --- MÓDULO: ASSUMIR / EDITAR REQUISIÇÃO ---               */
+/* ========================================================= */
+
+.box-assumir-tarefa {
+  background-color: #eaf2f8;
+  border: 1px dashed #3498db;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.box-editar-req { 
+  background-color: #fcf3ff; 
+  border-color: #9b59b6; 
+}
+
+.assumir-info {
+  font-size: 0.95rem;
+  color: #2c3e50;
+}
+
+.btn-assumir {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background-color 0.2s;
+}
+
+.btn-assumir:hover {
+  background-color: #2980b9;
+}
+
+.btn-editar-roxo {
+  background-color: #9b59b6;
+}
+
+.btn-editar-roxo:hover {
+  background-color: #8e44ad;
+}
+
+.btn-roxo-escuro {
+  background-color: #8e44ad !important;
+}
+
+.linha-assumir {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.linha-assumir input {
+  padding: 10px;
+  border: 1px solid #bdc3c7;
+  border-radius: 6px;
+  flex: 1;
+  min-width: 150px;
+}
+
+.btn-confirmar-assumir {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-cancelar-assumir {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}

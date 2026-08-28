@@ -1,0 +1,492 @@
+/* ========================================================= */
+/* --- MÓDULO: SEPARAÇÃO, BIPAGEM E CÂMERA ---               */
+/* ========================================================= */
+
+.titulo-lista-produtos {
+  margin-top: 20px;
+}
+
+.subtitulo-lista-produtos {
+  font-size: 0.9rem;
+  color: #7f8c8d;
+  margin-bottom: 15px;
+}
+
+.tabela-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 15px;
+  border-radius: 8px;
+}
+
+.tabela-itens {
+  width: 100%;
+  min-width: 650px;
+  text-align: left;
+  border-collapse: collapse;
+}
+
+.tabela-itens-header-tr {
+  border-bottom: 2px solid #eee;
+}
+
+.th-tabela-itens {
+  padding: 10px;
+}
+
+.td-tabela-itens {
+  padding: 15px 10px;
+}
+
+.td-tabela-itens-centro {
+  text-align: center;
+}
+
+.tr-clicavel {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tr-clicavel:hover {
+  background-color: #f9f5fb !important;
+}
+
+.linha-item-completo {
+  background-color: #e8f8f5 !important;
+  font-weight: bold;
+}
+
+.linha-item-normal {
+  border-bottom: 1px solid #eee;
+}
+
+.linha-expandida-ativa {
+  border-bottom: none;
+}
+
+.texto-verde-sucesso {
+  color: #27ae60;
+}
+
+.detalhes-produto-expandido {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+}
+
+.info-bipagem-resumo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  width: 100%;
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.qtd-destaque {
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.qtd-destaque-completo {
+  color: #27ae60;
+}
+
+.qtd-destaque-pendente {
+  color: #333;
+}
+
+.acoes-linha-expandida {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-acao-expandida {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.btn-acao-expandida:active {
+  transform: scale(0.95);
+}
+
+.btn-acao-camera {
+  background-color: #3498db;
+  color: white;
+}
+
+.btn-acao-camera:hover {
+  background-color: #2980b9;
+}
+
+.btn-acao-editar {
+  background-color: #95a5a6;
+  color: white;
+}
+
+.btn-acao-editar:hover {
+  background-color: #7f8c8d;
+}
+
+.btn-acao-chave {
+  background-color: #f39c12;
+  color: white;
+}
+
+.btn-acao-chave:hover {
+  background-color: #e67e22;
+}
+
+/* --- Controles de Bip Manual --- */
+.badge-status-bip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 15px;
+  border-radius: 6px;
+  font-weight: bold;
+  color: white;
+  font-size: 0.9rem;
+}
+
+.badge-status-bip.pendente {
+  background-color: #f1c40f;
+  color: #333;
+}
+
+.badge-status-bip.recusado {
+  background-color: #e74c3c;
+}
+
+.container-bip-manual {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: #eaf2f8;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px dashed #3498db;
+  width: 100%;
+  justify-content: center;
+}
+
+.input-bip-manual {
+  padding: 10px;
+  border: 2px solid #3498db;
+  border-radius: 6px;
+  outline: none;
+  width: 200px;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.btn-confirmar-bip-manual {
+  padding: 10px 20px;
+  background-color: #2980b9;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-confirmar-bip-manual:hover {
+  background-color: #1c5980;
+}
+
+.btn-resetar-margin {
+  margin-top: 10px;
+}
+
+/* --- Edição de Qtd --- */
+.edicao-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: #fcf8ff;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px dashed var(--cor-primaria);
+  align-items: center;
+}
+
+.edicao-linha {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.titulo-ajuste-qtd {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.input-qtd-edit {
+  width: 80px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.input-obs-edit {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.btn-acao-edit {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.5rem;
+  transition: transform 0.2s;
+}
+
+.btn-acao-edit:hover {
+  transform: scale(1.2);
+}
+
+.texto-observacao {
+  display: block;
+  font-size: 0.85rem;
+  color: #d35400;
+  margin-top: 5px;
+  font-style: italic;
+}
+
+/* --- Cronômetro e Gamificação --- */
+.painel-cronometro {
+  background-color: #f0f8ff;
+  border: 2px solid #3498db;
+  border-radius: 8px;
+  padding: 15px;
+  text-align: center;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  animation: fadeIn 0.3s ease;
+}
+
+.cronometro-titulo {
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #2980b9;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 5px;
+}
+
+.cronometro-relogio {
+  font-size: 3rem;
+  font-weight: 900;
+  color: #2c3e50;
+  font-family: monospace;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+}
+
+.cronometro-relogio.tempo-travado {
+  color: #27ae60;
+}
+
+.cronometro-eficiencia {
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin-top: 5px;
+}
+
+.festa-confete {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 6rem;
+  z-index: 9999999;
+  animation: zoomFesta 1.5s ease-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes zoomFesta {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 1;
+  }
+}
+
+/* --- Câmera Overlay --- */
+.camera-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.85);
+  z-index: 99999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 15px;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.camera-modal-content {
+  background-color: var(--cor-branca);
+  width: 100%;
+  max-width: 500px;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  animation: popInModal 0.3s ease-out;
+}
+
+.camera-modal-header {
+  background-color: var(--cor-secundaria);
+  color: white;
+  padding: 15px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.camera-modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.camera-box-modal {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--cor-primaria);
+  background-color: #000;
+}
+
+.info-bipagem {
+  width: 100%;
+  background-color: #fff;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.progresso-texto {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.barra-progresso-bg {
+  width: 100%;
+  height: 12px;
+  background-color: #eee;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.barra-progresso-fill {
+  height: 100%;
+  background-color: #27ae60;
+  transition: width 0.3s ease;
+}
+
+.codigo-referencia {
+  font-size: 0.85rem;
+  color: #7f8c8d;
+  margin-top: 10px;
+  display: block;
+}
+
+.botoes-camera {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+
+.btn-fechar-camera {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  flex: 1;
+}
+
+.btn-fechar-camera:hover {
+  background-color: #c0392b;
+}
+
+.btn-resetar-bip {
+  background-color: #f39c12;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  flex: 1;
+}
+
+.btn-resetar-bip:hover {
+  background-color: #d68910;
+}
+
+.btn-salvar-progresso {
+  display: block;
+  width: 100%;
+  max-width: 300px;
+  margin: 25px auto 0;
+  padding: 15px 20px;
+  background-color: var(--cor-secundaria);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+  text-align: center;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.btn-salvar-progresso:hover {
+  background-color: #6a2a85;
+}
+
+.btn-salvar-progresso:active {
+  transform: scale(0.98);
+}
