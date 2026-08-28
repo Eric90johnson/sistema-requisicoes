@@ -17,7 +17,6 @@
   padding: 25px;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  overflow-x: auto;
 }
 
 /* --- RESPONSIVIDADE --- */
@@ -44,7 +43,7 @@
   border-radius: 8px;
   margin-bottom: 25px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 15px;
   border: 1px solid #eee;
 }
@@ -117,12 +116,87 @@
 }
 
 /* ========================================================= */
-/* --- NOVO: ESTILOS PARA AS LINHAS EXPANSÍVEIS ---          */
+/* --- CONTAINER SCROLL DA TABELA (VERTICAL/HORIZONTAL) ---  */
+/* ========================================================= */
+
+.tabela-wrapper {
+  width: 100%;
+  max-height: 60vh; /* Mantém a rolagem na própria tabela sem descer a página inteira */
+  overflow-y: auto;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #eeeeee;
+  background-color: var(--cor-branca);
+}
+
+/* Estilização moderna da barra de rolagem */
+.tabela-wrapper::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.tabela-wrapper::-webkit-scrollbar-track {
+  background: #f1f2f6;
+  border-radius: 4px;
+}
+.tabela-wrapper::-webkit-scrollbar-thumb {
+  background: #bdc3c7;
+  border-radius: 4px;
+}
+.tabela-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #95a5a6;
+}
+
+.tabela-requisicoes {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* ========================================================= */
+/* --- CABEÇALHO ORDENÁVEL COM SETAS E EFEITO STICKY ---     */
+/* ========================================================= */
+
+.th-sortable {
+  position: sticky; /* Mantém o cabeçalho no topo ao rolar para baixo */
+  top: 0;
+  z-index: 10;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s, color 0.2s;
+  padding: 15px;
+  background-color: #e8dff0;
+  color: var(--cor-secundaria);
+  border-bottom: 2px solid #dcdde1;
+}
+
+.th-sortable:hover {
+  background-color: #d8cce4;
+}
+
+.sort-icon {
+  font-size: 0.85em;
+  margin-left: 8px;
+  color: #95a5a6;
+  transition: color 0.2s, transform 0.2s;
+}
+
+.sort-icon.ativo {
+  color: #e74c3c;
+  font-weight: bold;
+  font-size: 1em;
+}
+
+/* ========================================================= */
+/* --- ESTILOS PARA AS LINHAS EXPANSÍVEIS ---                */
 /* ========================================================= */
 
 .tr-clicavel-historico {
   cursor: pointer;
   transition: background-color 0.2s;
+}
+
+.tr-clicavel-historico td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #f1f2f6;
 }
 
 .tr-clicavel-historico:hover {
@@ -134,7 +208,7 @@
 }
 
 .linha-ativa-historico td {
-  border-bottom: none !important; /* Remove a linha de baixo para grudar na expansão */
+  border-bottom: none !important; 
 }
 
 .linha-expandida-historico td {

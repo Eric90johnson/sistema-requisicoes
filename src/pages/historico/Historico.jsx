@@ -1,18 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import '../../styles/pages/historico/historico.css';
 
 export default function Historico({ requisicoes, aoVoltar }) {
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
+  const [filtroId, setFiltroId] = useState(''); 
   const [filtroCodigo, setFiltroCodigo] = useState('');
   const [filtroOrdem, setFiltroOrdem] = useState('');
   const [filtroNotaFiscal, setFiltroNotaFiscal] = useState('');
-  
-  // NOVO: Filtro de Status
   const [filtroStatus, setFiltroStatus] = useState('');
 
-  // NOVO: Controle da linha expandida para mostrar os produtos
   const [linhaExpandida, setLinhaExpandida] = useState(null);
+  const [ordenacao, setOrdenacao] = useState({ coluna: 'data', direcao: 'desc' });
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -22,7 +21,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
       case 'Faturamento': return 'status-faturado';
       case 'Transporte': return 'status-enviado';
       case 'Recebimento': return 'status-recebido';
-      case 'Cancelada': return 'status-pendente'; // Utiliza cor limpa
+      case 'Cancelada': return 'status-pendente';
       default: return 'status-pendente';
     }
   };
@@ -33,7 +32,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
     return new Date(`${ano}-${mes}-${dia}T00:00:00`);
   };
 
-  const temFiltroAtivo = dataInicio || dataFim || filtroCodigo || filtroOrdem || filtroNotaFiscal || filtroStatus;
+  const temFiltroAtivo = dataInicio || dataFim || filtroId || filtroCodigo || filtroOrdem || filtroNotaFiscal || filtroStatus;
 
   const requisicoesFiltradas = temFiltroAtivo ? requisicoes.filter(req => {
     let passaFiltro = true;
@@ -48,6 +47,10 @@ export default function Historico({ requisicoes, aoVoltar }) {
         const fim = new Date(`${dataFim}T23:59:59`);
         if (dataReq > fim) passaFiltro = false;
       }
+    }
+
+    if (filtroId && passaFiltro) {
+      if (!req.id.toString().includes(filtroId)) passaFiltro = false;
     }
 
     if (filtroCodigo && passaFiltro) {
@@ -69,7 +72,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
       }
     }
 
-    // Aplicação do novo filtro de Status
     if (filtroStatus && passaFiltro) {
       if (req.status !== filtroStatus) {
         passaFiltro = false;
@@ -79,9 +81,41 @@ export default function Historico({ requisicoes, aoVoltar }) {
     return passaFiltro;
   }) : [];
 
+  const requisicoesOrdenadas = useMemo(() => {
+    return [...requisicoesFiltradas].sort((a, b) => {
+      let valA = a[ordenacao.coluna];
+      let valB = b[ordenacao.coluna];
+
+      if (ordenacao.coluna === 'separador') {
+        valA = a.historico?.['Em Separação'] || a.metricasSeparacao?.responsavel || '';
+        valB = b.historico?.['Em Separação'] || b.metricasSeparacao?.responsavel || '';
+      } else if (ordenacao.coluna === 'tempoSeparacao') {
+        valA = a.metricasSeparacao?.tempoTotalSegundos || 0;
+        valB = b.metricasSeparacao?.tempoTotalSegundos || 0;
+      } else if (ordenacao.coluna === 'data') {
+        valA = converterData(a.data)?.getTime() || 0;
+        valB = converterData(b.data)?.getTime() || 0;
+      } else if (ordenacao.coluna === 'itens') {
+        valA = a.metricasSeparacao?.totalItensFisicos || a.itens || 0;
+        valB = b.metricasSeparacao?.totalItensFisicos || b.itens || 0;
+      } else if (ordenacao.coluna === 'tempoTotal' || ordenacao.coluna === 'horaCriacao') {
+        valA = a.timestampCriacao || 0;
+        valB = b.timestampCriacao || 0;
+      } else if (ordenacao.coluna === 'horaFim') {
+        valA = a.metricasSeparacao?.finalizadoEm ? new Date(a.metricasSeparacao.finalizadoEm).getTime() : 0;
+        valB = b.metricasSeparacao?.finalizadoEm ? new Date(b.metricasSeparacao.finalizadoEm).getTime() : 0;
+      }
+
+      if (valA < valB) return ordenacao.direcao === 'asc' ? -1 : 1;
+      if (valA > valB) return ordenacao.direcao === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [requisicoesFiltradas, ordenacao]);
+
   const limparFiltros = () => {
     setDataInicio('');
     setDataFim('');
+    setFiltroId('');
     setFiltroCodigo('');
     setFiltroOrdem('');
     setFiltroNotaFiscal('');
@@ -89,7 +123,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
     setLinhaExpandida(null);
   };
 
-  // --- CIRURGIA AQUI: Formatar tempo padronizado (HH:MM:SS) ---
   const formatarTempo = (segundos) => {
     if (!segundos && segundos !== 0) return '-';
     const h = Math.floor(segundos / 3600).toString().padStart(2, '0');
@@ -98,22 +131,62 @@ export default function Historico({ requisicoes, aoVoltar }) {
     return `${h}:${m}:${s}`;
   };
 
-  // Extrai lista única de status existentes no banco para preencher o select
+  const extrairHora = (timestampOuData) => {
+    if (!timestampOuData) return '-';
+    const data = new Date(Number(timestampOuData) || timestampOuData);
+    if (isNaN(data.getTime())) return '-';
+    return data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getSeparador = (req) => {
+    return req.historico?.['Em Separação'] || req.metricasSeparacao?.responsavel || '-';
+  };
+
+  const getTempoTotalReq = (req) => {
+    if (!req.timestampCriacao) return '-';
+    if (req.metricasSeparacao && req.metricasSeparacao.finalizadoEm) {
+      const inicio = Number(req.timestampCriacao);
+      const fim = new Date(req.metricasSeparacao.finalizadoEm).getTime();
+      const diff = Math.floor((fim - inicio) / 1000);
+      return formatarTempo(diff > 0 ? diff : 0);
+    }
+    return 'Em andamento';
+  };
+
+  const getTempoBipProduto = (req) => {
+    if (!req.metricasSeparacao) return '-';
+    const seg = req.metricasSeparacao.tempoTotalSegundos || 1;
+    const itens = req.metricasSeparacao.totalItensFisicos || req.itens || 1;
+    return `${(seg / itens).toFixed(1)}s / un`;
+  };
+
   const opcoesStatus = [...new Set(requisicoes.map(r => r.status))].filter(Boolean);
 
+  // --- NOVA ORDENAÇÃO NO ARQUIVO EXCEL ---
   const exportarParaExcel = () => {
-    if (requisicoesFiltradas.length === 0) {
+    if (requisicoesOrdenadas.length === 0) {
       alert("Não há dados para exportar com os filtros atuais.");
       return;
     }
 
-    // Removido "Eficiência (%)" do cabeçalho
-    let csv = "ID da Requisicao;Data da Requisicao;Cod. do Produto;Descricao do Produto;Quantidade;Ordem Interna;N da NF;Tempo Separacao;Observacoes\n";
+    // Cabecalho reorganizado com os Produtos logo no começo
+    let csv = "ID da Requisicao;Cod. do Produto;Descricao do Produto;Qtd. Solicitada;Qtd. Bipada;Motivo (Tipo);Status Atual;Data da Requisicao;Solicitante;Destino;Criado as;Finalizado as;Tempo Total Estimado;Tempo Separacao;Tempo Bip Medio;Separador;N do Sistema;Nota Fiscal;Observacoes do Produto\n";
 
-    requisicoesFiltradas.forEach(req => {
-      const tempo = req.metricasSeparacao ? formatarTempo(req.metricasSeparacao.tempoTotalSegundos) : '-';
+    requisicoesOrdenadas.forEach(req => {
       const id = req.id || '-';
+      const motivo = req.motivo || '-';
+      const status = req.status || '-';
       const dataReq = req.data || '-';
+      const solicitante = req.solicitante || '-';
+      const destino = req.destino || '-';
+      
+      const horaCriacao = extrairHora(req.timestampCriacao);
+      const horaFim = req.metricasSeparacao?.finalizadoEm ? extrairHora(req.metricasSeparacao.finalizadoEm) : '-';
+      const tempoTotal = getTempoTotalReq(req);
+      const tempoSep = req.metricasSeparacao ? formatarTempo(req.metricasSeparacao.tempoTotalSegundos) : '-';
+      const tempoBip = getTempoBipProduto(req);
+      const separador = getSeparador(req);
+      
       const ordemInterna = req.numeroRequisicaoExterna || '-';
       const nf = req.notaFiscal || '-';
 
@@ -122,10 +195,15 @@ export default function Historico({ requisicoes, aoVoltar }) {
           const codProduto = item.cod || '-';
           const descProduto = item.descricao || '-';
           const qtd = item.quantidade || '0';
-          const obs = item.observacao || '-';
+          const qtdBipada = item.bipContagem || '0';
+          const obs = item.observacao ? item.observacao.replace(/"/g, '""').replace(/\n/g, ' ') : '-';
 
-          csv += `${id};${dataReq};${codProduto};"${descProduto}";${qtd};${ordemInterna};${nf};${tempo};"${obs}"\n`;
+          // As informações do produto agora vêm logo após o ID da Requisição
+          csv += `"${id}";"${codProduto}";"${descProduto}";"${qtd}";"${qtdBipada}";"${motivo}";"${status}";"${dataReq}";"${solicitante}";"${destino}";"${horaCriacao}";"${horaFim}";"${tempoTotal}";"${tempoSep}";"${tempoBip}";"${separador}";"${ordemInterna}";"${nf}";"${obs}"\n`;
         });
+      } else {
+        // Fallback preenchendo os traços nas colunas de produto se estiverem vazias
+        csv += `"${id}";"-";"-";"-";"-";"${motivo}";"${status}";"${dataReq}";"${solicitante}";"${destino}";"${horaCriacao}";"${horaFim}";"${tempoTotal}";"${tempoSep}";"${tempoBip}";"${separador}";"${ordemInterna}";"${nf}";"-"\n`;
       }
     });
 
@@ -134,7 +212,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
     
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Auditoria_Historico_${new Date().getTime()}.csv`;
+    link.download = `Relatorio_Logistica_NetaDantas_${new Date().getTime()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -148,16 +226,41 @@ export default function Historico({ requisicoes, aoVoltar }) {
     }
   };
 
+  const handleSort = (coluna) => {
+    setOrdenacao(prev => ({
+      coluna,
+      direcao: prev.coluna === coluna && prev.direcao === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const RenderHeaderSort = ({ titulo, coluna }) => {
+    const isAtiva = ordenacao.coluna === coluna;
+    return (
+      <th className="th-sortable" onClick={() => handleSort(coluna)} title="Clique para ordenar">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {titulo}
+          <span className={`sort-icon ${isAtiva ? 'ativo' : ''}`}>
+            {isAtiva ? (ordenacao.direcao === 'asc' ? '▲' : '▼') : '↕'}
+          </span>
+        </div>
+      </th>
+    );
+  };
+
   return (
     <div className="historico-container">
       <div className="historico-header">
-        <h2>Histórico e Auditoria de Requisições</h2>
+        <h2>Histórico e Relatório Gerencial</h2>
         <button className="btn-voltar" onClick={aoVoltar}>
           ← Voltar ao Painel
         </button>
       </div>
 
       <div className="filtros-container">
+        <div className="filtro-item">
+          <label>Nº Requisição (ID)</label>
+          <input type="text" className="input-filtro" placeholder="Ex: REQ-001" value={filtroId} onChange={(e) => setFiltroId(e.target.value)} />
+        </div>
         <div className="filtro-item">
           <label>Data Início</label>
           <input type="date" className="input-filtro" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
@@ -196,31 +299,33 @@ export default function Historico({ requisicoes, aoVoltar }) {
           <table className="tabela-requisicoes" style={{ whiteSpace: 'nowrap', width: '100%' }}>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Data</th>
-                <th>Solicitante</th>
-                <th>Loja Destino</th>
-                <th>Nº Sistema</th>
-                <th>Nota Fiscal</th>
-                <th>Itens</th>
-                {/* Removida Eficiência, mantido Tempo formatado */}
-                <th>Tempo</th>
-                <th>Status Atual</th>
+                <RenderHeaderSort titulo="ID" coluna="id" />
+                <RenderHeaderSort titulo="Motivo (Tipo)" coluna="motivo" />
+                <RenderHeaderSort titulo="Data" coluna="data" />
+                <RenderHeaderSort titulo="Destino" coluna="destino" />
+                <RenderHeaderSort titulo="Separador" coluna="separador" />
+                <RenderHeaderSort titulo="Itens" coluna="itens" />
+                <RenderHeaderSort titulo="Criado às" coluna="horaCriacao" />
+                <RenderHeaderSort titulo="T. Separação" coluna="tempoSeparacao" />
+                <RenderHeaderSort titulo="T. Bip Médio" coluna="tempoBip" />
+                <RenderHeaderSort titulo="Finalizado às" coluna="horaFim" />
+                <RenderHeaderSort titulo="T. Total Estimado" coluna="tempoTotal" />
+                <RenderHeaderSort titulo="Status Atual" coluna="status" />
               </tr>
             </thead>
             <tbody>
               {!temFiltroAtivo ? (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '50px 20px', color: '#666' }}>
+                  <td colSpan="12" style={{ textAlign: 'center', padding: '50px 20px', color: '#666' }}>
                     <span style={{ fontSize: '2rem', display: 'block', margin: '0 auto 10px' }}>🔍</span>
-                    <strong>Preencha um ou mais filtros acima para visualizar o histórico.</strong>
+                    <strong>Preencha um ou mais filtros acima para visualizar o relatório gerencial.</strong>
                     <p style={{ fontSize: '0.9rem', color: '#999', marginTop: '5px' }}>
                       Para manter o sistema rápido, as requisições só aparecem após a busca.
                     </p>
                   </td>
                 </tr>
-              ) : requisicoesFiltradas.length > 0 ? (
-                requisicoesFiltradas.map((req) => (
+              ) : requisicoesOrdenadas.length > 0 ? (
+                requisicoesOrdenadas.map((req) => (
                   <React.Fragment key={req.id}>
                     <tr 
                       className={`tr-clicavel-historico ${linhaExpandida === req.id ? 'linha-ativa-historico' : ''}`} 
@@ -228,15 +333,30 @@ export default function Historico({ requisicoes, aoVoltar }) {
                       title="Clique para ver os produtos desta requisição"
                     >
                       <td><strong>{req.id}</strong></td>
+                      <td style={{ fontWeight: 'bold', color: req.motivo === 'Reposição Interna' ? '#8e44ad' : 'inherit' }}>{req.motivo || '-'}</td>
                       <td>{req.data}</td>
-                      <td>{req.solicitante}</td>
                       <td>{req.destino}</td>
-                      <td style={{ color: '#2980b9', fontWeight: 'bold' }}>{req.numeroRequisicaoExterna || '-'}</td>
-                      <td style={{ color: '#e67e22', fontWeight: 'bold' }}>{req.notaFiscal || '-'}</td>
-                      <td>{req.itens}</td>
+                      <td style={{ color: '#2980b9' }}><strong>{getSeparador(req)}</strong></td>
+                      <td>{req.metricasSeparacao?.totalItensFisicos || req.itens} un</td>
                       
+                      <td style={{ color: '#8e44ad' }}>
+                        {extrairHora(req.timestampCriacao)}
+                      </td>
+
                       <td style={{ fontWeight: 'bold' }}>
                         {req.metricasSeparacao ? formatarTempo(req.metricasSeparacao.tempoTotalSegundos) : '-'}
+                      </td>
+                      
+                      <td style={{ color: '#e67e22', fontWeight: 'bold' }}>
+                        {getTempoBipProduto(req)}
+                      </td>
+
+                      <td style={{ color: '#27ae60' }}>
+                        {req.metricasSeparacao?.finalizadoEm ? extrairHora(req.metricasSeparacao.finalizadoEm) : '-'}
+                      </td>
+
+                      <td style={{ color: '#7f8c8d' }}>
+                        {getTempoTotalReq(req)}
                       </td>
 
                       <td>
@@ -246,12 +366,18 @@ export default function Historico({ requisicoes, aoVoltar }) {
                       </td>
                     </tr>
 
-                    {/* ACORDEÃO COM OS PRODUTOS (Visível ao clicar na linha) */}
+                    {/* ACORDEÃO COM OS PRODUTOS */}
                     {linhaExpandida === req.id && (
                       <tr className="linha-expandida-historico">
-                        <td colSpan="9">
+                        <td colSpan="12">
                           <div className="conteudo-expandido-historico">
-                            <h4>📦 Itens Solicitados na {req.id}</h4>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+                              <h4 style={{ margin: 0 }}>📦 Itens Solicitados na {req.id}</h4>
+                              <div style={{ fontSize: '0.9rem' }}>
+                                <strong style={{ color: '#2980b9' }}>Nº Sistema:</strong> {req.numeroRequisicaoExterna || 'N/D'} | <strong style={{ color: '#e67e22' }}>NF:</strong> {req.notaFiscal || 'N/D'}
+                              </div>
+                            </div>
+                            
                             <table className="subtabela-historico">
                               <thead>
                                 <tr>
@@ -290,7 +416,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}>
+                  <td colSpan="12" style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}>
                     Nenhuma requisição encontrada com os filtros selecionados. Tente ajustar a busca.
                   </td>
                 </tr>
@@ -299,10 +425,10 @@ export default function Historico({ requisicoes, aoVoltar }) {
           </table>
         </div>
 
-        {requisicoesFiltradas.length > 0 && (
+        {requisicoesOrdenadas.length > 0 && (
           <div className="acoes-rodape">
             <button className="btn-exportar" onClick={exportarParaExcel} title="Baixar relatório gerencial completo">
-              📊 Exportar Dados para Excel (.csv)
+              📊 Exportar Relatório Gerencial (.csv)
             </button>
           </div>
         )}
