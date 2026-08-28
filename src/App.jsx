@@ -391,6 +391,8 @@ function App() {
           <div className="admin-tabs-header">
             <button className={`tab-header ${abaAdminAtiva === 'base-dados' ? 'ativo' : ''}`} onClick={() => setAbaAdminAtiva('base-dados')}>🗄️ Base de Dados</button>
             <button className={`tab-header ${abaAdminAtiva === 'usuarios' ? 'ativo' : ''}`} onClick={() => setAbaAdminAtiva('usuarios')}>👥 Gestão de Usuários</button>
+            {/* NOVA ABA ADICIONADA AQUI 👇 */}
+            <button className={`tab-header ${abaAdminAtiva === 'novidades' ? 'ativo' : ''}`} onClick={() => setAbaAdminAtiva('novidades')}>📢 Novidades</button>
           </div>
         )}
       </header>

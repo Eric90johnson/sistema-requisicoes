@@ -1,6 +1,7 @@
+import ModalNovidades from '../../components/novidades/ModalNovidades';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import '../../styles/pages/painel/painel.css';
-import '../../styles/pages/painel/ranking/ranking.css'; // IMPORTAÇÃO DO NOVO CSS DO RANKING
+import '../../styles/pages/painel/ranking/ranking.css';
 import PainelMarketplace from '../marketplace/painel/PainelMarketplace'; 
 import { supabase } from '../../services/supabase';
 import { calcularRanking } from './utils/calculadoraRanking';
@@ -15,7 +16,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   
   // Estados do Extrato e Alertas visuais
   const [colaboradorExpandido, setColaboradorExpandido] = useState(null);
-  const [mostrarAvisoData, setMostrarAvisoData] = useState(false); // NOVO ESTADO
+  const [mostrarAvisoData, setMostrarAvisoData] = useState(false); 
 
   const [filtros, setFiltros] = useState({});
   const [colunaFiltroAberta, setColunaFiltroAberta] = useState(null);
@@ -201,11 +202,9 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     return `${h}:${m}:${s}`;
   };
 
-  // --- Função Ajustada com o novo Alerta Visual ---
   const handleExpandirColaborador = (nomeColaborador) => {
     if (!dataInicioRanking && !dataFimRanking) {
       setMostrarAvisoData(true);
-      // Remove o aviso automaticamente após 5 segundos
       setTimeout(() => setMostrarAvisoData(false), 5000);
       return;
     }
@@ -253,6 +252,9 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   return (
     <div className="painel-container">
       
+      {/* INJEÇÃO DO MODAL DE NOVIDADES */}
+      <ModalNovidades />
+
       {alertaDelta.visivel && (
         <div className="chat-notificacao-container">
           <div className="chat-notificacao-header">
@@ -402,7 +404,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                 <button className="btn-limpar-ranking" onClick={() => {setDataInicioRanking(''); setDataFimRanking(''); setColaboradorExpandido(null); setMostrarAvisoData(false);}}>Limpar</button>
               </div>
 
-              {/* RENDERIZAÇÃO DO NOVO ALERTA VISUAL */}
               {mostrarAvisoData && (
                 <div className="alerta-filtro-periodo">
                   <span>⚠️</span>
@@ -469,7 +470,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                             </td>
                           </tr>
                           
-                          {/* LINHA EXPANDIDA DO EXTRATO DE PONTUAÇÃO */}
                           {colaboradorExpandido === colab.nome && (
                             <tr style={{ backgroundColor: '#f9fafd' }}>
                               <td colSpan="6" style={{ padding: '20px', borderBottom: '2px solid #bdc3c7' }}>

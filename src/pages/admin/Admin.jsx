@@ -1,7 +1,7 @@
-// src/pages/admin/Admin.jsx
 import '../../styles/admin/admin.css';
 import AdminBaseDados from './base-dados/AdminBaseDados';
-import AdminUsuarios from './usuarios/AdminUsuarios'; // A importação foi liberada!
+import AdminUsuarios from './usuarios/AdminUsuarios';
+import AdminNovidades from './novidades/AdminNovidades'; // IMPORTAÇÃO DA NOVA ABA
 
 export default function Admin({ setProdutos, abaAtiva }) {
   
@@ -20,6 +20,11 @@ export default function Admin({ setProdutos, abaAtiva }) {
 
         {abaAtiva === 'usuarios' && (
           <AdminUsuarios />
+        )}
+
+        {/* CHAMADA DA NOVA TELA */}
+        {abaAtiva === 'novidades' && (
+          <AdminNovidades />
         )}
 
       </div>
