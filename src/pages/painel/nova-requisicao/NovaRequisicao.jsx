@@ -15,7 +15,19 @@ const parseValorMoeda = (valorStr) => {
   return Number(limpo) || 0;
 };
 
-export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCancelarReq, requisicoes = [], produtosPreSelecionados = null, reqEmEdicao = null }) {
+export default function NovaRequisicao({ 
+  aoVoltar, 
+  baseProdutos, 
+  aoSalvar, 
+  aoCancelarReq, 
+  requisicoes = [], 
+  produtosPreSelecionados = null, 
+  reqEmEdicao = null,
+  usuarioLogado,
+  recordesGlobais = {},
+  tipoReposicaoGlobal = 'interna',
+  inicioCronometroGlobal = null
+}) {
   
   const lojas = [
     'Araturi', 
@@ -26,7 +38,7 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
 
   const [lojaDe, setLojaDe] = useState(lojas[0]);
   const [lojaPara, setLojaPara] = useState(lojas[1]);
-  const [solicitante, setSolicitante] = useState('');
+  const [solicitante, setSolicitante] = useState(usuarioLogado?.nome_completo || '');
   
   const [motivo, setMotivo] = useState('');
   const [motivoOutro, setMotivoOutro] = useState('');
@@ -52,6 +64,27 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
   const alertaPreenchimentoExibido = useRef(false);
 
   const isModoVitrine = produtosPreSelecionados && produtosPreSelecionados.length > 0;
+
+  const [tempoAtual, setTempoAtual] = useState(Date.now());
+
+  useEffect(() => {
+    let interval;
+    if (tipoReposicaoGlobal === 'externa' && inicioCronometroGlobal) {
+      interval = setInterval(() => {
+        setTempoAtual(Date.now());
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [tipoReposicaoGlobal, inicioCronometroGlobal]);
+
+  const segundosDecorridos = inicioCronometroGlobal ? Math.floor((tempoAtual - inicioCronometroGlobal) / 1000) : 0;
+
+  const formatarTempo = (totalSegundos) => {
+    const h = Math.floor(totalSegundos / 3600).toString().padStart(2, '0');
+    const m = Math.floor((totalSegundos % 3600) / 60).toString().padStart(2, '0');
+    const s = (totalSegundos % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
 
   useEffect(() => {
     if (reqEmEdicao) {
@@ -122,10 +155,19 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
     if (isModoVitrine && !alertaPreenchimentoExibido.current && baseProdutos.length > 0) {
       alertaPreenchimentoExibido.current = true;
       
+      // MÁGICA 1: Recupera o nome de quem está separando lá da memória!
+      const nomeSalvo = localStorage.getItem('nd_separador_gamificado');
+      if (nomeSalvo && tipoReposicaoGlobal === 'externa') {
+        setSolicitante(nomeSalvo);
+      }
+
       const itensAuto = produtosPreSelecionados.map(prod => {
         const baseProd = baseProdutos.find(p => p.codigo === prod.codigo) || prod;
         const temEstoqueDefinido = baseProd.quantidade !== undefined && baseProd.quantidade !== null;
         const estoqueAtual = temEstoqueDefinido ? Number(baseProd.quantidade.toString().replace(',', '.')) : null;
+
+        const qtdSolicitada = prod.quantidadeDesejada ? Number(prod.quantidadeDesejada) : 1;
+        const isInsuficiente = temEstoqueDefinido && (qtdSolicitada > estoqueAtual);
 
         let custoUnit = 0;
         const campoCustoTotal = baseProd.custo || baseProd.precoCusto || baseProd.preco_custo;
@@ -137,27 +179,27 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
         return {
           cod: baseProd.codigo,
           descricao: baseProd.descricao || 'Produto não encontrado',
-          quantidade: 0, 
+          quantidade: qtdSolicitada, 
           estoque: estoqueAtual,
           custoUnitario: custoUnit,
-          insuficiente: false
+          insuficiente: isInsuficiente
         };
       });
 
       setItensAdicionados(itensAuto);
-      setMotivo('Reposição de estoque'); 
+      setMotivo(''); 
 
       mostrarAlerta(
-        'aviso',
-        'Alinhamento Comercial',
-        '⚠️ Atenção: Possivelmente nem todos estes itens serão vendidos em sua loja.\n\nPara ter certeza de quais produtos solicitar e evitar excesso de estoque, entre em contato com a gerência geral.\n\nEdite a quantidade (✏️) do que deseja e exclua (🗑️) o restante.',
+        'sucesso',
+        '🛒 Produtos Importados!',
+        'Sua lista de pré-requisição foi carregada com sucesso!\n\nAntes de gravar a transferência, lembre-se de:\n\n1️⃣ Escolher a Loja Solicitante (Para)\n2️⃣ Selecionar o Motivo (Prioridade)\n3️⃣ Adicionar Observações (Se necessário)',
         () => fecharAlerta(),
         null,
-        'Entendido',
+        'Entendi, vou revisar',
         ''
       );
     }
-  }, [produtosPreSelecionados, baseProdutos, isModoVitrine]);
+  }, [produtosPreSelecionados, baseProdutos, isModoVitrine, tipoReposicaoGlobal]);
 
   const handleMudancaCodigo = (valorDigitado) => {
     setCodigo(valorDigitado);
@@ -397,7 +439,6 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
       grauPrioridade = Number(prioridadeOutro);
     }
 
-    // Se for a mesma loja, o identificador principal do motivo vira "Reposição Interna", preservando a prioridade calculada acima
     if (lojaDe === lojaPara) {
       motivoFinal = 'Reposição Interna';
     }
@@ -439,6 +480,35 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
       ? { ...reqEmEdicao.historico, observacoesGerais: listaObservacoes, 'Última Edição': `Por ${nomeEditorFinal} em ${dataAtualString}` }
       : { observacoesGerais: listaObservacoes };
 
+    let statusFinal = 'Pendente';
+    let metricas = null;
+
+    if (tipoReposicaoGlobal === 'externa' && inicioCronometroGlobal) {
+      statusFinal = 'Separado'; 
+      
+      const tempoTotalSegundos = Math.floor((Date.now() - inicioCronometroGlobal) / 1000);
+      const totalItensFisicos = itensAdicionados.reduce((acc, item) => acc + Number(item.quantidade), 0);
+      
+      const chaveRecorde = `qtd_${totalItensFisicos}`;
+      const recordeAtual = recordesGlobais[chaveRecorde];
+      const bateu = !recordeAtual || tempoTotalSegundos < recordeAtual.tempoSegundos;
+
+      metricas = {
+        tempoTotalSegundos: tempoTotalSegundos,
+        totalItensFisicos: totalItensFisicos,
+        bateuRecorde: bateu,
+        responsavel: solicitante, 
+        finalizadoEm: new Date().toISOString()
+      };
+
+      novoHistorico['Em Separação'] = solicitante;
+      novoHistorico['inicio_separacao'] = inicioCronometroGlobal;
+      novoHistorico['Separado'] = solicitante;
+      
+      // MÁGICA 2: Limpa a memória pra não sujar o nome na próxima
+      localStorage.removeItem('nd_separador_gamificado');
+    }
+
     const novaRequisicao = {
       id: reqEmEdicao ? reqEmEdicao.id : gerarIdSequencial(lojaPara),
       data: reqEmEdicao ? reqEmEdicao.data : new Date().toLocaleDateString('pt-BR'),
@@ -449,12 +519,13 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
       motivo: motivoFinal,
       prioridade: grauPrioridade, 
       itens: itensAdicionados.length,
-      status: 'Pendente', 
+      status: statusFinal, 
       listaItens: itensAdicionados,
-      historico: novoHistorico
+      historico: novoHistorico,
+      metricasSeparacao: metricas 
     };
 
-    mostrarAlerta('sucesso', reqEmEdicao ? 'Edição Concluída!' : 'Requisição Concluída!', `A requisição ${novaRequisicao.id} foi ${reqEmEdicao ? 'atualizada' : 'gravada'} com sucesso!`, () => {
+    mostrarAlerta('sucesso', reqEmEdicao ? 'Edição Concluída!' : 'Separação e Gravação Concluídas!', `A requisição ${novaRequisicao.id} foi salva com sucesso e já está pronta para a próxima etapa!`, () => {
       fecharAlerta();
       aoSalvar(novaRequisicao, !!reqEmEdicao);
     });
@@ -482,6 +553,14 @@ export default function NovaRequisicao({ aoVoltar, baseProdutos, aoSalvar, aoCan
 
   return (
     <div className="nova-req-container">
+      
+      {tipoReposicaoGlobal === 'externa' && inicioCronometroGlobal && (
+        <div className="painel-cronometro-global-checkout">
+          <span className="cronometro-titulo-checkout">⏱️ Finalize para gravar seu tempo:</span>
+          <span className="cronometro-relogio-checkout">{formatarTempo(segundosDecorridos)}</span>
+        </div>
+      )}
+
       <div className="nova-req-header">
         <h2>{reqEmEdicao ? `✏️ Editar Requisição ${reqEmEdicao.id}` : 'Criar Nova Requisição'}</h2>
         <button className="btn-voltar" onClick={aoVoltar}>← Cancelar</button>

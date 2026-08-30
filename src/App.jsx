@@ -27,8 +27,12 @@ function App() {
   const [produtosPreSelecionados, setProdutosPreSelecionados] = useState(null);
   const [reqEmEdicao, setReqEmEdicao] = useState(null); 
 
-  // Estado para gerenciar os itens da pré-requisição vindos da Base de Dados
+  // =======================================================================
+  // NOVOS ESTADOS GLOBAIS PARA A "REPOSIÇÃO EXTERNA GAMIFICADA SIMULTÂNEA"
+  // =======================================================================
   const [itensPreRequisicao, setItensPreRequisicao] = useState([]);
+  const [tipoReposicaoGlobal, setTipoReposicaoGlobal] = useState('interna'); 
+  const [inicioCronometroGlobal, setInicioCronometroGlobal] = useState(null);
 
   const [baseProdutos, setBaseProdutos] = useState([]);
   const [requisicoes, setRequisicoes] = useState([]);
@@ -115,7 +119,6 @@ function App() {
     }
   }, []);
 
-  // Smart Polling
   useEffect(() => {
     if (!isLogado) return;
 
@@ -205,6 +208,8 @@ function App() {
     }
     setTelaAtual('painel');
     setProdutosPreSelecionados(null);
+    setInicioCronometroGlobal(null); // Reseta caso o usuário desista no meio
+    setTipoReposicaoGlobal('interna');
   };
 
   const handleCancelarRequisicao = async (id, nomeCancelador) => {
@@ -228,6 +233,10 @@ function App() {
     }
   };
 
+  // =======================================================================
+  // AJUSTE REALIZADO AQUI: Suporte a gravação das métricas de separação 
+  // direto da criação da Nova Requisição (se for "Externa Gamificada")
+  // =======================================================================
   const handleSalvarRequisicao = async (novaReq, isEdicao = false) => {
     if (isEdicao) {
       const { error } = await supabase.from('requisicoes').update({
@@ -250,9 +259,27 @@ function App() {
     } else {
       const { error } = await supabase.from('requisicoes').insert([{
         id: novaReq.id, data: novaReq.data, timestamp_criacao: novaReq.timestampCriacao, origem: novaReq.origem, destino: novaReq.destino, solicitante: novaReq.solicitante,
-        motivo: novaReq.motivo, prioridade: novaReq.prioridade, itens: novaReq.itens, status: novaReq.status, lista_itens: novaReq.listaItens, historico: novaReq.historico
+        motivo: novaReq.motivo, prioridade: novaReq.prioridade, itens: novaReq.itens, status: novaReq.status, lista_itens: novaReq.listaItens, historico: novaReq.historico,
+        metricas_separacao: novaReq.metricasSeparacao || null // <-- ADICIONADO AQUI
       }]);
-      if (!error) { await carregarDadosDaNuvem(true); setTelaAtual('painel'); setProdutosPreSelecionados(null); }
+      
+      if (!error) { 
+        // Verifica se a gamificação simultânea bateu recorde e salva no banco
+        if (novaReq.metricasSeparacao?.bateuRecorde) {
+          await supabase.from('recordes_globais').upsert({ 
+            qtd_itens: novaReq.metricasSeparacao.totalItensFisicos, 
+            tempo_segundos: novaReq.metricasSeparacao.tempoTotalSegundos, 
+            responsavel: novaReq.metricasSeparacao.responsavel, 
+            data: new Date().toLocaleDateString() 
+          });
+        }
+        
+        await carregarDadosDaNuvem(true); 
+        setTelaAtual('painel'); 
+        setProdutosPreSelecionados(null); 
+        setInicioCronometroGlobal(null); // Limpa o cronômetro para o próximo pedido
+        setTipoReposicaoGlobal('interna'); // Volta ao padrão
+      }
     }
   };
 
@@ -391,7 +418,6 @@ function App() {
           <div className="admin-tabs-header">
             <button className={`tab-header ${abaAdminAtiva === 'base-dados' ? 'ativo' : ''}`} onClick={() => setAbaAdminAtiva('base-dados')}>🗄️ Base de Dados</button>
             <button className={`tab-header ${abaAdminAtiva === 'usuarios' ? 'ativo' : ''}`} onClick={() => setAbaAdminAtiva('usuarios')}>👥 Gestão de Usuários</button>
-            {/* NOVA ABA ADICIONADA AQUI 👇 */}
             <button className={`tab-header ${abaAdminAtiva === 'novidades' ? 'ativo' : ''}`} onClick={() => setAbaAdminAtiva('novidades')}>📢 Novidades</button>
           </div>
         )}
@@ -406,21 +432,49 @@ function App() {
         ) : (
           <>
             {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes.filter(r => r.status !== 'Em Edição' && r.status !== 'Cancelada')} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
-            {telaAtual === 'nova' && <NovaRequisicao aoVoltar={handleCancelarEdicao} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} aoCancelarReq={handleCancelarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} reqEmEdicao={reqEmEdicao} />}
+            
+            {/* PASSANDO AS NOVAS PROPS GLOBAIS PARA A NOVA REQUISIÇÃO */}
+            {telaAtual === 'nova' && (
+              <NovaRequisicao 
+                aoVoltar={handleCancelarEdicao} 
+                baseProdutos={baseProdutos} 
+                aoSalvar={handleSalvarRequisicao} 
+                aoCancelarReq={handleCancelarRequisicao} 
+                requisicoes={requisicoes} 
+                produtosPreSelecionados={produtosPreSelecionados} 
+                reqEmEdicao={reqEmEdicao} 
+                usuarioLogado={usuarioLogado}
+                recordesGlobais={recordesGlobais}
+                tipoReposicaoGlobal={tipoReposicaoGlobal}
+                inicioCronometroGlobal={inicioCronometroGlobal}
+              />
+            )}
+            
             {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} aoIniciarEdicao={handleIniciarEdicao} aoAtualizarObservacoes={handleAtualizarObservacoes} recordesGlobais={recordesGlobais} />}
             {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
             {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
+            
+            {/* PASSANDO AS NOVAS PROPS GLOBAIS PARA A BASE DE DADOS */}
             {telaAtual === 'base-dados' && (
               <BaseDados 
-                aoVoltar={() => setTelaAtual('painel')} 
+                aoVoltar={() => {
+                  setTelaAtual('painel');
+                  setInicioCronometroGlobal(null);
+                  setTipoReposicaoGlobal('interna');
+                }} 
                 produtos={baseProdutos} 
                 setProdutos={setBaseProdutos} 
                 itensPreRequisicao={itensPreRequisicao}
                 aoAdicionarPreRequisicao={handleAdicionarPreRequisicao}
                 aoRemoverPreRequisicao={handleRemoverPreRequisicao}
                 aoIrParaPreRequisicao={handleIrParaPreRequisicao}
+                tipoReposicaoGlobal={tipoReposicaoGlobal}
+                setTipoReposicaoGlobal={setTipoReposicaoGlobal}
+                inicioCronometroGlobal={inicioCronometroGlobal}
+                setInicioCronometroGlobal={setInicioCronometroGlobal}
               />
             )}
+            
             {telaAtual === 'admin' && usuarioLogado?.username === 'admin' && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
           </>
         )}

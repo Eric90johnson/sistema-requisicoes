@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import '../../styles/components/rodape/rodape.css';
 
 export default function Rodape() {
-  const VERSAO_SISTEMA = "1.5.0"; 
+  const VERSAO_SISTEMA = "1.5.1"; 
   
   // Estado para controlar se o rodapé está aberto ou fechado no celular
   const [expandido, setExpandido] = useState(false);
