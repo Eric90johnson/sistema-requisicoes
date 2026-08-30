@@ -52,73 +52,6 @@
   font-weight: bold;
 }
 
-/* --- Status Base --- */
-.controle-status {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  background-color: #f9f5fb;
-  padding: 15px;
-  border-radius: 8px;
-}
-
-.select-status {
-  padding: 10px;
-  border: 2px solid var(--cor-primaria);
-  border-radius: 6px;
-  font-size: 1rem;
-  font-weight: bold;
-  color: var(--cor-secundaria);
-  outline: none;
-  cursor: pointer;
-}
-
-.controle-status-container {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.input-responsavel {
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  flex: 1;
-  min-width: 150px;
-}
-
-.input-req-externa {
-  padding: 10px;
-  border-radius: 6px;
-  border: 2px solid #3498db;
-  flex: 1;
-  min-width: 180px;
-}
-
-.input-nota-fiscal {
-  padding: 10px;
-  border-radius: 6px;
-  border: 2px solid #e67e22;
-  flex: 1;
-  min-width: 180px;
-}
-
-.btn-confirmar-status {
-  padding: 10px 20px;
-  background-color: #27ae60;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: 0.2s;
-}
-
-.btn-confirmar-status:hover {
-  background-color: #219653;
-}
-
 /* --- Botões do Cabeçalho --- */
 .botoes-header-container {
   display: flex;
@@ -254,23 +187,13 @@
 
 /* --- Animações Globais --- */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes popInModal {
-  0% {
-    transform: scale(0.9);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 /* --- Responsividade Global --- */
@@ -292,16 +215,5 @@
   .info-grid {
     grid-template-columns: 1fr;
     gap: 10px;
-  }
-
-  .controle-status {
-    flex-direction: column;
-    align-items: stretch !important;
-  }
-
-  .controle-status > * {
-    width: 100%;
-    margin-bottom: 10px;
-    min-width: unset !important;
   }
 }

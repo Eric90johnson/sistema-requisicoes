@@ -1,9 +1,12 @@
 export const calcularRanking = (requisicoes, dataInicioRanking, dataFimRanking) => {
   const reqsValidas = requisicoes.filter(req => {
     if (!req.metricasSeparacao) return false;
+    
+    // Se houver filtro de data, aplica a regra
     if (dataInicioRanking || dataFimRanking) {
       const dataFimReal = req.metricasSeparacao.finalizadoEm ? new Date(req.metricasSeparacao.finalizadoEm) : null;
       if (!dataFimReal) return false;
+      
       if (dataInicioRanking) {
         const inicio = new Date(`${dataInicioRanking}T00:00:00`);
         if (dataFimReal < inicio) return false;
@@ -13,6 +16,7 @@ export const calcularRanking = (requisicoes, dataInicioRanking, dataFimRanking) 
         if (dataFimReal > fim) return false;
       }
     }
+    // Se não houver filtro, traz TODAS as requisições finalizadas
     return true;
   });
 
@@ -71,6 +75,7 @@ export const calcularRanking = (requisicoes, dataInicioRanking, dataFimRanking) 
   });
 
   const rankingFinal = Object.values(pontuacoes).map(p => {
+    // Calcula o UPM Global do colaborador baseado no tempo total dele
     const upmGlobal = p.totalSegundos > 0 ? ((p.totalItens / p.totalSegundos) * 60) : 0;
     const upmFormatado = Number(upmGlobal.toFixed(1));
 
@@ -85,6 +90,7 @@ export const calcularRanking = (requisicoes, dataInicioRanking, dataFimRanking) 
     };
   });
 
+  // Ordena o ranking final do maior pontuador para o menor
   rankingFinal.sort((a, b) => b.pontuacao - a.pontuacao); 
   return rankingFinal;
 };

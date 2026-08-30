@@ -2,22 +2,21 @@ import React, { useState, useEffect } from 'react';
 import '../../../styles/pages/painel/detalhes/detalhes.css';
 import Romaneio from '../romaneio/Romaneio';
 
-// Importação dos Nossos Novos Módulos
 import ObservacoesReq from './ObservacoesReq';
 import EdicaoReq from './EdicaoReq';
 import SeparacaoReq from './SeparacaoReq';
+import EsteiraInterna from './EsteiraInterna';
+import EsteiraExterna from './EsteiraExterna';
 
-export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, aoVoltar, aoMudarStatus, aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, aoIniciarEdicao, aoAtualizarObservacoes, recordesGlobais }) {
+export default function DetalhesRequisicao({ 
+  req, usuarioLogado, baseProdutos, aoVoltar, aoMudarStatus, 
+  aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, 
+  aoIniciarEdicao, aoAtualizarObservacoes, recordesGlobais 
+}) {
   if (!req) return null;
-
-  const [novoStatus, setNovoStatus] = useState(req.status);
-  const [responsavel, setResponsavel] = useState('');
-  const [numReqExterna, setNumReqExterna] = useState('');
-  const [notaFiscal, setNotaFiscal] = useState('');
 
   const [nomeAssumir, setNomeAssumir] = useState('');
   const [modoAssumir, setModoAssumir] = useState(false);
-
   const [tempoDecorrido, setTempoDecorrido] = useState(0);
   const [cronometroRodando, setCronometroRodando] = useState(false);
 
@@ -31,11 +30,11 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
   
   const fecharPopupCustom = () => setPopupCustom({ ...popupCustom, visivel: false });
 
-  // Recalcula todosBipados usando os dados oficais do pai (segurança extra)
-  const todosBipadosStatus = req.listaItens && req.listaItens.length > 0 && req.listaItens.every(item => {
+  const isGamificada = req.metricasSeparacao && req.listaItens.every(i => i.bipContagem === undefined);
+  const todosBipadosStatus = isGamificada || (req.listaItens && req.listaItens.length > 0 && req.listaItens.every(item => {
     const meta = item.quantidadeEditada !== undefined ? Number(item.quantidadeEditada) : Number(item.quantidade);
     return (item.bipContagem || 0) >= meta;
-  });
+  }));
 
   const dispararDesafioDeProdutividade = () => {
     const totalItensFisicos = req.listaItens.reduce((acc, item) => {
@@ -64,7 +63,7 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
         setCronometroRodando(true);
         intervalo = setInterval(() => {
           const diferencaSegundos = Math.floor((Date.now() - Number(horaInicioBanco)) / 1000);
-          setTempoDecorrido(diferencaSegundos);
+          setTempoDecorrido(diferencaSegundos > 0 ? diferencaSegundos : 0);
         }, 1000);
       }
     } else {
@@ -92,30 +91,58 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
     }
   };
 
-  const confirmarMudanca = () => {
-    if (!responsavel.trim()) { exibirPopup('aviso', 'Atenção', 'Por favor, insira seu nome para assumir a responsabilidade!'); return; }
-    
-    if (novoStatus === 'Em Separação' && req.status !== 'Em Separação') {
-       dispararDesafioDeProdutividade();
-    }
+  const isReposicaoInterna = req.motivo === 'Reposição Interna' || (req.origem && req.destino && req.origem === req.destino);
 
-    if (novoStatus === 'Saída de produtos') {
-      if (!todosBipadosStatus) { exibirPopup('erro', 'Trava de Segurança', 'Você não pode finalizar a saída sem bipar a quantidade exata de TODOS os produtos solicitados (ou justificar o corte editando a quantidade)!'); return; }
-      if (!numReqExterna.trim()) { exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Requisição gerado pelo sistema da loja!'); return; }
-      if (!req.metricasSeparacao) { exibirPopup('erro', 'Atenção', 'Você deve clicar no botão "Concluir Separação" na parte de baixo da tela para travar o seu tempo antes de passar para a próxima etapa!'); return; }
+  // A função processarEsteira agora recebe os dados diretamente dos componentes filhos
+  const processarEsteira = (proximoStatus, responsavelDigitado, dadosDaEsteira = {}) => {
+    if (!responsavelDigitado.trim()) { 
+      exibirPopup('aviso', 'Atenção', 'Por favor, insira o nome do responsável pela etapa!'); 
+      return; 
     }
     
-    if (novoStatus === 'Faturamento' && !notaFiscal.trim()) { exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Nota Fiscal de transferência!'); return; }
-
     const dadosExtras = {};
-    if (novoStatus === 'Saída de produtos') dadosExtras.numeroRequisicaoExterna = numReqExterna;
-    if (novoStatus === 'Faturamento') dadosExtras.notaFiscal = notaFiscal;
+
+    if (proximoStatus === 'Em Separação' && req.status !== 'Em Separação') {
+       dispararDesafioDeProdutividade();
+       dadosExtras.inicio_separacao = Date.now(); 
+    }
+
+    if (req.status === 'Separado' && !isReposicaoInterna) {
+      if (!todosBipadosStatus) { 
+        exibirPopup('erro', 'Trava de Segurança', 'Você não pode dar saída sem bipar a quantidade exata de TODOS os produtos solicitados (ou ajustar a quantidade)!'); 
+        return; 
+      }
+      if (!dadosDaEsteira.numReqExterna?.trim()) { 
+        exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Ordem Interna (Req. Sistema)!'); 
+        return; 
+      }
+      if (!req.metricasSeparacao) { 
+        exibirPopup('erro', 'Atenção', 'Você deve clicar no botão "Concluir Separação" na parte de baixo da tela para travar o seu tempo antes de passar para a saída!'); 
+        return; 
+      }
+      dadosExtras.numeroRequisicaoExterna = dadosDaEsteira.numReqExterna;
+    }
     
-    aoMudarStatus(req.id, novoStatus, responsavel, dadosExtras);
+    if ((req.status === 'Faturamento' || req.status === 'Saída de produtos') && !isReposicaoInterna) {
+      if (!dadosDaEsteira.notaFiscal?.trim()) { 
+        exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Nota Fiscal de transferência!'); 
+        return; 
+      }
+      dadosExtras.notaFiscal = dadosDaEsteira.notaFiscal;
+    }
     
-    setResponsavel(''); setNumReqExterna(''); setNotaFiscal('');
-    if (novoStatus !== 'Em Separação') {
-       exibirPopup('sucesso', 'Status Atualizado', 'O status da requisição foi alterado com sucesso!');
+    aoMudarStatus(req.id, proximoStatus, responsavelDigitado, dadosExtras);
+
+    if (proximoStatus !== 'Concluída' && proximoStatus !== 'Em Separação') {
+       exibirPopup('sucesso', 'Avançou na Esteira!', `O status foi atualizado para: ${proximoStatus}`, () => {
+         fecharPopupCustom();
+         aoVoltar(); 
+       });
+    } else if (proximoStatus === 'Concluída') {
+       exibirPopup('sucesso', 'Requisição Concluída!', `A requisição foi recebida e finalizada com sucesso!\n\nLembrete: Arquive a nota/romaneio após o abastecimento das prateleiras.`, () => {
+         fecharPopupCustom();
+         aoVoltar(); 
+       });
     }
   };
 
@@ -132,8 +159,6 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
       default: return 'status-pendente'; 
     }
   };
-
-  const isReposicaoInterna = req.motivo === 'Reposição Interna' || (req.origem && req.destino && req.origem === req.destino);
 
   return (
     <div className="detalhes-container">
@@ -183,22 +208,15 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
             </div>
           )}
 
-          {/* MÓDULO DE OBSERVAÇÕES */}
-          <ObservacoesReq 
-            req={req} 
-            usuarioLogado={usuarioLogado} 
-            aoAtualizarObservacoes={aoAtualizarObservacoes} 
-            exibirPopup={exibirPopup} 
-          />
+          <ObservacoesReq req={req} usuarioLogado={usuarioLogado} aoAtualizarObservacoes={aoAtualizarObservacoes} exibirPopup={exibirPopup} />
         </div>
 
-        {/* MÓDULO DE EDIÇÃO DA REQUISIÇÃO */}
         <EdicaoReq req={req} aoIniciarEdicao={aoIniciarEdicao} exibirPopup={exibirPopup} />
 
         {req.status === 'Em Separação' && (
           <div className="box-assumir-tarefa">
             <div className="assumir-info">
-              <span><strong>Separador(es) Atual(is):</strong> {req.historico['Em Separação'] || 'Não informado'}</span>
+              <span><strong>Separador(es) Atual(is):</strong> {req.historico?.['Em Separação'] || 'Não informado'}</span>
             </div>
             {!modoAssumir ? (
               <button className="btn-assumir" onClick={() => setModoAssumir(true)}>🙋 Assumir / Ajudar na Separação</button>
@@ -212,37 +230,11 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
           </div>
         )}
 
-        <div className="controle-status controle-status-container">
-          <strong>Atualizar Status:</strong>
-          
-          <select className="select-status" value={novoStatus} onChange={(e) => setNovoStatus(e.target.value)}>
-            <option value="Pendente">Pendente</option>
-            <option value="Em Separação">Em Separação</option>
-            <option value="Separado">Separado</option>
-            {!isReposicaoInterna && (
-              <>
-                <option value="Saída de produtos">Saída de produtos</option>
-                <option value="Faturamento">Faturamento</option>
-                <option value="Transporte">Transporte</option>
-              </>
-            )}
-            <option value="Recebimento">Recebimento</option>
-          </select>
-          
-          <input type="text" placeholder="Nome do Responsável" className="input-responsavel" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} />
-
-          {novoStatus === 'Saída de produtos' && (
-            <input type="text" placeholder="Nº da Req. no Sistema" className="input-req-externa" value={numReqExterna} onChange={(e) => setNumReqExterna(e.target.value)} />
-          )}
-
-          {novoStatus === 'Faturamento' && (
-            <input type="text" placeholder="Nº da Nota Fiscal" className="input-nota-fiscal" value={notaFiscal} onChange={(e) => setNotaFiscal(e.target.value)} />
-          )}
-          
-          <button className="btn-confirmar-status" onClick={confirmarMudanca}>
-            Confirmar Status
-          </button>
-        </div>
+        {isReposicaoInterna ? (
+          <EsteiraInterna req={req} onProcessar={processarEsteira} />
+        ) : (
+          <EsteiraExterna req={req} onProcessar={processarEsteira} />
+        )}
       </div>
 
       <div className="card-info" style={{ position: 'relative' }}>
@@ -271,16 +263,7 @@ export default function DetalhesRequisicao({ req, usuarioLogado, baseProdutos, a
           </div>
         )}
 
-        {/* MÓDULO DE SEPARAÇÃO E BIPAGEM */}
-        <SeparacaoReq 
-          req={req} 
-          usuarioLogado={usuarioLogado} 
-          aoAtualizarItens={aoAtualizarItens} 
-          aoFinalizarSeparacao={aoFinalizarSeparacao} 
-          tempoDecorrido={tempoDecorrido} 
-          exibirPopup={exibirPopup} 
-          setNovoStatus={setNovoStatus}
-        />
+        <SeparacaoReq req={req} usuarioLogado={usuarioLogado} aoAtualizarItens={aoAtualizarItens} aoFinalizarSeparacao={aoFinalizarSeparacao} tempoDecorrido={tempoDecorrido} exibirPopup={exibirPopup} />
       </div>
 
       {popupCustom.visivel && (

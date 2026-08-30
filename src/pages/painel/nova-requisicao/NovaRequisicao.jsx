@@ -1,19 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import '../../../styles/pages/painel/nova-requisicao/novaRequisicao.css';
-
-const parseValorMoeda = (valorStr) => {
-  if (!valorStr) return 0;
-  if (typeof valorStr === 'number') return valorStr;
-  
-  let limpo = valorStr.toString().replace(/[^\d.,-]/g, '');
-  
-  if (limpo.includes('.') && limpo.includes(',')) {
-    limpo = limpo.replace(/\./g, '');
-  }
-  
-  limpo = limpo.replace(',', '.');
-  return Number(limpo) || 0;
-};
+import FormularioCabecalho from './FormularioCabecalho';
+import TabelaProdutosForm from './TabelaProdutosForm';
+import CronometroCheckout from './CronometroCheckout';
+import ModalAlerta from './ModalAlerta';
+import { parseValorMoeda, gerarIdSequencial } from './requisicaoUtils';
 
 export default function NovaRequisicao({ 
   aoVoltar, 
@@ -29,12 +20,7 @@ export default function NovaRequisicao({
   inicioCronometroGlobal = null
 }) {
   
-  const lojas = [
-    'Araturi', 
-    'Conjunto Ceará', 
-    'Messejana',
-    'Mulungu'
-  ];
+  const lojas = ['Araturi', 'Conjunto Ceará', 'Messejana', 'Mulungu'];
 
   const [lojaDe, setLojaDe] = useState(lojas[0]);
   const [lojaPara, setLojaPara] = useState(lojas[1]);
@@ -155,7 +141,6 @@ export default function NovaRequisicao({
     if (isModoVitrine && !alertaPreenchimentoExibido.current && baseProdutos.length > 0) {
       alertaPreenchimentoExibido.current = true;
       
-      // MÁGICA 1: Recupera o nome de quem está separando lá da memória!
       const nomeSalvo = localStorage.getItem('nd_separador_gamificado');
       if (nomeSalvo && tipoReposicaoGlobal === 'externa') {
         setSolicitante(nomeSalvo);
@@ -387,29 +372,6 @@ export default function NovaRequisicao({
     reader.readAsText(file);
   };
 
-  const gerarIdSequencial = (destino) => {
-    let prefixo = 'REQ'; 
-    if (destino === 'Araturi') prefixo = 'A';
-    else if (destino === 'Conjunto Ceará') prefixo = 'C';
-    else if (destino === 'Messejana') prefixo = 'M';
-    else if (destino === 'Mulungu') prefixo = 'MU';
-    
-    let maxNum = 0;
-    
-    requisicoes.forEach(req => {
-      if (req.id && req.id.startsWith(prefixo)) {
-        const resto = req.id.substring(prefixo.length);
-        if (/^\d+$/.test(resto)) {
-          const num = parseInt(resto, 10);
-          if (num > maxNum) maxNum = num;
-        }
-      }
-    });
-
-    const proxNumFormatado = String(maxNum + 1).padStart(4, '0');
-    return `${prefixo}${proxNumFormatado}`;
-  };
-
   const finalizarRequisicao = () => {
     if (!solicitante.trim()) { 
       mostrarAlerta('erro', 'Campo Obrigatório', 'Preencha o nome do Solicitante antes de prosseguir.'); 
@@ -505,12 +467,11 @@ export default function NovaRequisicao({
       novoHistorico['inicio_separacao'] = inicioCronometroGlobal;
       novoHistorico['Separado'] = solicitante;
       
-      // MÁGICA 2: Limpa a memória pra não sujar o nome na próxima
       localStorage.removeItem('nd_separador_gamificado');
     }
 
     const novaRequisicao = {
-      id: reqEmEdicao ? reqEmEdicao.id : gerarIdSequencial(lojaPara),
+      id: reqEmEdicao ? reqEmEdicao.id : gerarIdSequencial(lojaPara, requisicoes),
       data: reqEmEdicao ? reqEmEdicao.data : new Date().toLocaleDateString('pt-BR'),
       timestampCriacao: reqEmEdicao ? reqEmEdicao.timestampCriacao : Date.now(), 
       origem: lojaDe, 
@@ -555,10 +516,10 @@ export default function NovaRequisicao({
     <div className="nova-req-container">
       
       {tipoReposicaoGlobal === 'externa' && inicioCronometroGlobal && (
-        <div className="painel-cronometro-global-checkout">
-          <span className="cronometro-titulo-checkout">⏱️ Finalize para gravar seu tempo:</span>
-          <span className="cronometro-relogio-checkout">{formatarTempo(segundosDecorridos)}</span>
-        </div>
+        <CronometroCheckout 
+          segundosDecorridos={segundosDecorridos} 
+          formatarTempo={formatarTempo} 
+        />
       )}
 
       <div className="nova-req-header">
@@ -568,197 +529,50 @@ export default function NovaRequisicao({
 
       <div className="card-formulario">
         
-        <div className="form-secao">
-          
-          <div className="campo-loja">
-            <label>Solicitante (Seu Nome):</label>
-            <input type="text" className="input-item" placeholder="Ex: Maria" value={solicitante} onChange={(e) => setSolicitante(e.target.value)} />
-          </div>
+        <FormularioCabecalho
+          solicitante={solicitante}
+          setSolicitante={setSolicitante}
+          lojaDe={lojaDe}
+          setLojaDe={setLojaDe}
+          lojaPara={lojaPara}
+          setLojaPara={setLojaPara}
+          lojas={lojas}
+          motivo={motivo}
+          setMotivo={setMotivo}
+          motivoOutro={motivoOutro}
+          setMotivoOutro={setMotivoOutro}
+          prioridadeOutro={prioridadeOutro}
+          setPrioridadeOutro={setPrioridadeOutro}
+          listaObservacoes={listaObservacoes}
+          novaObs={novaObs}
+          setNovaObs={setNovaObs}
+          handleAdicionarObservacao={handleAdicionarObservacao}
+          handleRemoverObservacao={handleRemoverObservacao}
+          reqEmEdicao={reqEmEdicao}
+        />
 
-          <div className="linha-dupla">
-            <div className="campo-loja">
-              <label>Loja Atendente (De):</label>
-              <select value={lojaDe} onChange={(e) => setLojaDe(e.target.value)}>
-                {lojas.map(loja => <option key={`de-${loja}`} value={loja}>{loja}</option>)}
-              </select>
-            </div>
-            
-            <div className="campo-loja">
-              <label>Loja Solicitante (Para):</label>
-              <select value={lojaPara} onChange={(e) => setLojaPara(e.target.value)}>
-                {lojas.map(loja => <option key={`para-${loja}`} value={loja}>{loja}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="campo-loja">
-            <label>Motivo da Transferência:</label>
-            <select className="input-item" value={motivo} onChange={(e) => setMotivo(e.target.value)}>
-              <option value="">Selecione um motivo...</option>
-              <option value="Cliente">Cliente (Prioridade Alta)</option>
-              <option value="Rota para clientes">Rota para clientes (Prioridade Alta)</option>
-              <option value="Reposição de estoque">Reposição de estoque (Prioridade Média)</option>
-              <option value="Produtos para provadores">Produtos para provadores (Prioridade Baixa)</option>
-              <option value="Outros">Outros (Especificar)</option>
-            </select>
-            
-            {motivo === 'Outros' && (
-              <div className="linha-dupla linha-dupla-motivo">
-                <div className="campo-loja campo-loja-flex-2">
-                  <input 
-                    type="text" 
-                    className="input-item" 
-                    placeholder="Especifique o motivo da requisição..." 
-                    value={motivoOutro} 
-                    onChange={(e) => setMotivoOutro(e.target.value)} 
-                  />
-                </div>
-                <div className="campo-loja campo-loja-flex-1">
-                  <select 
-                    className="input-item" 
-                    value={prioridadeOutro} 
-                    onChange={(e) => setPrioridadeOutro(e.target.value)}
-                    title="Defina o nível de urgência desta requisição"
-                  >
-                    <option value="1">Prioridade 1 (Alta / Urgente)</option>
-                    <option value="2">Prioridade 2 (Média)</option>
-                    <option value="3">Prioridade 3 (Baixa)</option>
-                  </select>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div className="campo-loja obs-geral-box" style={{ marginTop: '10px' }}>
-            <label>📝 Observações Gerais / Instruções da Requisição:</label>
-
-            {listaObservacoes.length > 0 && (
-              <div className="lista-observacoes-wrapper">
-                <ul className="lista-obs-ul">
-                  {listaObservacoes.map((obs) => (
-                    <li key={obs.id_obs} className="item-obs-li">
-                      <div className="obs-meta">
-                        <strong>{obs.autor}</strong> em {obs.data}
-                      </div>
-                      <div className="obs-conteudo">{obs.texto}</div>
-                      <button
-                        type="button"
-                        className="btn-remover-obs"
-                        onClick={() => handleRemoverObservacao(obs.id_obs)}
-                        title="Remover esta observação"
-                      >
-                        🗑️
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="obs-add-mode">
-              <textarea 
-                className="obs-textarea-nova" 
-                placeholder={reqEmEdicao ? "Ex: Alterei a quantidade do produto X..." : "Ex: Cuidado com os produtos de vidro. Embalar separadamente..."}
-                value={novaObs} 
-                onChange={(e) => setNovaObs(e.target.value)} 
-              />
-              <button 
-                type="button" 
-                className="btn-adicionar-obs-lista" 
-                onClick={handleAdicionarObservacao}
-              >
-                ➕ Adicionar Observação
-              </button>
-            </div>
-          </div>
-
-        </div>
-
-        <div className="cabecalho-insercao">
-          <h3 className="titulo-insercao">Inserir Produtos</h3>
-          
-          <div>
-            <input type="file" accept=".csv" ref={inputArquivoRef} className="input-arquivo-oculto" onChange={handleImportarCSV} />
-            <button className="btn-importar" onClick={() => inputArquivoRef.current.click()} title="Importe um arquivo contendo apenas 'Código' e 'Quantidade' separados por vírgula">
-              📁 Importar Planilha CSV
-            </button>
-          </div>
-        </div>
-        
-        <div className="linha-insercao">
-          <div className="col-curta">
-            <input type="text" className="input-item" placeholder="Cód" value={codigo} onChange={(e) => handleMudancaCodigo(e.target.value)} ref={inputCodigoRef} />
-          </div>
-          <div className="col-longa">
-            <input type="text" className="input-item" placeholder="Descrição..." value={descricao} disabled />
-          </div>
-          <div className="col-curta">
-            <input type="number" className="input-item" placeholder="Qtd" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && adicionarNaLista()} />
-          </div>
-          <button className="btn-adicionar" onClick={adicionarNaLista}>Adicionar ↓</button>
-        </div>
-
-        {itensAdicionados.length > 0 && (
-          <>
-            <div className="tabela-wrapper">
-              <table className="tabela-itens">
-                <thead>
-                  <tr>
-                    <th>Cód. Produto</th>
-                    <th>Descrição</th>
-                    {isModoVitrine && <th className="td-centro">Qtd. no CD</th>}
-                    <th>Qtd. Solicitada</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {itensAdicionados.map((item, index) => (
-                    <tr key={index} className={item.insuficiente ? 'linha-alerta-estoque' : ''}>
-                      <td><strong>{item.cod}</strong></td>
-                      <td className={item.descricao === 'Produto não encontrado' ? 'texto-erro' : ''}>
-                        {item.descricao}
-                        {item.insuficiente && item.descricao !== 'Produto não encontrado' && !isModoVitrine && (
-                          <div><span className="badge-estoque">Estoque atual: {item.estoque} un</span></div>
-                        )}
-                      </td>
-                      
-                      {isModoVitrine && (
-                        <td className="td-centro">
-                          <span className="badge-estoque-vitrine">{item.estoque !== null ? item.estoque : 0} un</span>
-                        </td>
-                      )}
-
-                      <td>
-                        {editandoIndex === index ? (
-                          <div className="edicao-container-nova">
-                            <input type="number" className="input-qtd-edit-nova" value={novaQuantidadeEdit} onChange={(e) => setNovaQuantidadeEdit(e.target.value)} />
-                            <button className="btn-acao-edit-nova" onClick={() => salvarEdicao(index)} title="Salvar">✔️</button>
-                            <button className="btn-acao-edit-nova" onClick={cancelarEdicao} title="Cancelar">❌</button>
-                          </div>
-                        ) : (
-                          <div className="quantidade-container-nova">
-                            <strong className={item.quantidade === 0 ? 'texto-qtd-zerada' : ''}>{item.quantidade} un</strong>
-                            <button className="btn-editar-item-nova" onClick={() => iniciarEdicao(index, item.quantidade)} title="Editar quantidade">✏️</button>
-                            <button className="btn-remover-item-nova" onClick={() => removerDaLista(index)} title="Remover item">🗑️</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="resumo-valores">
-              <div className="resumo-valores-texto">
-                <strong>Atenção:</strong> Esta transferência movimenta produtos físicos. 
-                O valor total estimado (a preço de custo) desta operação é de:
-              </div>
-              <div className="resumo-valores-total">
-                {valorTotalRequisicao.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </div>
-            </div>
-          </>
-        )}
+        <TabelaProdutosForm
+          codigo={codigo}
+          setCodigo={setCodigo}
+          descricao={descricao}
+          quantidade={quantidade}
+          setQuantidade={setQuantidade}
+          handleMudancaCodigo={handleMudancaCodigo}
+          adicionarNaLista={adicionarNaLista}
+          inputCodigoRef={inputCodigoRef}
+          inputArquivoRef={inputArquivoRef}
+          handleImportarCSV={handleImportarCSV}
+          itensAdicionados={itensAdicionados}
+          isModoVitrine={isModoVitrine}
+          editandoIndex={editandoIndex}
+          novaQuantidadeEdit={novaQuantidadeEdit}
+          setNovaQuantidadeEdit={setNovaQuantidadeEdit}
+          salvarEdicao={salvarEdicao}
+          cancelarEdicao={cancelarEdicao}
+          iniciarEdicao={iniciarEdicao}
+          removerDaLista={removerDaLista}
+          valorTotalRequisicao={valorTotalRequisicao}
+        />
         
         <div className="rodape-formulario">
           {reqEmEdicao && (
@@ -773,33 +587,7 @@ export default function NovaRequisicao({
         </div>
       </div>
 
-      {alerta.visivel && (
-        <div className="alerta-modal-overlay">
-          <div className="alerta-modal-box">
-            
-            <div className={`alerta-modal-header tipo-${alerta.tipo}`}>
-              {alerta.tipo === 'erro' && '🚨 '}
-              {alerta.tipo === 'sucesso' && '✅ '}
-              {alerta.tipo === 'aviso' && '⚠️ '}
-              {alerta.titulo}
-            </div>
-
-            <div className="alerta-modal-body">
-              {alerta.mensagem.split('\n').map((linha, i) => (<span key={i}>{linha}<br/></span>))}
-            </div>
-
-            <div className="alerta-modal-footer">
-              {alerta.onCancel && (
-                <button className="btn-alerta btn-alerta-cancelar" onClick={alerta.onCancel}>{alerta.textoCancelar}</button>
-              )}
-              <button className={`btn-alerta btn-alerta-confirmar tipo-${alerta.tipo}`} onClick={() => { if (alerta.onConfirm) alerta.onConfirm(); else fecharAlerta(); }}>
-                {alerta.textoConfirmar}
-              </button>
-            </div>
-            
-          </div>
-        </div>
-      )}
+      <ModalAlerta alerta={alerta} fecharAlerta={fecharAlerta} />
 
     </div>
   );

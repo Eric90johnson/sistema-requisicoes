@@ -111,7 +111,10 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const temPedidoPendente = pedidosMarketplace.some(ped => ped.status === 'Pendente');
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
   
-  const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Recebimento' && req.status !== 'Cancelada');
+  // ======================================================================================
+  // Concluída é o gatilho para sumir
+  // ======================================================================================
+  const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Concluída' && req.status !== 'Cancelada');
 
   const getNomeLojaCurto = (nomeLoja) => {
     if (!nomeLoja) return '-';
@@ -147,10 +150,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       if (aDestacado && !bDestacado) return -1; 
       if (!aDestacado && bDestacado) return 1;  
 
-      const aTransporte = a.status === 'Transporte';
-      const bTransporte = b.status === 'Transporte';
-      if (aTransporte && !bTransporte) return 1;
-      if (!aTransporte && bTransporte) return -1;
+      // Joga Transporte e Recebimento para o final da fila (menor prioridade visual)
+      const aBaixaPrioridade = a.status === 'Transporte' || a.status === 'Recebimento';
+      const bBaixaPrioridade = b.status === 'Transporte' || b.status === 'Recebimento';
+      if (aBaixaPrioridade && !bBaixaPrioridade) return 1;
+      if (!aBaixaPrioridade && bBaixaPrioridade) return -1;
 
       const prioA = a.prioridade || 3; 
       const prioB = b.prioridade || 3;
@@ -172,17 +176,21 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     switch (status) {
       case 'Pendente': return 'status-pendente';
       case 'Em Separação': return 'status-separacao';
+      case 'Separado': return 'status-separado';
       case 'Saída de produtos': return 'status-separado';
       case 'Faturamento': return 'status-faturado';
-      case 'Transporte': return 'status-pendente'; 
-      case 'Recebimento': return 'status-recebido';
+      case 'Transporte': return 'status-enviado'; // Azul claro padrão (verifique o CSS .status-enviado)
+      case 'Recebimento': return 'status-enviado'; // Recebimento agora ganha o mesmo visual azul do transporte
+      case 'Concluída': return 'status-recebido'; 
       case 'Cancelada': return 'status-pendente';
       default: return 'status-pendente';
     }
   };
 
   const getLinhaPrioridadeClass = (req) => {
-    if (req.status === 'Transporte') return 'prioridade-baixa';
+    // Transporte e Recebimento usam a cor da prioridade baixa para ficarem esmaecidos no fundo
+    if (req.status === 'Transporte' || req.status === 'Recebimento') return 'prioridade-baixa';
+    
     switch (req.prioridade) {
       case 1: return 'prioridade-alta';   
       case 2: return 'prioridade-media';  
