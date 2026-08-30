@@ -39,7 +39,6 @@ export default function BaseDados({
   const [alertaExterna, setAlertaExterna] = useState(false); 
   const [cameraAtiva, setCameraAtiva] = useState(null); 
 
-  // NOVO ESTADO: Guarda quem vai ganhar os pontos
   const [nomeSeparador, setNomeSeparador] = useState('');
 
   const [tempoAtual, setTempoAtual] = useState(Date.now());
@@ -175,7 +174,10 @@ export default function BaseDados({
         tempProdutos = tempProdutos.filter(p => filtrosAtivos[col].includes(p[col]));
       }
     });
-    const unicos = [...new Set(tempProdutos.map(p => p[coluna]))].filter(Boolean).sort();
+    
+    // Tratamento seguro para evitar crash ao abrir filtros de colunas numéricas (como estoque)[cite: 13]
+    const unicos = [...new Set(tempProdutos.map(p => p[coluna] !== undefined && p[coluna] !== null ? String(p[coluna]) : ''))].filter(Boolean).sort();
+    
     setValoresUnicosMenu(unicos);
     if (filtrosAtivos[coluna]) setFiltroTemporario(filtrosAtivos[coluna]);
     else setFiltroTemporario(unicos);
@@ -200,7 +202,7 @@ export default function BaseDados({
     const novosFiltros = { ...filtrosAtivos }; delete novosFiltros[coluna]; setFiltrosAtivos(novosFiltros); setItensVisiveis(50); fecharMenu();
   };
 
-  const valoresExibidos = valoresUnicosMenu.filter(v => v.toLowerCase().includes(buscaMenu.toLowerCase()));
+  const valoresExibidos = valoresUnicosMenu.filter(v => String(v).toLowerCase().includes(buscaMenu.toLowerCase()));
   const todasExibidasMarcadas = valoresExibidos.length > 0 && valoresExibidos.every(v => filtroTemporario.includes(v));
 
   const handleToggleTodas = () => {
@@ -298,21 +300,18 @@ export default function BaseDados({
 
   const handleSelecionarModo = (modo) => {
     if (modo === 'externa' && !inicioCronometroGlobal) {
-      // Exibe o popup quando for iniciar
       setAlertaExterna(true); 
     } else {
       setTipoReposicaoGlobal(modo);
     }
   };
 
-  // --- NOVA REGRA: Salva o nome de quem vai ganhar os pontos ---
   const confirmarInicioExterna = () => {
     if (!nomeSeparador.trim()) {
       alert('Por favor, informe quem está separando para validar os pontos no Ranking!');
       return;
     }
 
-    // Grava o nome na memória rápida do navegador para a tela seguinte buscar
     localStorage.setItem('nd_separador_gamificado', nomeSeparador.trim());
 
     setTipoReposicaoGlobal('externa');
@@ -366,7 +365,6 @@ export default function BaseDados({
   return (
     <div className="base-dados-container">
       
-      {/* POPUP DE INÍCIO DA GAMIFICAÇÃO ATUALIZADO */}
       {alertaExterna && (
         <div className="popup-overlay">
           <div className="popup-content" style={{ maxWidth: '500px', width: '95%', padding: '30px' }}>
@@ -377,7 +375,6 @@ export default function BaseDados({
                 Agora suas pré-requisições valem pontos no ranking! O cronômetro vai começar a contar.
               </p>
 
-              {/* CAIXA DE ALERTA DE SEGURANÇA */}
               <div style={{
                 backgroundColor: '#fdedec', color: '#c0392b', padding: '15px', borderRadius: '8px',
                 borderLeft: '5px solid #e74c3c', fontSize: '0.9rem', textAlign: 'left', marginBottom: '20px', lineHeight: '1.4'
@@ -387,7 +384,6 @@ export default function BaseDados({
                 Caso contrário, <u>você perderá todo o seu progresso</u> e a gestão perderá a rastreabilidade dos produtos. Vamos evitar retrabalho!
               </div>
 
-              {/* CAMPO DO NOME DO SEPARADOR */}
               <div style={{ textAlign: 'left', marginBottom: '25px' }}>
                 <label style={{ fontWeight: 'bold', color: '#2c3e50', display: 'block', marginBottom: '8px' }}>👤 Quem está separando?</label>
                 <input 
