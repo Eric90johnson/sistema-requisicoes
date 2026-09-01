@@ -1,133 +1,127 @@
-.rodape-container {
-  background-color: var(--cor-secundaria, #2c3e50);
-  color: #ecf0f1;
-  padding: 30px 20px 15px;
-  margin-top: auto; 
-  border-top: 4px solid var(--cor-primaria, #8e44ad);
-  transition: all 0.3s ease;
-}
+/* ========================================================= */
+/* RODAPÉ MINIMALISTA (SaaS)                                 */
+/* ========================================================= */
 
-.rodape-conteudo {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 20px;
-}
-
-.rodape-secao {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.rodape-secao h3 {
-  color: #fff;
-  font-size: 1.2rem;
-  margin-bottom: 5px;
-}
-
-.rodape-secao h4 {
-  color: #bdc3c7;
-  font-size: 1rem;
-  margin-bottom: 5px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.rodape-secao ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.rodape-secao ul li {
-  margin-bottom: 8px;
-  font-size: 0.95rem;
-}
-
-.rodape-secao a {
-  color: #ecf0f1;
-  text-decoration: none;
-  transition: color 0.2s;
-}
-
-.rodape-secao a:hover {
-  color: #3498db;
-}
-
-.rodape-bottom {
-  max-width: 1200px;
-  margin: 15px auto 0;
+.rodape-minimalista {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background-color: #ffffff; 
+  padding: 15px 30px;
+  border-top: 1px solid #eeeeee;
   font-size: 0.85rem;
-  color: #95a5a6;
-  flex-wrap: wrap;
-  gap: 10px;
+  color: #7f8c8d;
+  box-shadow: 0 -2px 5px rgba(0,0,0,0.02);
+}
+
+.rodape-esquerda {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  flex: 1;
+  cursor: default; 
+}
+
+.rodape-esquerda strong {
+  color: #2c3e50;
+  font-size: 0.95rem;
+  margin-bottom: 2px;
+}
+
+/* Esconde a seta no Desktop */
+.icone-expandir-rodape {
+  display: none;
+}
+
+.rodape-centro {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  flex: 1;
+}
+
+.desenvolvedor {
+  margin-top: 4px;
+}
+
+.rodape-direita {
+  flex: 1;
+  text-align: right;
 }
 
 .versao-app {
-  background-color: rgba(255, 255, 255, 0.1);
-  padding: 5px 10px;
-  border-radius: 6px;
+  background-color: #f4f7f9;
+  padding: 4px 10px;
+  border-radius: 12px;
   font-weight: bold;
-  color: #fff;
-  letter-spacing: 0.5px;
+  color: #34495e;
+  border: 1px solid #e0e6ed;
 }
 
-/* Elementos exclusivos da interatividade mobile */
-.titulo-com-icone {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.icone-expandir {
-  display: none; /* Escondido no computador */
-  font-size: 1.2rem;
-  color: #3498db;
-  transition: transform 0.3s;
-}
-
-/* Responsividade do Rodapé */
+/* ========================================================= */
+/* RESPONSIVIDADE PARA CELULAR (EFEITO SANFONA)              */
+/* ========================================================= */
 @media (max-width: 768px) {
-  .rodape-container {
-    padding: 20px 15px 15px;
-  }
-
-  .rodape-conteudo {
-    grid-template-columns: 1fr;
-    gap: 0; /* Tiramos o gap para controlar melhor as margens internas */
+  .rodape-minimalista {
+    flex-direction: column;
+    padding: 15px;
+    text-align: center;
+    gap: 0;
   }
   
-  .rodape-header-mobile {
-    cursor: pointer;
-    /* Adiciona uma área de toque maior para facilitar no dedo */
-    padding: 5px 0; 
+  .rodape-minimalista.expandido {
+    gap: 15px; 
   }
-
-  .icone-expandir {
-    display: block; /* Mostra a setinha no celular */
-  }
-
-  /* Classes de controle (Colapsável) */
-  .rodape-container:not(.expandido) .conteudo-colapsavel {
-    display: none !important;
-  }
-
-  .rodape-container.expandido .conteudo-colapsavel {
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px dashed rgba(255, 255, 255, 0.2);
-  }
-
-  .rodape-bottom {
-    flex-direction: column;
+  
+  .rodape-esquerda {
     text-align: center;
-    border-top: none; /* Evita borda dupla com o conteúdo colapsavel */
+    align-items: center;
+    width: 100%;
+    cursor: pointer;
+    position: relative; /* Permite posicionar a seta solta aqui dentro */
+    padding: 0 25px; /* Cria um respiro para o texto não sobrepor a seta */
+  }
+
+  /* Seta fixada à esquerda e centralizada verticalmente */
+  .icone-expandir-rodape {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    margin: 0;
+    font-size: 1.1rem;
+    color: #8e44ad; 
+    transition: transform 0.3s ease;
+  }
+
+  /* Esconde o miolo e a versão por padrão no mobile */
+  .rodape-centro, 
+  .rodape-direita {
+    display: none;
+    width: 100%;
+    align-items: center;
+    justify-content: center; /* GARANTE QUE A VERSÃO FIQUE NO CENTRO */
+    text-align: center;
+  }
+
+  /* Mostra o miolo e a versão quando o state "expandido" for ativado */
+  .rodape-minimalista.expandido .rodape-centro,
+  .rodape-minimalista.expandido .rodape-direita {
+    display: flex;
+    flex-direction: column; /* Organiza os itens de cima para baixo */
+    animation: fadeInSlideDown 0.3s ease-out;
+  }
+}
+
+/* Animação suave para quando a sanfona abrir */
+@keyframes fadeInSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

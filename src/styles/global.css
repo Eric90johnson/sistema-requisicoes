@@ -19,13 +19,6 @@ body {
   color: var(--cor-texto);
 }
 
-/* Estrutura padrão do Layout */
-.layout-container {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
-
 /* Estilos do Cabeçalho Global */
 .cabecalho-global {
   display: flex;
@@ -170,4 +163,61 @@ body {
 @keyframes slideInRight {
   from { transform: translateX(120%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
+}
+
+/* ========================================================= */
+/* ESTRUTURA GLOBAL PARA A SIDEBAR LADO A LADO               */
+/* ========================================================= */
+
+.layout-container {
+  display: flex !important;
+  flex-direction: row !important; /* Força os itens a ficarem lado a lado */
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100% !important;
+  overflow: hidden;
+  background-color: #f4f7f9;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.conteudo-principal-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0; /* Previne que tabelas grandes empurrem a barra lateral */
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 15px; /* Dá um respiro para o conteúdo não grudar nas bordas */
+}
+
+/* Botão Hambúrguer Mobile (Fica no cabeçalho do App.jsx) */
+.btn-toggle-sidebar {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--cor-branca);
+  font-size: 1.8rem;
+  cursor: pointer;
+  margin-right: 15px;
+  padding: 0;
+}
+
+@media (max-width: 768px) {
+  .btn-toggle-sidebar {
+    display: block;
+  }
+}
+
+/* Ajustes no cabeçalho existente para acomodar o botão */
+.header-wrapper-flex {
+  display: flex;
+  align-items: center;
 }

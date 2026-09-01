@@ -1,9 +1,25 @@
 /* src/styles/pages/painel/painel.css */
+/* src/styles/pages/painel/painel.css */
 .painel-container {
   padding: 30px;
-  max-width: 1200px;
-  margin: 0 auto;
+  /* max-width foi removido. O painel agora usa o espaço total. */
   width: 100%;
+  flex: 1; /* Garante expansão vertical se necessário */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Para garantir que a tabela cresça, você pode adicionar/atualizar: */
+.tabela-container-scroll {
+  width: 100%;
+  flex-grow: 1; /* Faz a tabela empurrar o layout pra baixo pra ocupar o espaço vago */
+  min-height: 400px;
+  max-height: calc(100vh - 250px); /* Usa o tamanho útil da tela */
+  overflow-y: auto;
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  background-color: var(--cor-branca);
 }
 
 /* --- SISTEMA DE ABAS --- */

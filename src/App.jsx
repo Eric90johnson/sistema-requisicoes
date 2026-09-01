@@ -9,7 +9,6 @@ import Historico from './pages/historico/Historico';
 import Menu from './components/menu/Menu';
 import InserirPedido from './pages/marketplace/inserir-pedido/InserirPedido';
 import Login from './pages/login/Login';
-import logo from './assets/logo.jpeg'; 
 import Admin from './pages/admin/Admin';
 import { supabase } from './services/supabase';
 
@@ -21,6 +20,7 @@ function App() {
   });
 
   const [telaAtual, setTelaAtual] = useState('painel');
+  const [abaPainelAtiva, setAbaPainelAtiva] = useState('interna');
   const [reqSelecionada, setReqSelecionada] = useState(null);
   const [abaAdminAtiva, setAbaAdminAtiva] = useState('base-dados');
 
@@ -41,6 +41,9 @@ function App() {
   const [carregando, setCarregando] = useState(false);
 
   const [autorizacoesPendentes, setAutorizacoesPendentes] = useState([]);
+
+  // --- ESTADO PARA O MENU MOBILE ---
+  const [menuMobileAberto, setMenuMobileAberto] = useState(false);
 
   const handleLogar = (dadosUsuario) => {
     localStorage.setItem('netadantas_logado', 'true');
@@ -402,106 +405,131 @@ function App() {
 
   if (!isLogado) return <Login aoLogar={handleLogar} />;
 
+  // --- Função para gerenciar a navegação sincronizada com as abas do Painel ---
+  const navegarPara = (novaTela, aba = 'interna') => {
+    setTelaAtual(novaTela);
+    if (novaTela === 'painel') {
+      setAbaPainelAtiva(aba);
+    }
+    setMenuMobileAberto(false); // Fecha o menu no mobile após clicar
+  };
+
   return (
     <div className="layout-container">
-      <header className={`cabecalho-global ${telaAtual === 'admin' ? 'cabecalho-admin-mode' : ''}`}>
-        <div className="header-wrapper-flex">
-          <img src={logo} alt="Logo Neta Dantas" className="logo-header" />
-          <h1 className="titulo-cabecalho">Painel de Requisição Interna de Produtos</h1>
-          <Menu 
-            aoClicarPainel={() => setTelaAtual('painel')} aoClicarHistorico={() => setTelaAtual('historico')}
-            aoClicarBaseDados={() => setTelaAtual('base-dados')} aoClicarAdmin={() => setTelaAtual('admin')}
-            usuarioLogado={usuarioLogado} aoSair={handleSair} 
-          />
-        </div>
-        {telaAtual === 'admin' && usuarioLogado?.username === 'admin' && (
-          <div className="admin-tabs-header">
-            <button className={`tab-header ${abaAdminAtiva === 'base-dados' ? 'ativo' : ''}`} onClick={() => setAbaAdminAtiva('base-dados')}>🗄️ Base de Dados</button>
-            <button className={`tab-header ${abaAdminAtiva === 'usuarios' ? 'ativo' : ''}`} onClick={() => setAbaAdminAtiva('usuarios')}>👥 Gestão de Usuários</button>
-            <button className={`tab-header ${abaAdminAtiva === 'novidades' ? 'ativo' : ''}`} onClick={() => setAbaAdminAtiva('novidades')}>📢 Novidades</button>
-          </div>
-        )}
-      </header>
       
-      <main>
-        {carregando ? (
-          <div className="tela-loading">
-            <h2>🔄 Conectando com a Nuvem...</h2>
-            <p>Sincronizando as requisições da Neta Dantas, aguarde.</p>
+      {/* SIDEBAR COM AS ROTAS ATUALIZADAS */}
+      <Menu 
+        aoClicarTransferencias={() => navegarPara('painel', 'interna')} 
+        aoClicarMarketplace={() => navegarPara('painel', 'marketplace')} 
+        aoClicarHistorico={() => navegarPara('historico')}
+        aoClicarBaseDados={() => navegarPara('base-dados')} 
+        aoClicarAdmin={(abaDestino = 'base-dados') => {
+          setAbaAdminAtiva(abaDestino);
+          navegarPara('admin');
+        }}
+        aoClicarContatos={() => navegarPara('contatos')}
+        usuarioLogado={usuarioLogado} 
+        aoSair={handleSair} 
+        telaAtual={telaAtual}
+        menuMobileAberto={menuMobileAberto}
+        setMenuMobileAberto={setMenuMobileAberto}
+      />
+
+      <div className="conteudo-principal-wrapper">
+        <header className="cabecalho-global">
+          <div className="header-wrapper-flex">
+            <button className="btn-toggle-sidebar" onClick={() => setMenuMobileAberto(!menuMobileAberto)}>
+              ☰
+            </button>
+            <h1 className="titulo-cabecalho">Painel de Requisição Interna de Produtos</h1>
           </div>
-        ) : (
-          <>
-            {/* ======================================================================= */}
-            {/* O FILTRO PRINCIPAL FOI APLICADO AQUI. RETIRAMOS O '.status !== "Concluída"' */}
-            {/* ASSIM, O PAINEL.JSX RECEBE A LISTA COMPLETA E FAZ O FILTRO VISUAL INTERNO */}
-            {/* ======================================================================= */}
-            {telaAtual === 'painel' && <Painel aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes.filter(r => r.status !== 'Em Edição' && r.status !== 'Cancelada')} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
-            
-            {telaAtual === 'nova' && (
-              <NovaRequisicao 
-                aoVoltar={handleCancelarEdicao} 
-                baseProdutos={baseProdutos} 
-                aoSalvar={handleSalvarRequisicao} 
-                aoCancelarReq={handleCancelarRequisicao} 
-                requisicoes={requisicoes} 
-                produtosPreSelecionados={produtosPreSelecionados} 
-                reqEmEdicao={reqEmEdicao} 
-                usuarioLogado={usuarioLogado}
-                recordesGlobais={recordesGlobais}
-                tipoReposicaoGlobal={tipoReposicaoGlobal}
-                inicioCronometroGlobal={inicioCronometroGlobal}
-              />
-            )}
-            
-            {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} aoIniciarEdicao={handleIniciarEdicao} aoAtualizarObservacoes={handleAtualizarObservacoes} recordesGlobais={recordesGlobais} />}
-            {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
-            {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
-            
-            {telaAtual === 'base-dados' && (
-              <BaseDados 
-                aoVoltar={() => {
-                  setTelaAtual('painel');
-                  setInicioCronometroGlobal(null);
-                  setTipoReposicaoGlobal('interna');
-                }} 
-                produtos={baseProdutos} 
-                setProdutos={setBaseProdutos} 
-                itensPreRequisicao={itensPreRequisicao}
-                aoAdicionarPreRequisicao={handleAdicionarPreRequisicao}
-                aoRemoverPreRequisicao={handleRemoverPreRequisicao}
-                aoIrParaPreRequisicao={handleIrParaPreRequisicao}
-                tipoReposicaoGlobal={tipoReposicaoGlobal}
-                setTipoReposicaoGlobal={setTipoReposicaoGlobal}
-                inicioCronometroGlobal={inicioCronometroGlobal}
-                setInicioCronometroGlobal={setInicioCronometroGlobal}
-              />
-            )}
-            
-            {telaAtual === 'admin' && usuarioLogado?.username === 'admin' && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
-          </>
-        )}
-      </main>
-
-      {autorizacoesPendentes.length > 0 && (
-        <div className="container-notificacoes-bip">
-          {autorizacoesPendentes.map(auth => (
-            <div key={auth.id} className="toast-autorizacao-bip">
-              <div className="toast-bip-header">🔑 Liberação de Bip Manual</div>
-              <div className="toast-bip-body">
-                <strong>{auth.solicitante_nome}</strong> não conseguiu bipar o produto abaixo e solicita digitação:<br/>
-                <br/>
-                <span>{auth.produto_descricao}</span>
-              </div>
-              <div className="toast-bip-footer">
-                <button className="btn-recusar-bip" onClick={() => handleRecusarBip(auth)}>Recusar ❌</button>
-                <button className="btn-aprovar-bip" onClick={() => handleAprovarBip(auth)}>Aprovar ✅</button>
-              </div>
+        </header>
+        
+        <main>
+          {carregando ? (
+            <div className="tela-loading">
+              <h2>🔄 Conectando com a Nuvem...</h2>
+              <p>Sincronizando as requisições da Neta Dantas, aguarde.</p>
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            <>
+              {telaAtual === 'painel' && (
+                <Painel 
+                  abaExterna={abaPainelAtiva}
+                  aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} 
+                  aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} 
+                  requisicoes={requisicoes.filter(r => r.status !== 'Em Edição' && r.status !== 'Cancelada')} 
+                  pedidosMarketplace={pedidosMarketplace} 
+                  aoAbrirDetalhes={abrirDetalhes} 
+                />
+              )}
+              
+              {telaAtual === 'nova' && (
+                <NovaRequisicao 
+                  aoVoltar={handleCancelarEdicao} 
+                  baseProdutos={baseProdutos} 
+                  aoSalvar={handleSalvarRequisicao} 
+                  aoCancelarReq={handleCancelarRequisicao} 
+                  requisicoes={requisicoes} 
+                  produtosPreSelecionados={produtosPreSelecionados} 
+                  reqEmEdicao={reqEmEdicao} 
+                  usuarioLogado={usuarioLogado}
+                  recordesGlobais={recordesGlobais}
+                  tipoReposicaoGlobal={tipoReposicaoGlobal}
+                  inicioCronometroGlobal={inicioCronometroGlobal}
+                />
+              )}
+              
+              {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} aoIniciarEdicao={handleIniciarEdicao} aoAtualizarObservacoes={handleAtualizarObservacoes} recordesGlobais={recordesGlobais} />}
+              {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
+              {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
+              
+              {telaAtual === 'base-dados' && (
+                <BaseDados 
+                  aoVoltar={() => {
+                    setTelaAtual('painel');
+                    setInicioCronometroGlobal(null);
+                    setTipoReposicaoGlobal('interna');
+                  }} 
+                  produtos={baseProdutos} 
+                  setProdutos={setBaseProdutos} 
+                  itensPreRequisicao={itensPreRequisicao}
+                  aoAdicionarPreRequisicao={handleAdicionarPreRequisicao}
+                  aoRemoverPreRequisicao={handleRemoverPreRequisicao}
+                  aoIrParaPreRequisicao={handleIrParaPreRequisicao}
+                  tipoReposicaoGlobal={tipoReposicaoGlobal}
+                  setTipoReposicaoGlobal={setTipoReposicaoGlobal}
+                  inicioCronometroGlobal={inicioCronometroGlobal}
+                  setInicioCronometroGlobal={setInicioCronometroGlobal}
+                />
+              )}
+              
+              {telaAtual === 'admin' && usuarioLogado?.username === 'admin' && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
+            </>
+          )}
+        </main>
 
-      <Rodape />
+        {autorizacoesPendentes.length > 0 && (
+          <div className="container-notificacoes-bip">
+            {autorizacoesPendentes.map(auth => (
+              <div key={auth.id} className="toast-autorizacao-bip">
+                <div className="toast-bip-header">🔑 Liberação de Bip Manual</div>
+                <div className="toast-bip-body">
+                  <strong>{auth.solicitante_nome}</strong> não conseguiu bipar o produto abaixo e solicita digitação:<br/>
+                  <br/>
+                  <span>{auth.produto_descricao}</span>
+                </div>
+                <div className="toast-bip-footer">
+                  <button className="btn-recusar-bip" onClick={() => handleRecusarBip(auth)}>Recusar ❌</button>
+                  <button className="btn-aprovar-bip" onClick={() => handleAprovarBip(auth)}>Aprovar ✅</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Rodape />
+      </div>
     </div>
   );
 }

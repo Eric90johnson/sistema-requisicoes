@@ -6,9 +6,14 @@ import PainelMarketplace from '../marketplace/painel/PainelMarketplace';
 import { supabase } from '../../services/supabase';
 import { calcularRanking } from './utils/calculadoraRanking';
 
-export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, pedidosMarketplace = [], aoAbrirDetalhes }) {
+export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, pedidosMarketplace = [], aoAbrirDetalhes, abaExterna = 'interna' }) {
   
-  const [abaAtiva, setAbaAtiva] = useState('interna'); 
+  const [abaAtiva, setAbaAtiva] = useState(abaExterna); 
+
+  // Sincroniza a aba ativa sempre que houver alteração na prop externa (clique no menu lateral)
+  useEffect(() => {
+    setAbaAtiva(abaExterna);
+  }, [abaExterna]);
 
   const [mostrarRanking, setMostrarRanking] = useState(false);
   const [dataInicioRanking, setDataInicioRanking] = useState('');
@@ -108,12 +113,8 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     reqsAnterioresRef.current = requisicoes;
   }, [requisicoes]);
 
-  const temPedidoPendente = pedidosMarketplace.some(ped => ped.status === 'Pendente');
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
   
-  // ======================================================================================
-  // Concluída é o gatilho para sumir
-  // ======================================================================================
   const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Concluída' && req.status !== 'Cancelada');
 
   const getNomeLojaCurto = (nomeLoja) => {
@@ -150,7 +151,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       if (aDestacado && !bDestacado) return -1; 
       if (!aDestacado && bDestacado) return 1;  
 
-      // Joga Transporte e Recebimento para o final da fila (menor prioridade visual)
       const aBaixaPrioridade = a.status === 'Transporte' || a.status === 'Recebimento';
       const bBaixaPrioridade = b.status === 'Transporte' || b.status === 'Recebimento';
       if (aBaixaPrioridade && !bBaixaPrioridade) return 1;
@@ -179,8 +179,8 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       case 'Separado': return 'status-separado';
       case 'Saída de produtos': return 'status-separado';
       case 'Faturamento': return 'status-faturado';
-      case 'Transporte': return 'status-enviado'; // Azul claro padrão (verifique o CSS .status-enviado)
-      case 'Recebimento': return 'status-enviado'; // Recebimento agora ganha o mesmo visual azul do transporte
+      case 'Transporte': return 'status-enviado';
+      case 'Recebimento': return 'status-enviado';
       case 'Concluída': return 'status-recebido'; 
       case 'Cancelada': return 'status-pendente';
       default: return 'status-pendente';
@@ -188,7 +188,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   };
 
   const getLinhaPrioridadeClass = (req) => {
-    // Transporte e Recebimento usam a cor da prioridade baixa para ficarem esmaecidos no fundo
     if (req.status === 'Transporte' || req.status === 'Recebimento') return 'prioridade-baixa';
     
     switch (req.prioridade) {
@@ -292,31 +291,26 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
       {colunaFiltroAberta && <div className="filtro-overlay" onClick={() => setColunaFiltroAberta(null)}></div>}
 
-      <div className="abas-container">
-        <button className={`aba-btn ${abaAtiva === 'interna' ? 'ativa' : ''}`} onClick={() => setAbaAtiva('interna')}>
-          🏢 Transferências Internas
-        </button>
-        
-        <button className={`aba-btn ${abaAtiva === 'marketplace' ? 'ativa' : ''}`} onClick={() => setAbaAtiva('marketplace')}>
-          🛒 Marketplace {temPedidoPendente && <span className="alerta-pisca">!</span>}
-        </button>
-
-        <div className="ranking-btn-container">
-          <button className="btn-ranking-abrir" onClick={() => { setMostrarRanking(true); setColaboradorExpandido(null); setMostrarAvisoData(false); }}>🏆 Ranking da Equipe</button>
-        </div>
-      </div>
+      {/* ABAS REMOVIDAS DA TELA. A NAVEGAÇÃO OCORRE EXCLUSIVAMENTE PELO MENU LATERAL DO SISTEMA. */}
 
       {abaAtiva === 'interna' && (
         <>
           <div className="painel-header">
-            <h2>Visão Geral</h2>
+            <button 
+              className="btn-ranking-abrir" 
+              onClick={() => { setMostrarRanking(true); setColaboradorExpandido(null); setMostrarAvisoData(false); }}
+            >
+              🏆 Ranking da Equipe
+            </button>
             
             <div className="contador-requisicoes">
               <span className="numero-destaque">{requisicoesAtivas.length}</span> 
               <span>requisições pendentes de conclusão</span>
             </div>
 
-            <button className="btn-nova-req" onClick={() => aoClicarNovo()}>+ Nova Requisição</button>
+            <button className="btn-nova-req" onClick={() => aoClicarNovo()}>
+              + Nova Requisição
+            </button>
           </div>
 
           <div className="tabela-container-scroll">
