@@ -393,3 +393,10 @@
   from { transform: scale(0.8); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
+
+@media (max-width: 768px) {
+  /* No celular, o submenu abre via toque acionando a classe state do React */
+  .menu-item.sub-menu-parent.mobile-expandido > .sub-menu-container {
+    display: block !important;
+  }
+}

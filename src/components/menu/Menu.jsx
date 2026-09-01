@@ -38,6 +38,10 @@ export default function Menu({
   const [colapsado, setColapsado] = useState(true);
   const [mostrarModalAcessoNegado, setMostrarModalAcessoNegado] = useState(false);
 
+  // Estados para controlar a abertura dos submenus por toque no mobile
+  const [painelMobileAberto, setPainelMobileAberto] = useState(false);
+  const [adminMobileAberto, setAdminMobileAberto] = useState(false);
+
   const handleNavegacao = (acao) => {
     if (acao) acao();
     if (window.innerWidth <= 768) {
@@ -46,6 +50,21 @@ export default function Menu({
   };
 
   const handleAdminClick = (aba, e) => {
+    e.preventDefault();
+    if (window.innerWidth <= 768) {
+      // No mobile, o primeiro toque abre/fecha o submenu de administração
+      setAdminMobileAberto(!adminMobileAberto);
+      return;
+    }
+
+    if (usuarioLogado?.username === 'admin') {
+      if (aoClicarAdmin) aoClicarAdmin(aba);
+    } else {
+      setMostrarModalAcessoNegado(true);
+    }
+  };
+
+  const handleSubItemAdminClick = (aba, e) => {
     e.preventDefault();
     if (usuarioLogado?.username === 'admin') {
       if (aoClicarAdmin) aoClicarAdmin(aba);
@@ -57,6 +76,16 @@ export default function Menu({
       if (window.innerWidth <= 768) {
         setMenuMobileAberto(false);
       }
+    }
+  };
+
+  const handlePainelClick = (e) => {
+    e.preventDefault();
+    if (window.innerWidth <= 768) {
+      // No mobile, o clique alterna o submenu do painel principal
+      setPainelMobileAberto(!painelMobileAberto);
+    } else {
+      handleNavegacao(aoClicarTransferencias);
     }
   };
 
@@ -99,8 +128,8 @@ export default function Menu({
               <li className="menu-header-texto"><span>SISTEMA</span></li>
               
               {/* NÍVEL 1: PAINEL PRINCIPAL */}
-              <li className="menu-item sub-menu-parent">
-                <a href="#" onClick={(e) => { e.preventDefault(); handleNavegacao(aoClicarTransferencias); }}>
+              <li className={`menu-item sub-menu-parent ${painelMobileAberto ? 'mobile-expandido' : ''}`}>
+                <a href="#" onClick={handlePainelClick}>
                   <span className="menu-icon"><IconHome /></span>
                   <span className="menu-title">Painel Principal</span>
                   <span className="menu-seta">▾</span>
@@ -173,7 +202,7 @@ export default function Menu({
               {/* SEÇÃO DE GESTÃO */}
               <li className="menu-header-texto mt-2"><span>GESTÃO</span></li>
               
-              {/* Dashboard como menu separado dentro de Gestão */}
+              {/* Dashboard */}
               <li className={`menu-item ${telaAtual === 'dashboard' ? 'ativo' : ''}`}>
                 <a href="#" onClick={(e) => { e.preventDefault(); handleNavegacao(aoClicarDashboard); }}>
                   <span className="menu-icon"><IconDashboard /></span>
@@ -182,7 +211,7 @@ export default function Menu({
               </li>
 
               {/* Administrador */}
-              <li className="menu-item sub-menu-parent">
+              <li className={`menu-item sub-menu-parent ${adminMobileAberto ? 'mobile-expandido' : ''}`}>
                 <a href="#" onClick={(e) => handleAdminClick('base-dados', e)}>
                   <span className="menu-icon icon-admin"><IconAdmin /></span>
                   <span className="menu-title text-admin">Administrador</span>
@@ -192,17 +221,17 @@ export default function Menu({
                 <div className="sub-menu-container">
                   <ul>
                     <li className="menu-item sub-nivel-2">
-                      <a href="#" onClick={(e) => handleAdminClick('base-dados', e)}>
+                      <a href="#" onClick={(e) => handleSubItemAdminClick('base-dados', e)}>
                         <span className="menu-title">Base de Dados</span>
                       </a>
                     </li>
                     <li className="menu-item sub-nivel-2">
-                      <a href="#" onClick={(e) => handleAdminClick('usuarios', e)}>
+                      <a href="#" onClick={(e) => handleSubItemAdminClick('usuarios', e)}>
                         <span className="menu-title">Gestão de Usuários</span>
                       </a>
                     </li>
                     <li className="menu-item sub-nivel-2">
-                      <a href="#" onClick={(e) => handleAdminClick('novidades', e)}>
+                      <a href="#" onClick={(e) => handleSubItemAdminClick('novidades', e)}>
                         <span className="menu-title">Novidades</span>
                       </a>
                     </li>
