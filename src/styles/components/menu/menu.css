@@ -395,8 +395,12 @@
 }
 
 @media (max-width: 768px) {
-  /* No celular, o submenu abre via toque acionando a classe state do React */
+  /* No celular, o submenu nível 2 e 3 abrem via toque acionando as classes state do React */
   .menu-item.sub-menu-parent.mobile-expandido > .sub-menu-container {
+    display: block !important;
+  }
+  
+  .menu-item.sub-menu-parent.mobile-expandido-nivel3 > .sub-nivel-3-container {
     display: block !important;
   }
 }

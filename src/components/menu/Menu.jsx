@@ -40,6 +40,7 @@ export default function Menu({
 
   // Estados para controlar a abertura dos submenus por toque no mobile
   const [painelMobileAberto, setPainelMobileAberto] = useState(false);
+  const [transferenciasMobileAberto, setTransferenciasMobileAberto] = useState(false);
   const [adminMobileAberto, setAdminMobileAberto] = useState(false);
 
   const handleNavegacao = (acao) => {
@@ -52,7 +53,6 @@ export default function Menu({
   const handleAdminClick = (aba, e) => {
     e.preventDefault();
     if (window.innerWidth <= 768) {
-      // No mobile, o primeiro toque abre/fecha o submenu de administração
       setAdminMobileAberto(!adminMobileAberto);
       return;
     }
@@ -82,8 +82,17 @@ export default function Menu({
   const handlePainelClick = (e) => {
     e.preventDefault();
     if (window.innerWidth <= 768) {
-      // No mobile, o clique alterna o submenu do painel principal
       setPainelMobileAberto(!painelMobileAberto);
+    } else {
+      handleNavegacao(aoClicarTransferencias);
+    }
+  };
+
+  const handleTransferenciasClick = (e) => {
+    e.preventDefault();
+    if (window.innerWidth <= 768) {
+      // No mobile, alterna o nível 3 (Transferência Externa / Reposição Interna)
+      setTransferenciasMobileAberto(!transferenciasMobileAberto);
     } else {
       handleNavegacao(aoClicarTransferencias);
     }
@@ -149,11 +158,8 @@ export default function Menu({
                     </li>
 
                     {/* TRANSFERÊNCIAS */}
-                    <li className={`menu-item sub-menu-parent sub-nivel-2 ${telaAtual === 'painel' ? 'ativo-link' : ''}`}>
-                      <a href="#" onClick={(e) => { 
-                        e.preventDefault(); 
-                        handleNavegacao(aoClicarTransferencias);
-                      }}>
+                    <li className={`menu-item sub-menu-parent sub-nivel-2 ${telaAtual === 'painel' ? 'ativo-link' : ''} ${transferenciasMobileAberto ? 'mobile-expandido-nivel3' : ''}`}>
+                      <a href="#" onClick={handleTransferenciasClick}>
                         <span className="menu-title">Transferências</span>
                         <span className="menu-seta">▸</span>
                       </a>
