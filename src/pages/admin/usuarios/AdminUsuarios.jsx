@@ -14,9 +14,9 @@ export default function AdminUsuarios() {
   const [senha, setSenha] = useState('');
   const [loja, setLoja] = useState('Matriz');
   const [hierarquia, setHierarquia] = useState('Subordinado');
-  const [encarregadoResponsavel, setEncarregadoResponsavel] = useState('');
+  const [encarregadosSelecionados, setEncarregadosSelecionados] = useState([]); 
+  const [acessoAdmin, setAcessoAdmin] = useState(false); 
 
-  // Carrega a lista de usuários assim que a aba é aberta
   useEffect(() => {
     buscarUsuarios();
   }, []);
@@ -38,7 +38,6 @@ export default function AdminUsuarios() {
     }
   };
 
-  // Lista dinâmica de encarregados para alimentar o campo "Subordinado a quem?"
   const listaEncarregados = usuarios.filter(u => u.hierarquia === 'Encarregado' || u.username === 'admin');
 
   const resetarFormulario = () => {
@@ -48,7 +47,8 @@ export default function AdminUsuarios() {
     setSenha('');
     setLoja('Matriz');
     setHierarquia('Subordinado');
-    setEncarregadoResponsavel('');
+    setEncarregadosSelecionados([]);
+    setAcessoAdmin(false);
   };
 
   const iniciarEdicao = (user) => {
@@ -58,8 +58,23 @@ export default function AdminUsuarios() {
     setSenha(user.senha || '');
     setLoja(user.loja || 'Matriz');
     setHierarquia(user.hierarquia || 'Subordinado');
-    setEncarregadoResponsavel(user.encarregado_responsavel || '');
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // Sobe a tela suavemente para o formulário
+    setAcessoAdmin(user.acesso_admin || false);
+    
+    if (user.encarregado_responsavel) {
+      setEncarregadosSelecionados(user.encarregado_responsavel.split(', '));
+    } else {
+      setEncarregadosSelecionados([]);
+    }
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+  };
+
+  const handleToggleEncarregado = (nomeEncarregado) => {
+    setEncarregadosSelecionados(prev => 
+      prev.includes(nomeEncarregado) 
+        ? prev.filter(n => n !== nomeEncarregado) 
+        : [...prev, nomeEncarregado] 
+    );
   };
 
   const handleSalvarUsuario = async (e) => {
@@ -67,11 +82,10 @@ export default function AdminUsuarios() {
     setProcessando(true);
 
     try {
-      // Regra da Hierarquia
-      const responsavelFinal = hierarquia === 'Subordinado' ? encarregadoResponsavel : null;
+      const responsavelFinal = hierarquia === 'Subordinado' ? encarregadosSelecionados.join(', ') : null;
 
-      if (hierarquia === 'Subordinado' && !responsavelFinal) {
-        alert("Por favor, selecione a qual encarregado este usuário é subordinado.");
+      if (hierarquia === 'Subordinado' && encarregadosSelecionados.length === 0) {
+        alert("Por favor, selecione pelo menos um encarregado ao qual este usuário é subordinado.");
         setProcessando(false);
         return;
       }
@@ -85,39 +99,59 @@ export default function AdminUsuarios() {
           return;
         }
 
-        const { error } = await supabase.from('usuarios_sistema').insert([{
+        // O .select() no final força o banco a devolver a linha confirmada
+        const { data, error } = await supabase.from('usuarios_sistema').insert([{
           nome_completo: nome,
           username: username,
           senha: senha,
           loja: loja,
           hierarquia: hierarquia,
-          encarregado_responsavel: responsavelFinal
-        }]);
+          encarregado_responsavel: responsavelFinal,
+          acesso_admin: acessoAdmin
+        }]).select();
 
         if (error) throw error;
+        
         alert("✅ Usuário criado com sucesso!");
+        // Atualiza a tela em tempo real com o dado devolvido pelo banco
+        if (data && data.length > 0) {
+          setUsuarios([...usuarios, data[0]]);
+        } else {
+          buscarUsuarios();
+        }
 
       } else {
         // --- MODO EDIÇÃO ---
-        const { error } = await supabase.from('usuarios_sistema').update({
+        // O .select() no final força o banco a devolver a linha editada e evita a falha silenciosa
+        const { data, error } = await supabase.from('usuarios_sistema').update({
           nome_completo: nome,
           username: username,
           senha: senha,
           loja: loja,
           hierarquia: hierarquia,
-          encarregado_responsavel: responsavelFinal
-        }).eq('id', editandoId);
+          encarregado_responsavel: responsavelFinal,
+          acesso_admin: acessoAdmin
+        }).eq('id', editandoId).select();
 
         if (error) throw error;
+
+        // Se o banco não devolveu a linha, o Supabase bloqueou a edição silenciosamente
+        if (!data || data.length === 0) {
+           alert("⚠️ O banco de dados falhou silenciosamente ao alterar o registro. Isso pode indicar uma restrição ativa no Supabase (RLS).");
+           setProcessando(false);
+           return;
+        }
+
         alert("✅ Usuário atualizado com sucesso!");
+        // Atualiza a tabela na tela instantaneamente!
+        setUsuarios(usuarios.map(u => u.id === editandoId ? data[0] : u));
       }
 
       resetarFormulario();
-      buscarUsuarios();
 
     } catch (erro) {
-      console.error("Erro ao salvar usuário:", erro);
-      alert("Ocorreu um erro ao salvar os dados do usuário.");
+      console.error("Erro detalhado do Supabase:", erro);
+      alert(`🚨 Erro bloqueado pelo Banco de Dados:\n\n${erro.message || erro.details || "Erro desconhecido"}`);
     } finally {
       setProcessando(false);
     }
@@ -139,7 +173,8 @@ export default function AdminUsuarios() {
         .eq('id', id);
 
       if (error) throw error;
-      buscarUsuarios();
+      // Atualiza o estado removendo o item instantaneamente
+      setUsuarios(usuarios.filter(u => u.id !== id));
     } catch (erro) {
       console.error("Erro ao excluir:", erro);
       alert("Erro ao tentar excluir o usuário.");
@@ -172,7 +207,7 @@ export default function AdminUsuarios() {
               placeholder="Ex: joao.araturi" 
               value={username} 
               onChange={(e) => setUsername(e.target.value.replace(/\s+/g, '').toLowerCase())}
-              disabled={editandoId && username === 'admin'} // Admin original não pode mudar o login
+              disabled={editandoId && username === 'admin'} 
               required 
             />
           </div>
@@ -207,21 +242,43 @@ export default function AdminUsuarios() {
             </select>
           </div>
 
+          {/* ÁREA DE MÚLTIPLOS ENCARREGADOS */}
           {hierarquia === 'Subordinado' && (
             <div className="input-group-admin">
-              <label>Subordinado a quem?</label>
-              <select 
-                value={encarregadoResponsavel} 
-                onChange={(e) => setEncarregadoResponsavel(e.target.value)} 
-                required={hierarquia === 'Subordinado'}
-              >
-                <option value="">Selecione o Encarregado...</option>
-                {listaEncarregados.map(enc => (
-                  <option key={enc.id} value={enc.nome_completo}>{enc.nome_completo}</option>
-                ))}
-              </select>
+              <label>Subordinado a quem? (Pode selecionar mais de um)</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: '#f8f9fa', border: '1px solid #dcdde1', borderRadius: '6px' }}>
+                {listaEncarregados.length === 0 ? (
+                  <span style={{ fontSize: '0.85rem', color: '#7f8c8d' }}>Nenhum encarregado cadastrado ainda.</span>
+                ) : (
+                  listaEncarregados.map(enc => (
+                    <label key={enc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={encarregadosSelecionados.includes(enc.nome_completo)}
+                        onChange={() => handleToggleEncarregado(enc.nome_completo)}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      {enc.nome_completo}
+                    </label>
+                  ))
+                )}
+              </div>
             </div>
           )}
+
+          {/* CHECKBOX DE ACESSO ADMIN */}
+          <div className="input-group-admin" style={{ marginTop: '15px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', background: '#fcf3cf', padding: '12px', border: '1px solid #f1c40f', borderRadius: '6px', color: '#d35400', fontWeight: 'bold' }}>
+              <input
+                type="checkbox"
+                checked={username === 'admin' ? true : acessoAdmin}
+                onChange={(e) => setAcessoAdmin(e.target.checked)}
+                disabled={username === 'admin'} 
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              🔑 Conceder privilégios de Administrador a este usuário
+            </label>
+          </div>
 
           <div className="botoes-form-acoes">
             {editandoId && (
@@ -259,9 +316,11 @@ export default function AdminUsuarios() {
                   <tr key={user.id}>
                     <td>
                       <strong>{user.nome_completo}</strong>
+                      {user.acesso_admin && <span style={{ marginLeft: '8px', background: '#f39c12', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold' }}>ADMIN</span>}
+                      
                       {user.encarregado_responsavel && user.hierarquia === 'Subordinado' && (
-                        <div style={{ fontSize: '0.8rem', color: '#7f8c8d', marginTop: '3px' }}>
-                          ↪ Líder: {user.encarregado_responsavel}
+                        <div style={{ fontSize: '0.8rem', color: '#7f8c8d', marginTop: '4px' }}>
+                          ↪ Líderes: {user.encarregado_responsavel}
                         </div>
                       )}
                     </td>

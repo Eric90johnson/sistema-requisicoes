@@ -57,7 +57,7 @@ export default function Menu({
       return;
     }
 
-    if (usuarioLogado?.username === 'admin') {
+    if (usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin) {
       if (aoClicarAdmin) aoClicarAdmin(aba);
     } else {
       setMostrarModalAcessoNegado(true);
@@ -66,7 +66,7 @@ export default function Menu({
 
   const handleSubItemAdminClick = (aba, e) => {
     e.preventDefault();
-    if (usuarioLogado?.username === 'admin') {
+    if (usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin) {
       if (aoClicarAdmin) aoClicarAdmin(aba);
       if (window.innerWidth <= 768) {
         setMenuMobileAberto(false);
@@ -194,7 +194,7 @@ export default function Menu({
               <li className={`menu-item ${telaAtual === 'base-dados' ? 'ativo' : ''}`}>
                 <a href="#" onClick={(e) => { e.preventDefault(); handleNavegacao(aoClicarBaseDados); }}>
                   <span className="menu-icon"><IconDatabase /></span>
-                  <span className="menu-title">Base de Dados</span>
+                  <span className="menu-title">Consulta de Estoque</span>
                 </a>
               </li>
 

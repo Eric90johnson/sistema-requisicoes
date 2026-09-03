@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5QrcodeScanner, Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import '../../styles/pages/base-dados/baseDados.css';
 
 const parseValorMoeda = (valorStr) => {
@@ -38,6 +38,7 @@ export default function BaseDados({
   const [bipInputVal, setBipInputVal] = useState({}); 
   const [alertaExterna, setAlertaExterna] = useState(false); 
   const [cameraAtiva, setCameraAtiva] = useState(null); 
+  const [cameraBuscaAtiva, setCameraBuscaAtiva] = useState(false); // NOVO: Estado para a câmera de pesquisa
 
   const [nomeSeparador, setNomeSeparador] = useState('');
 
@@ -89,6 +90,7 @@ export default function BaseDados({
     return `${h}:${m}:${s}`;
   };
 
+  // --- EFEITO DA CÂMERA DE BIPAGEM PARA ADICIONAR (Gamificação) ---
   useEffect(() => {
     let scanner = null;
     if (cameraAtiva) {
@@ -126,6 +128,52 @@ export default function BaseDados({
       }
     };
   }, [cameraAtiva, produtos]);
+
+  // --- EFEITO DA CÂMERA DE PESQUISA GERAL (NOVO) ---
+  useEffect(() => {
+    let scanner = null;
+    let isMounted = true;
+
+    if (cameraBuscaAtiva) {
+      setTimeout(() => {
+        if (!isMounted) return;
+        scanner = new Html5Qrcode('leitor-camera-busca', {
+          formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.CODE_39]
+        });
+        const configCamera = { fps: 10, qrbox: { width: 250, height: 100 } };
+
+        scanner.start({ facingMode: "environment" }, configCamera,
+          (decodedText) => {
+            if (!decodedText || !decodedText.trim()) return;
+            
+            // Emite som de sucesso
+            try {
+              const ctx = new (window.AudioContext || window.webkitAudioContext)();
+              const osc = ctx.createOscillator();
+              osc.type = 'sine'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+              osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); 
+            } catch(e) {}
+            
+            // Aplica a busca e fecha a câmera
+            setBuscaCodigoBarra(decodedText);
+            setItensVisiveis(50);
+            setCameraBuscaAtiva(false);
+          },
+          (err) => { }
+        ).catch(err => {
+          console.error("Erro ao iniciar câmera de busca:", err);
+          alert('Erro ao iniciar a câmera. Verifique as permissões do seu navegador.');
+          setCameraBuscaAtiva(false);
+        });
+      }, 150);
+    }
+    
+    return () => { 
+      isMounted = false;
+      if (scanner) { scanner.stop().then(() => { scanner.clear(); }).catch(err => console.error(err)); }
+    };
+  }, [cameraBuscaAtiva]);
+
 
   const iniciarRedimensionamento = (e, coluna) => {
     arrastandoCol.current = coluna;
@@ -175,7 +223,6 @@ export default function BaseDados({
       }
     });
     
-    // Tratamento seguro para evitar crash ao abrir filtros de colunas numéricas (como estoque)[cite: 13]
     const unicos = [...new Set(tempProdutos.map(p => p[coluna] !== undefined && p[coluna] !== null ? String(p[coluna]) : ''))].filter(Boolean).sort();
     
     setValoresUnicosMenu(unicos);
@@ -365,6 +412,19 @@ export default function BaseDados({
   return (
     <div className="base-dados-container">
       
+      {/* MODAL CÂMERA DE BUSCA GLOBAL (NOVO) */}
+      {cameraBuscaAtiva && (
+        <div className="camera-modal-overlay">
+          <div className="camera-modal-content">
+            <div className="camera-modal-header">📷 Escanear Cód. de Barras</div>
+            <div className="camera-modal-body">
+              <div id="leitor-camera-busca" className="camera-box-modal"></div>
+              <button className="btn-fechar-camera" onClick={() => setCameraBuscaAtiva(false)}>Fechar Câmera</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {alertaExterna && (
         <div className="popup-overlay">
           <div className="popup-content" style={{ maxWidth: '500px', width: '95%', padding: '30px' }}>
@@ -404,6 +464,7 @@ export default function BaseDados({
         </div>
       )}
 
+      {/* MODAL CÂMERA DE SEPARAÇÃO INTERNA/EXTERNA */}
       {cameraAtiva && (
         <div className="camera-modal-overlay">
           <div className="camera-modal-content">
@@ -452,10 +513,33 @@ export default function BaseDados({
 
       {produtos.length > 0 ? (
         <>
-          <div className="filtros-topo-container">
+          <div className="filtros-topo-container" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
             <input type="text" placeholder="🔍 Código..." value={buscaCodigo} onChange={(e) => { setBuscaCodigo(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
             <input type="text" placeholder="🔍 Descrição..." value={buscaDescricao} onChange={(e) => { setBuscaDescricao(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
-            <input type="text" placeholder="🔍 Cód. Barras..." value={buscaCodigoBarra} onChange={(e) => { setBuscaCodigoBarra(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
+            
+            {/* NOVO: CAMPO DE CÓDIGO DE BARRAS COM BOTÃO DE CÂMERA EMBUTIDO */}
+            <div style={{ display: 'flex', flex: '1 1 200px', minWidth: '150px' }}>
+              <input 
+                type="text" 
+                placeholder="🔍 Cód. Barras..." 
+                value={buscaCodigoBarra} 
+                onChange={(e) => { setBuscaCodigoBarra(e.target.value); setItensVisiveis(50); }} 
+                style={{ ...estiloInputBusca, flex: 1, borderTopRightRadius: '0', borderBottomRightRadius: '0', borderRight: 'none' }} 
+              />
+              <button 
+                onClick={() => setCameraBuscaAtiva(true)}
+                title="Escanear Código de Barras"
+                style={{ 
+                  backgroundColor: '#3498db', color: 'white', border: '1px solid #2980b9', 
+                  borderTopRightRadius: '6px', borderBottomRightRadius: '6px', 
+                  padding: '0 15px', cursor: 'pointer', fontSize: '1.2rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+              >
+                📷
+              </button>
+            </div>
+
             <input type="text" placeholder="🔍 Marca..." value={buscaMarca} onChange={(e) => { setBuscaMarca(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
             
             {temBuscaAtiva && (

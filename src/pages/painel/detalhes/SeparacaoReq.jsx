@@ -3,7 +3,7 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { supabase } from '../../../services/supabase';
 import '../../../styles/pages/painel/detalhes/separacaoReq.css';
 
-export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoFinalizarSeparacao, tempoDecorrido, exibirPopup, setNovoStatus }) {
+export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoFinalizarSeparacao, tempoDecorrido, exibirPopup, fecharPopupCustom, aoAtualizarHistorico }) {
   const [itens, setItens] = useState(req.listaItens || []);
   const itensRef = useRef(itens);
   
@@ -19,9 +19,13 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
   const [motivoAlteracao, setMotivoAlteracao] = useState('');
   const [mostrarFesta, setMostrarFesta] = useState(false);
 
-  const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
+  const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
   const [pedidosBip, setPedidosBip] = useState({}); 
   const [codigoManual, setCodigoManual] = useState({}); 
+  
+  // ESTADO DA PAUSA
+  const [pausaPendente, setPausaPendente] = useState(false); 
+  const isPausado = !!req.historico?.pausa_ativa_inicio;
 
   const ultimoBipTempo = useRef(0);
   const ultimoBipTexto = useRef("");
@@ -58,7 +62,10 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     if (!usuarioLogado || isEncarregado) return;
 
     const fetchAuths = async () => {
-      const { data, error } = await supabase.from('autorizacoes_bip').select('*').eq('requisicao_id', req.id).eq('solicitante_nome', usuarioLogado.nome_completo);
+      // 1. Busca os bips
+      const { data, error } = await supabase.from('autorizacoes_bip')
+        .select('*').eq('requisicao_id', req.id).eq('solicitante_nome', usuarioLogado.nome_completo).order('timestamp_criacao', { ascending: true });
+        
       if (!error && data) {
         const mapNovo = {};
         data.forEach(d => {
@@ -67,15 +74,27 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
           if (statusAntigo && statusAntigo !== d.status) {
             if (d.status === 'aprovado') {
               tocarBipSucesso();
-              exibirPopup('sucesso', 'Bip Manual Liberado!', `O encarregado liberou a digitação manual para o produto:\n\n${d.produto_descricao}\n\nO teclado do sistema já foi destravado.`);
+              exibirPopup('sucesso', 'Bip Manual Liberado!', `O encarregado liberou a digitação manual para o produto:\n\n${d.produto_descricao}`);
             } else if (d.status === 'recusado') {
               tocarBipErro();
-              exibirPopup('erro', 'Liberação Recusada', `Atenção, o encarregado recusou a liberação de digitação manual para:\n\n${d.produto_descricao}`);
+              exibirPopup('erro', 'Liberação Recusada', `Atenção, o encarregado recusou a liberação para:\n\n${d.produto_descricao}`);
             }
           }
         });
         pedidosBipAntigoRef.current = mapNovo;
         setPedidosBip(mapNovo);
+      }
+
+      // 2. Busca o status da solicitação de pausa do banco
+      const { data: dataPausa } = await supabase.from('pausas_separacao')
+        .select('*').eq('requisicao_id', req.id).eq('solicitante_nome', usuarioLogado.nome_completo).order('timestamp_criacao', { ascending: false }).limit(1);
+      
+      if (dataPausa && dataPausa.length > 0) {
+        if (dataPausa[0].status === 'pendente') {
+          setPausaPendente(true);
+        } else {
+          setPausaPendente(false);
+        }
       }
     };
 
@@ -84,24 +103,82 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     return () => clearInterval(intervaloAuth);
   }, [req.id, usuarioLogado, isEncarregado]);
 
+  // --- FUNÇÕES DA PAUSA (COM BLINDAGEM DE ERRO) ---
+  const solicitarPausaAoLider = async (tipoPausa) => {
+    if (!usuarioLogado?.encarregado_responsavel) {
+      exibirPopup('erro', 'Sem Encarregado', 'Você não tem um Encarregado vinculado ao seu perfil.\nPeça ao administrador para atualizar o seu perfil primeiro.');
+      return;
+    }
+    
+    setPausaPendente(true);
+    
+    // O '.select()' no final garante que, se der erro no Supabase, a mensagem apareça!
+    const { error } = await supabase.from('pausas_separacao').insert([{
+      requisicao_id: req.id,
+      solicitante_nome: usuarioLogado.nome_completo,
+      encarregado_destino: usuarioLogado.encarregado_responsavel,
+      tipo_pausa: tipoPausa,
+      timestamp_criacao: Date.now()
+    }]).select();
+
+    if (error) {
+      setPausaPendente(false);
+      exibirPopup('erro', 'Erro ao Solicitar', `Ocorreu um erro no banco de dados. Você criou a tabela de pausas?\n\nDetalhe técnico: ${error.message}`);
+      return;
+    }
+
+    exibirPopup('info', 'Pausa Solicitada', `Seu pedido de pausa para "${tipoPausa}" foi enviado.\n\nAguarde a aprovação do encarregado. O cronômetro só vai parar quando ele autorizar!`);
+  };
+
+  const handleRetomarSeparacao = async () => {
+    const horaRetorno = Date.now();
+    const horaQuePausou = req.historico.pausa_ativa_inicio;
+    
+    const tempoPausadoAgora = horaRetorno - Number(horaQuePausou);
+    const tempoPausadoAnterior = req.historico.tempo_pausado_total || 0;
+
+    const novoHistorico = {
+      ...req.historico,
+      tempo_pausado_total: tempoPausadoAnterior + tempoPausadoAgora
+    };
+    
+    delete novoHistorico.pausa_ativa_inicio;
+    const pausaIdAtiva = novoHistorico.pausa_ativa_id;
+    delete novoHistorico.pausa_ativa_id;
+    delete novoHistorico.tipo_pausa_ativa;
+
+    if (pausaIdAtiva) {
+      await supabase.from('pausas_separacao').update({ status: 'finalizada' }).eq('id', pausaIdAtiva);
+    }
+    
+    await aoAtualizarHistorico(req.id, novoHistorico);
+    exibirPopup('sucesso', 'Bem-vindo(a) de volta!', 'Sua separação foi retomada e o cronômetro voltou a correr. Bom trabalho!');
+  };
+
+  // --- FUNÇÕES DE BIP MANUAL ---
   const solicitarBipManual = async (item) => {
     if (!usuarioLogado?.encarregado_responsavel) {
-      exibirPopup('erro', 'Sem Encarregado', 'Você não tem um Encarregado vinculado ao seu perfil.\nPeça ao administrador para atualizar o seu perfil.');
+      exibirPopup('erro', 'Sem Encarregado', 'Você não tem um Encarregado vinculado.');
       return;
     }
     setPedidosBip(prev => ({ ...prev, [item.cod]: 'pendente' }));
-    await supabase.from('autorizacoes_bip').insert([{
+    
+    const { error } = await supabase.from('autorizacoes_bip').insert([{
       requisicao_id: req.id, produto_codigo: item.cod, produto_descricao: item.descricao,
       solicitante_nome: usuarioLogado.nome_completo, encarregado_destino: usuarioLogado.encarregado_responsavel,
       status: 'pendente', timestamp_criacao: Date.now()
-    }]);
+    }]).select();
+
+    if (error) {
+       exibirPopup('erro', 'Erro ao Solicitar', `Ocorreu um erro no banco de dados.\n\nDetalhe técnico: ${error.message}`);
+    }
   };
 
   useEffect(() => {
     let scanner = null;
     let isComponentMounted = true;
 
-    if (itemCameraAtiva !== null) {
+    if (itemCameraAtiva !== null && !isPausado) { // Trava a câmera se estiver pausado
       setTimeout(() => {
         if (!isComponentMounted) return;
         scanner = new Html5Qrcode('leitor-camera-modal', {
@@ -120,7 +197,7 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
           (err) => { }
         ).catch(err => {
           console.error("Erro ao iniciar câmera:", err);
-          exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões do navegador.');
+          exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões.');
           setItemCameraAtiva(null);
         });
       }, 150);
@@ -128,12 +205,12 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     
     return () => { 
       isComponentMounted = false;
-      if (scanner) { scanner.stop().then(() => { scanner.clear(); }).catch(err => console.error("Erro ao parar a câmera:", err)); }
+      if (scanner) { scanner.stop().then(() => { scanner.clear(); }).catch(err => console.error(err)); }
     };
-  }, [itemCameraAtiva]); 
+  }, [itemCameraAtiva, isPausado]); 
 
   const processarBipagem = (index, decodedText) => {
-    if (!decodedText || !decodedText.trim()) return;
+    if (!decodedText || !decodedText.trim() || isPausado) return;
     const itensAtuais = itensRef.current; 
     const itemAtual = itensAtuais[index];
     
@@ -177,7 +254,8 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
         const novosItens = [...itensRef.current];
         novosItens[index] = { ...novosItens[index], bipContagem: 0, bipReferencia: null };
         aoAtualizarItens(req.id, novosItens); 
-        ultimoBipTexto.current = ""; fecharPopupCustom();
+        ultimoBipTexto.current = ""; 
+        fecharPopupCustom();
       }, () => fecharPopupCustom()
     );
   };
@@ -201,8 +279,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
       const metricasFinais = await aoFinalizarSeparacao(req.id, tempoDecorrido, respAtual);
       if (!metricasFinais) return; 
 
-      setNovoStatus('Separado');
-      
       const tempoSegundos = metricasFinais.tempoTotalSegundos || 1;
       const itensFisicos = metricasFinais.totalItensFisicos || 0;
       const upm = (itensFisicos / tempoSegundos) * 60;
@@ -248,12 +324,53 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     setModoExpansao('resumo'); 
   };
 
+  // --- NOVA INTERFACE DE SEPARAÇÃO PAUSADA ---
+  if (isPausado) {
+    return (
+      <div style={{ textAlign: 'center', padding: '50px 20px', backgroundColor: '#fff3cd', border: '3px dashed #f39c12', borderRadius: '12px', marginTop: '20px' }}>
+        <h2 style={{ color: '#d35400', marginBottom: '15px', fontSize: '2rem' }}>⏸️ SEPARAÇÃO CONGELADA</h2>
+        <p style={{ fontSize: '1.2rem', color: '#856404', marginBottom: '30px' }}>
+          Motivo da Pausa: <strong>{req.historico.tipo_pausa_ativa}</strong><br/><br/>
+          <span style={{ fontSize: '1rem' }}>O cronômetro está parado e os produtos foram ocultados por segurança.</span>
+        </p>
+        <button onClick={handleRetomarSeparacao} style={{ backgroundColor: '#27ae60', color: 'white', padding: '18px 40px', fontSize: '1.2rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+          ▶️ ESTOU DE VOLTA! (Retomar Separação)
+        </button>
+      </div>
+    );
+  }
+
+  // --- INTERFACE NORMAL DE SEPARAÇÃO ---
   return (
     <>
       {mostrarFesta && <div className="festa-confete">🎉🏆🎉</div>}
       
-      <h3 className="titulo-lista-produtos">Lista de Produtos ({req.itens} itens)</h3>
-      <p className="subtitulo-lista-produtos">Clique na linha do produto para expandir as opções de leitura e edição.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '15px' }}>
+        <div>
+          <h3 className="titulo-lista-produtos" style={{ margin: 0 }}>Lista de Produtos ({req.itens} itens)</h3>
+          <p className="subtitulo-lista-produtos" style={{ margin: 0 }}>Clique na linha do produto para expandir as opções.</p>
+        </div>
+
+        {/* BOTÕES PARA SOLICITAR PAUSA - Aparecem apenas se estiver na etapa de separação e não logado como líder principal */}
+        {req.status === 'Em Separação' && !req.metricasSeparacao && !isEncarregado && (
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button 
+              onClick={() => solicitarPausaAoLider('Pausa para Almoço')} 
+              disabled={pausaPendente}
+              style={{ padding: '10px 15px', backgroundColor: pausaPendente ? '#ecf0f1' : '#f1c40f', color: pausaPendente ? '#bdc3c7' : '#856404', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: pausaPendente ? 'not-allowed' : 'pointer' }}
+            >
+              🍔 {pausaPendente ? 'Aguardando Aprovação...' : 'Pausa para Almoço'}
+            </button>
+            <button 
+              onClick={() => solicitarPausaAoLider('Fim de Expediente')} 
+              disabled={pausaPendente}
+              style={{ padding: '10px 15px', backgroundColor: pausaPendente ? '#ecf0f1' : '#34495e', color: pausaPendente ? '#bdc3c7' : 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: pausaPendente ? 'not-allowed' : 'pointer' }}
+            >
+              🌙 {pausaPendente ? 'Aguardando Aprovação...' : 'Fim de Expediente'}
+            </button>
+          </div>
+        )}
+      </div>
       
       <div className="tabela-wrapper">
         <table className="tabela-itens">
@@ -266,8 +383,12 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
           </thead>
           <tbody>
             {itens.map((item, index) => {
-              const contagemBipada = item.bipContagem || 0;
               const meta = item.quantidadeEditada !== undefined ? Number(item.quantidadeEditada) : Number(item.quantidade);
+              
+              // Lógica inteligente para preservar a visualização após a etapa de separação
+              const jaPassouSeparacao = req.status !== 'Pendente' && req.status !== 'Em Separação';
+              const contagemBipada = item.bipContagem !== undefined ? item.bipContagem : (jaPassouSeparacao ? meta : 0);
+              
               const completo = contagemBipada >= meta;
               const teveEdicao = item.quantidadeEditada !== undefined && Number(item.quantidadeEditada) !== Number(item.quantidade);
               const estaExpandido = linhaExpandida === index;

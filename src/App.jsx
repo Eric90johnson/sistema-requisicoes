@@ -27,9 +27,6 @@ function App() {
   const [produtosPreSelecionados, setProdutosPreSelecionados] = useState(null);
   const [reqEmEdicao, setReqEmEdicao] = useState(null); 
 
-  // =======================================================================
-  // ESTADOS GLOBAIS DA "REPOSIÇÃO EXTERNA GAMIFICADA SIMULTÂNEA"
-  // =======================================================================
   const [itensPreRequisicao, setItensPreRequisicao] = useState([]);
   const [tipoReposicaoGlobal, setTipoReposicaoGlobal] = useState('interna'); 
   const [inicioCronometroGlobal, setInicioCronometroGlobal] = useState(null);
@@ -40,9 +37,10 @@ function App() {
   const [recordesGlobais, setRecordesGlobais] = useState({});
   const [carregando, setCarregando] = useState(false);
 
+  // Estados de Notificações
   const [autorizacoesPendentes, setAutorizacoesPendentes] = useState([]);
+  const [pausasPendentes, setPausasPendentes] = useState([]); 
 
-  // --- ESTADO PARA O MENU MOBILE ---
   const [menuMobileAberto, setMenuMobileAberto] = useState(false);
 
   const handleLogar = (dadosUsuario) => {
@@ -127,21 +125,41 @@ function App() {
 
     carregarDadosDaNuvem();
 
-    const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin';
+    const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
     
     const fetchPendentes = async () => {
       if (isEncarregado && usuarioLogado?.nome_completo) {
         try {
-          const { data, error } = await supabase.from('autorizacoes_bip')
-            .select('*')
-            .eq('encarregado_destino', usuarioLogado.nome_completo)
-            .eq('status', 'pendente');
+          const isAdmin = usuarioLogado.username === 'admin' || usuarioLogado.acesso_admin;
+
+          // --- BUSCA BIPS PENDENTES ---
+          // Se for Admin, busca de todos. Se não for, busca só o que tem o nome dele.
+          let queryBip = supabase.from('autorizacoes_bip').select('*').eq('status', 'pendente');
+          if (!isAdmin) {
+             queryBip = queryBip.ilike('encarregado_destino', `%${usuarioLogado.nome_completo}%`);
+          }
+          const { data: dataBip } = await queryBip;
           
-          if (!error && data) {
+          if (dataBip) {
             setAutorizacoesPendentes(prev => {
-              const hasNew = data.some(novaAuth => !prev.some(p => p.id === novaAuth.id));
+              const hasNew = dataBip.some(novaAuth => !prev.some(p => p.id === novaAuth.id));
               if (hasNew) tocarSomNotificacao();
-              return data;
+              return dataBip;
+            });
+          }
+
+          // --- BUSCA PAUSAS PENDENTES ---
+          let queryPausa = supabase.from('pausas_separacao').select('*').eq('status', 'pendente');
+          if (!isAdmin) {
+             queryPausa = queryPausa.ilike('encarregado_destino', `%${usuarioLogado.nome_completo}%`);
+          }
+          const { data: dataPausa } = await queryPausa;
+          
+          if (dataPausa) {
+            setPausasPendentes(prev => {
+              const hasNew = dataPausa.some(novaPausa => !prev.some(p => p.id === novaPausa.id));
+              if (hasNew) tocarSomNotificacao();
+              return dataPausa;
             });
           }
         } catch (e) {}
@@ -186,18 +204,43 @@ function App() {
     setAutorizacoesPendentes(prev => prev.filter(a => a.id !== auth.id));
     await supabase.from('autorizacoes_bip').update({ status: 'aprovado' }).eq('id', auth.id);
   };
-
   const handleRecusarBip = async (auth) => {
     setAutorizacoesPendentes(prev => prev.filter(a => a.id !== auth.id));
     await supabase.from('autorizacoes_bip').update({ status: 'recusado' }).eq('id', auth.id);
   };
 
+  const handleAtualizarHistorico = async (id, novoHistorico) => {
+    const reqAtualizada = { ...requisicoes.find(r => r.id === id), historico: novoHistorico };
+    setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
+    if (reqSelecionada?.id === id) setReqSelecionada(reqAtualizada);
+    await supabase.from('requisicoes').update({ historico: novoHistorico }).eq('id', id);
+  };
+
+  const handleAprovarPausa = async (pausa) => {
+    setPausasPendentes(prev => prev.filter(p => p.id !== pausa.id));
+    const agora = Date.now();
+    await supabase.from('pausas_separacao').update({ status: 'aprovada', inicio_pausa: agora }).eq('id', pausa.id);
+    const req = requisicoes.find(r => r.id === pausa.requisicao_id);
+    if (req) {
+      const historicoAtualizado = {
+        ...req.historico,
+        pausa_ativa_inicio: agora,
+        pausa_ativa_id: pausa.id,
+        tipo_pausa_ativa: pausa.tipo_pausa
+      };
+      await handleAtualizarHistorico(req.id, historicoAtualizado);
+    }
+  };
+
+  const handleRecusarPausa = async (pausa) => {
+    setPausasPendentes(prev => prev.filter(p => p.id !== pausa.id));
+    await supabase.from('pausas_separacao').update({ status: 'recusada' }).eq('id', pausa.id);
+  };
+
   const handleIniciarEdicao = async (id, nomeEditor) => {
     const req = requisicoes.find(r => r.id === id);
     const reqEditando = { ...req, editorTemporario: nomeEditor };
-    
     await supabase.from('requisicoes').update({ status: 'Em Edição' }).eq('id', id);
-    
     setReqEmEdicao(reqEditando);
     setTelaAtual('nova');
     carregarDadosDaNuvem(true, true);
@@ -218,17 +261,8 @@ function App() {
   const handleCancelarRequisicao = async (id, nomeCancelador) => {
     const req = requisicoes.find(r => r.id === id);
     const dataCancelamento = new Date().toLocaleString('pt-BR');
-    
-    const historicoAtualizado = { 
-      ...req.historico, 
-      'Cancelamento': `Por ${nomeCancelador} em ${dataCancelamento}` 
-    };
-
-    const { error } = await supabase.from('requisicoes').update({
-      status: 'Cancelada', 
-      historico: historicoAtualizado
-    }).eq('id', id);
-
+    const historicoAtualizado = { ...req.historico, 'Cancelamento': `Por ${nomeCancelador} em ${dataCancelamento}` };
+    const { error } = await supabase.from('requisicoes').update({ status: 'Cancelada', historico: historicoAtualizado }).eq('id', id);
     if (!error) {
       setReqEmEdicao(null);
       await carregarDadosDaNuvem(true); 
@@ -239,24 +273,13 @@ function App() {
   const handleSalvarRequisicao = async (novaReq, isEdicao = false) => {
     if (isEdicao) {
       const { error } = await supabase.from('requisicoes').update({
-        origem: novaReq.origem,
-        destino: novaReq.destino,
-        solicitante: novaReq.solicitante,
-        motivo: novaReq.motivo,
-        prioridade: novaReq.prioridade,
-        itens: novaReq.itens,
-        status: 'Pendente', 
-        lista_itens: novaReq.listaItens,
-        historico: novaReq.historico
+        origem: novaReq.origem, destino: novaReq.destino, solicitante: novaReq.solicitante,
+        motivo: novaReq.motivo, prioridade: novaReq.prioridade, itens: novaReq.itens,
+        status: 'Pendente', lista_itens: novaReq.listaItens, historico: novaReq.historico
       }).eq('id', novaReq.id);
 
       if (!error) { 
-        setReqEmEdicao(null);
-        await carregarDadosDaNuvem(true); 
-        setTelaAtual('painel'); 
-      } else {
-        alert("Erro ao editar requisição: " + error.message);
-        console.error("Erro na Edição: ", error);
+        setReqEmEdicao(null); await carregarDadosDaNuvem(true); setTelaAtual('painel'); 
       }
     } else {
       const { error } = await supabase.from('requisicoes').insert([{
@@ -267,47 +290,22 @@ function App() {
       
       if (!error) { 
         if (novaReq.metricasSeparacao?.bateuRecorde) {
-          await supabase.from('recordes_globais').upsert({ 
-            qtd_itens: novaReq.metricasSeparacao.totalItensFisicos, 
-            tempo_segundos: novaReq.metricasSeparacao.tempoTotalSegundos, 
-            responsavel: novaReq.metricasSeparacao.responsavel, 
-            data: new Date().toLocaleDateString() 
-          });
+          await supabase.from('recordes_globais').upsert({ qtd_itens: novaReq.metricasSeparacao.totalItensFisicos, tempo_segundos: novaReq.metricasSeparacao.tempoTotalSegundos, responsavel: novaReq.metricasSeparacao.responsavel, data: new Date().toLocaleDateString() });
         }
-        
         await carregarDadosDaNuvem(true); 
         setTelaAtual('painel'); 
-        setProdutosPreSelecionados(null); 
-        setInicioCronometroGlobal(null); 
-        setTipoReposicaoGlobal('interna'); 
-      } else {
-        alert("Erro ao gravar nova requisição: " + error.message);
-        console.error("Erro ao inserir Requisição: ", error);
+        setProdutosPreSelecionados(null); setInicioCronometroGlobal(null); setTipoReposicaoGlobal('interna'); 
       }
     }
   };
 
   const handleAtualizarObservacoes = async (id, novaDescricaoObs, autorDaObs) => {
     const req = requisicoes.find(r => r.id === id);
-    
-    const listaAntiga = Array.isArray(req.historico?.observacoesGerais) 
-      ? req.historico.observacoesGerais 
-      : [];
-
-    const novaObsObj = {
-      id_obs: Date.now(),
-      texto: novaDescricaoObs,
-      autor: autorDaObs,
-      data: new Date().toLocaleString('pt-BR')
-    };
-
+    const listaAntiga = Array.isArray(req.historico?.observacoesGerais) ? req.historico.observacoesGerais : [];
+    const novaObsObj = { id_obs: Date.now(), texto: novaDescricaoObs, autor: autorDaObs, data: new Date().toLocaleString('pt-BR') };
     const novaListaGeral = [...listaAntiga, novaObsObj];
     const historicoAtualizado = { ...req.historico, observacoesGerais: novaListaGeral };
-    
-    setRequisicoes(requisicoes.map(r => r.id === id ? { ...r, historico: historicoAtualizado } : r));
-    if (reqSelecionada?.id === id) setReqSelecionada({ ...reqSelecionada, historico: historicoAtualizado });
-
-    await supabase.from('requisicoes').update({ historico: historicoAtualizado }).eq('id', id);
+    await handleAtualizarHistorico(id, historicoAtualizado);
   };
 
   const handleAlterarStatus = async (id, novoStatus, responsavel, dadosExtras = {}) => {
@@ -321,9 +319,7 @@ function App() {
     const payloadBanco = { status: novoStatus, historico: historicoAtualizado };
     if (dadosExtras.numeroRequisicaoExterna) payloadBanco.numero_requisicao_externa = dadosExtras.numeroRequisicaoExterna;
     if (dadosExtras.notaFiscal) payloadBanco.nota_fiscal = dadosExtras.notaFiscal;
-
     await supabase.from('requisicoes').update(payloadBanco).eq('id', id);
-    await carregarDadosDaNuvem(true);
   };
 
   const handleAdicionarResponsavel = async (id, novoResponsavel) => {
@@ -333,11 +329,7 @@ function App() {
     if (responsavelAtual.includes(novoResponsavel)) return;
     const responsavelConcatenado = responsavelAtual ? `${responsavelAtual} + ${novoResponsavel}` : novoResponsavel;
     const historicoAtualizado = { ...req.historico, [statusAtual]: responsavelConcatenado };
-    const reqAtualizada = { ...req, historico: historicoAtualizado };
-    setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
-    setReqSelecionada(reqAtualizada);
-    await supabase.from('requisicoes').update({ historico: historicoAtualizado }).eq('id', id);
-    await carregarDadosDaNuvem(true);
+    await handleAtualizarHistorico(id, historicoAtualizado);
   };
 
   const handleAtualizarItens = async (id, novaListaItens) => {
@@ -354,7 +346,6 @@ function App() {
     
     const chaveRecorde = `qtd_${totalItensFisicos}`;
     const recordeAtual = recordesGlobais[chaveRecorde];
-    
     if (!recordeAtual || tempoSegundos < recordeAtual.tempoSegundos) {
       novasMetricas.bateuRecorde = true;
       await supabase.from('recordes_globais').upsert({ qtd_itens: totalItensFisicos, tempo_segundos: tempoSegundos, responsavel: responsavelSeparacao, data: new Date().toLocaleDateString() });
@@ -363,70 +354,26 @@ function App() {
     const novoStatusAutomatico = 'Separado';
     const historicoAtualizado = { ...req.historico, [novoStatusAutomatico]: responsavelSeparacao };
 
-    const reqAtualizada = { 
-      ...req, 
-      metricasSeparacao: novasMetricas,
-      status: novoStatusAutomatico,
-      historico: historicoAtualizado 
-    };
-
+    const reqAtualizada = { ...req, metricasSeparacao: novasMetricas, status: novoStatusAutomatico, historico: historicoAtualizado };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     setReqSelecionada(reqAtualizada);
-
-    await supabase.from('requisicoes').update({ 
-      metricas_separacao: novasMetricas,
-      status: novoStatusAutomatico,
-      historico: historicoAtualizado
-    }).eq('id', id);
-
-    await carregarDadosDaNuvem(true, true);
+    await supabase.from('requisicoes').update({ metricas_separacao: novasMetricas, status: novoStatusAutomatico, historico: historicoAtualizado }).eq('id', id);
     return novasMetricas;
   };
 
   const abrirDetalhes = (req) => { setReqSelecionada(req); setTelaAtual('detalhes'); };
-  const handleSalvarPedidosMarketplace = (novosPedidos) => { setPedidosMarketplace([...novosPedidos, ...pedidosMarketplace]); setTelaAtual('painel'); };
-
-  const handleAdicionarPreRequisicao = (produto) => {
-    setItensPreRequisicao(prev => {
-      if (prev.some(p => String(p.codigo) === String(produto.codigo))) return prev;
-      return [...prev, produto];
-    });
-  };
-
-  const handleRemoverPreRequisicao = (codigoProd) => {
-    setItensPreRequisicao(prev => prev.filter(p => String(p.codigo) !== String(codigoProd)));
-  };
-
-  const handleIrParaPreRequisicao = () => {
-    setProdutosPreSelecionados(itensPreRequisicao);
-    setItensPreRequisicao([]); 
-    setTelaAtual('nova');
-  };
+  const navegarPara = (novaTela, aba = 'interna') => { setTelaAtual(novaTela); if (novaTela === 'painel') setAbaPainelAtiva(aba); setMenuMobileAberto(false); };
 
   if (!isLogado) return <Login aoLogar={handleLogar} />;
 
-  // --- Função para gerenciar a navegação sincronizada com as abas do Painel ---
-  const navegarPara = (novaTela, aba = 'interna') => {
-    setTelaAtual(novaTela);
-    if (novaTela === 'painel') {
-      setAbaPainelAtiva(aba);
-    }
-    setMenuMobileAberto(false); // Fecha o menu no mobile após clicar
-  };
-
   return (
     <div className="layout-container">
-      
-      {/* SIDEBAR COM AS ROTAS ATUALIZADAS */}
       <Menu 
         aoClicarTransferencias={() => navegarPara('painel', 'interna')} 
         aoClicarMarketplace={() => navegarPara('painel', 'marketplace')} 
         aoClicarHistorico={() => navegarPara('historico')}
         aoClicarBaseDados={() => navegarPara('base-dados')} 
-        aoClicarAdmin={(abaDestino = 'base-dados') => {
-          setAbaAdminAtiva(abaDestino);
-          navegarPara('admin');
-        }}
+        aoClicarAdmin={(abaDestino = 'base-dados') => { setAbaAdminAtiva(abaDestino); navegarPara('admin'); }}
         aoClicarContatos={() => navegarPara('contatos')}
         usuarioLogado={usuarioLogado} 
         aoSair={handleSair} 
@@ -438,95 +385,72 @@ function App() {
       <div className="conteudo-principal-wrapper">
         <header className="cabecalho-global">
           <div className="header-wrapper-flex">
-            <button className="btn-toggle-sidebar" onClick={() => setMenuMobileAberto(!menuMobileAberto)}>
-              ☰
-            </button>
+            <button className="btn-toggle-sidebar" onClick={() => setMenuMobileAberto(!menuMobileAberto)}>☰</button>
             <h1 className="titulo-cabecalho">Painel de Requisição Interna de Produtos</h1>
           </div>
         </header>
         
         <main>
           {carregando ? (
-            <div className="tela-loading">
-              <h2>🔄 Conectando com a Nuvem...</h2>
-              <p>Sincronizando as requisições da Neta Dantas, aguarde.</p>
-            </div>
+            <div className="tela-loading"><h2>🔄 Conectando com a Nuvem...</h2><p>Sincronizando as requisições da Neta Dantas, aguarde.</p></div>
           ) : (
             <>
-              {telaAtual === 'painel' && (
-                <Painel 
-                  abaExterna={abaPainelAtiva}
-                  aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} 
-                  aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} 
-                  requisicoes={requisicoes.filter(r => r.status !== 'Em Edição' && r.status !== 'Cancelada')} 
-                  pedidosMarketplace={pedidosMarketplace} 
-                  aoAbrirDetalhes={abrirDetalhes} 
-                />
-              )}
+              {telaAtual === 'painel' && <Painel abaExterna={abaPainelAtiva} aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes.filter(r => r.status !== 'Em Edição' && r.status !== 'Cancelada')} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
+              {telaAtual === 'nova' && <NovaRequisicao aoVoltar={handleCancelarEdicao} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} aoCancelarReq={handleCancelarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} reqEmEdicao={reqEmEdicao} usuarioLogado={usuarioLogado} recordesGlobais={recordesGlobais} tipoReposicaoGlobal={tipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} />}
               
-              {telaAtual === 'nova' && (
-                <NovaRequisicao 
-                  aoVoltar={handleCancelarEdicao} 
+              {telaAtual === 'detalhes' && (
+                <DetalhesRequisicao 
+                  req={reqSelecionada} 
+                  usuarioLogado={usuarioLogado} 
                   baseProdutos={baseProdutos} 
-                  aoSalvar={handleSalvarRequisicao} 
-                  aoCancelarReq={handleCancelarRequisicao} 
-                  requisicoes={requisicoes} 
-                  produtosPreSelecionados={produtosPreSelecionados} 
-                  reqEmEdicao={reqEmEdicao} 
-                  usuarioLogado={usuarioLogado}
-                  recordesGlobais={recordesGlobais}
-                  tipoReposicaoGlobal={tipoReposicaoGlobal}
-                  inicioCronometroGlobal={inicioCronometroGlobal}
+                  aoVoltar={() => setTelaAtual('painel')} 
+                  aoMudarStatus={handleAlterarStatus} 
+                  aoAtualizarItens={handleAtualizarItens} 
+                  aoAdicionarResponsavel={handleAdicionarResponsavel} 
+                  aoFinalizarSeparacao={handleFinalizarSeparacao} 
+                  aoIniciarEdicao={handleIniciarEdicao} 
+                  aoAtualizarObservacoes={handleAtualizarObservacoes} 
+                  aoAtualizarHistorico={handleAtualizarHistorico}
+                  recordesGlobais={recordesGlobais} 
                 />
               )}
               
-              {telaAtual === 'detalhes' && <DetalhesRequisicao req={reqSelecionada} usuarioLogado={usuarioLogado} baseProdutos={baseProdutos} aoVoltar={() => setTelaAtual('painel')} aoMudarStatus={handleAlterarStatus} aoAtualizarItens={handleAtualizarItens} aoAdicionarResponsavel={handleAdicionarResponsavel} aoFinalizarSeparacao={handleFinalizarSeparacao} aoIniciarEdicao={handleIniciarEdicao} aoAtualizarObservacoes={handleAtualizarObservacoes} recordesGlobais={recordesGlobais} />}
-              {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={handleSalvarPedidosMarketplace} />}
+              {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={(n) => {setPedidosMarketplace([...n, ...pedidosMarketplace]); setTelaAtual('painel');}} />}
               {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
-              
-              {telaAtual === 'base-dados' && (
-                <BaseDados 
-                  aoVoltar={() => {
-                    setTelaAtual('painel');
-                    setInicioCronometroGlobal(null);
-                    setTipoReposicaoGlobal('interna');
-                  }} 
-                  produtos={baseProdutos} 
-                  setProdutos={setBaseProdutos} 
-                  itensPreRequisicao={itensPreRequisicao}
-                  aoAdicionarPreRequisicao={handleAdicionarPreRequisicao}
-                  aoRemoverPreRequisicao={handleRemoverPreRequisicao}
-                  aoIrParaPreRequisicao={handleIrParaPreRequisicao}
-                  tipoReposicaoGlobal={tipoReposicaoGlobal}
-                  setTipoReposicaoGlobal={setTipoReposicaoGlobal}
-                  inicioCronometroGlobal={inicioCronometroGlobal}
-                  setInicioCronometroGlobal={setInicioCronometroGlobal}
-                />
-              )}
-              
-              {telaAtual === 'admin' && usuarioLogado?.username === 'admin' && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
+              {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => {setTelaAtual('painel'); setInicioCronometroGlobal(null); setTipoReposicaoGlobal('interna');}} produtos={baseProdutos} setProdutos={setBaseProdutos} itensPreRequisicao={itensPreRequisicao} aoAdicionarPreRequisicao={(p) => setItensPreRequisicao(v => v.some(i => String(i.codigo) === String(p.codigo)) ? v : [...v, p])} aoRemoverPreRequisicao={(c) => setItensPreRequisicao(v => v.filter(i => String(i.codigo) !== String(c)))} aoIrParaPreRequisicao={() => {setProdutosPreSelecionados(itensPreRequisicao); setItensPreRequisicao([]); setTelaAtual('nova');}} tipoReposicaoGlobal={tipoReposicaoGlobal} setTipoReposicaoGlobal={setTipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} setInicioCronometroGlobal={setInicioCronometroGlobal} />}
+              {telaAtual === 'admin' && (usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin) && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
             </>
           )}
         </main>
 
-        {autorizacoesPendentes.length > 0 && (
-          <div className="container-notificacoes-bip">
-            {autorizacoesPendentes.map(auth => (
-              <div key={auth.id} className="toast-autorizacao-bip">
-                <div className="toast-bip-header">🔑 Liberação de Bip Manual</div>
-                <div className="toast-bip-body">
-                  <strong>{auth.solicitante_nome}</strong> não conseguiu bipar o produto abaixo e solicita digitação:<br/>
-                  <br/>
-                  <span>{auth.produto_descricao}</span>
-                </div>
-                <div className="toast-bip-footer">
-                  <button className="btn-recusar-bip" onClick={() => handleRecusarBip(auth)}>Recusar ❌</button>
-                  <button className="btn-aprovar-bip" onClick={() => handleAprovarBip(auth)}>Aprovar ✅</button>
-                </div>
+        <div className="container-notificacoes-bip">
+          {autorizacoesPendentes.map(auth => (
+            <div key={auth.id} className="toast-autorizacao-bip">
+              <div className="toast-bip-header">🔑 Liberação de Bip Manual</div>
+              <div className="toast-bip-body">
+                <strong>{auth.solicitante_nome}</strong> não conseguiu bipar o produto abaixo e solicita digitação:<br/><br/><span>{auth.produto_descricao}</span>
               </div>
-            ))}
-          </div>
-        )}
+              <div className="toast-bip-footer">
+                <button className="btn-recusar-bip" onClick={() => handleRecusarBip(auth)}>Recusar ❌</button>
+                <button className="btn-aprovar-bip" onClick={() => handleAprovarBip(auth)}>Aprovar ✅</button>
+              </div>
+            </div>
+          ))}
+
+          {pausasPendentes.map(pausa => (
+            <div key={pausa.id} className="toast-autorizacao-bip" style={{ borderColor: '#f39c12' }}>
+              <div className="toast-bip-header" style={{ backgroundColor: '#f39c12' }}>⏸️ Solicitação de Pausa</div>
+              <div className="toast-bip-body">
+                O colaborador <strong>{pausa.solicitante_nome}</strong> está solicitando uma pausa no cronômetro.<br/><br/>
+                Motivo: <strong>{pausa.tipo_pausa}</strong>
+              </div>
+              <div className="toast-bip-footer">
+                <button className="btn-recusar-bip" onClick={() => handleRecusarPausa(pausa)}>Negar ❌</button>
+                <button className="btn-aprovar-bip" style={{ backgroundColor: '#27ae60' }} onClick={() => handleAprovarPausa(pausa)}>Autorizar Pausa ✅</button>
+              </div>
+            </div>
+          ))}
+        </div>
 
         <Rodape />
       </div>

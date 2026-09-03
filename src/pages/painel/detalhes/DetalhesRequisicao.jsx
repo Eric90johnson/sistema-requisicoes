@@ -11,7 +11,7 @@ import EsteiraExterna from './EsteiraExterna';
 export default function DetalhesRequisicao({ 
   req, usuarioLogado, baseProdutos, aoVoltar, aoMudarStatus, 
   aoAtualizarItens, aoAdicionarResponsavel, aoFinalizarSeparacao, 
-  aoIniciarEdicao, aoAtualizarObservacoes, recordesGlobais 
+  aoIniciarEdicao, aoAtualizarObservacoes, aoAtualizarHistorico, recordesGlobais 
 }) {
   if (!req) return null;
 
@@ -55,16 +55,28 @@ export default function DetalhesRequisicao({
     exibirPopup('info', '🔥 Desafio de Agilidade', msgDesafio);
   };
 
+  // --- O CORAÇÃO DO NOVO CRONÔMETRO DE PAUSA ---
   useEffect(() => {
     let intervalo;
     if (req.status === 'Em Separação' && !req.metricasSeparacao) {
       const horaInicioBanco = req.historico?.inicio_separacao;
+      const tempoPausadoTotal = req.historico?.tempo_pausado_total || 0; // Quantos milissegundos já ficaram pausados
+      const pausaAtivaInicio = req.historico?.pausa_ativa_inicio; // Se existe, significa que está pausado AGORA
+
       if (horaInicioBanco) {
-        setCronometroRodando(true);
-        intervalo = setInterval(() => {
-          const diferencaSegundos = Math.floor((Date.now() - Number(horaInicioBanco)) / 1000);
-          setTempoDecorrido(diferencaSegundos > 0 ? diferencaSegundos : 0);
-        }, 1000);
+        if (pausaAtivaInicio) {
+          // Relógio congelado! Conta até a hora em que a pausa foi aceita.
+          setCronometroRodando(false);
+          const diferenca = (Number(pausaAtivaInicio) - Number(horaInicioBanco)) - tempoPausadoTotal;
+          setTempoDecorrido(Math.max(0, Math.floor(diferenca / 1000)));
+        } else {
+          // Relógio rodando! Tira do tempo atual o tanto de tempo que já ficou pausado no passado.
+          setCronometroRodando(true);
+          intervalo = setInterval(() => {
+            const diferenca = (Date.now() - Number(horaInicioBanco)) - tempoPausadoTotal;
+            setTempoDecorrido(Math.max(0, Math.floor(diferenca / 1000)));
+          }, 1000);
+        }
       }
     } else {
       setCronometroRodando(false);
@@ -93,7 +105,6 @@ export default function DetalhesRequisicao({
 
   const isReposicaoInterna = req.motivo === 'Reposição Interna' || (req.origem && req.destino && req.origem === req.destino);
 
-  // A função processarEsteira agora recebe os dados diretamente dos componentes filhos
   const processarEsteira = (proximoStatus, responsavelDigitado, dadosDaEsteira = {}) => {
     if (!responsavelDigitado.trim()) { 
       exibirPopup('aviso', 'Atenção', 'Por favor, insira o nome do responsável pela etapa!'); 
@@ -123,7 +134,7 @@ export default function DetalhesRequisicao({
       dadosExtras.numeroRequisicaoExterna = dadosDaEsteira.numReqExterna;
     }
     
-    if ((req.status === 'Faturamento' || req.status === 'Saída de produtos') && !isReposicaoInterna) {
+    if (req.status === 'Saída de produtos' && !isReposicaoInterna) {
       if (!dadosDaEsteira.notaFiscal?.trim()) { 
         exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Nota Fiscal de transferência!'); 
         return; 
@@ -213,7 +224,7 @@ export default function DetalhesRequisicao({
 
         <EdicaoReq req={req} aoIniciarEdicao={aoIniciarEdicao} exibirPopup={exibirPopup} />
 
-        {req.status === 'Em Separação' && (
+        {req.status === 'Em Separação' && !req.historico?.pausa_ativa_inicio && (
           <div className="box-assumir-tarefa">
             <div className="assumir-info">
               <span><strong>Separador(es) Atual(is):</strong> {req.historico?.['Em Separação'] || 'Não informado'}</span>
@@ -241,9 +252,9 @@ export default function DetalhesRequisicao({
         {(req.status === 'Em Separação' || req.metricasSeparacao) && (
           <div className="painel-cronometro">
             <div className="cronometro-titulo">
-              {req.metricasSeparacao ? '⏱️ TEMPO FINAL DA SEPARAÇÃO' : '⏱️ TEMPO EM ANDAMENTO'}
+              {req.metricasSeparacao ? '⏱️ TEMPO FINAL DA SEPARAÇÃO' : (req.historico?.pausa_ativa_inicio ? '⏸️ TEMPO CONGELADO (EM PAUSA)' : '⏱️ TEMPO EM ANDAMENTO')}
             </div>
-            <div className={`cronometro-relogio ${req.metricasSeparacao ? 'tempo-travado' : ''}`}>
+            <div className={`cronometro-relogio ${req.metricasSeparacao || req.historico?.pausa_ativa_inicio ? 'tempo-travado' : ''}`}>
               {formatarTempo(tempoDecorrido)}
             </div>
             {req.metricasSeparacao && (() => {
@@ -263,7 +274,17 @@ export default function DetalhesRequisicao({
           </div>
         )}
 
-        <SeparacaoReq req={req} usuarioLogado={usuarioLogado} aoAtualizarItens={aoAtualizarItens} aoFinalizarSeparacao={aoFinalizarSeparacao} tempoDecorrido={tempoDecorrido} exibirPopup={exibirPopup} />
+        {/* INJEÇÃO DAS NOVAS FUNÇÕES */}
+        <SeparacaoReq 
+          req={req} 
+          usuarioLogado={usuarioLogado} 
+          aoAtualizarItens={aoAtualizarItens} 
+          aoFinalizarSeparacao={aoFinalizarSeparacao} 
+          tempoDecorrido={tempoDecorrido} 
+          exibirPopup={exibirPopup} 
+          fecharPopupCustom={fecharPopupCustom} 
+          aoAtualizarHistorico={aoAtualizarHistorico}
+        />
       </div>
 
       {popupCustom.visivel && (

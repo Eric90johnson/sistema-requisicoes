@@ -11,8 +11,8 @@ export default function EsteiraExterna({ req, onProcessar }) {
   const handleAvancar = (proximoStatus) => {
     onProcessar(proximoStatus, responsavel, { numReqExterna, notaFiscal });
     setResponsavel('');
-    if (proximoStatus === 'Faturamento') setNumReqExterna('');
-    if (proximoStatus === 'Transporte') setNotaFiscal('');
+    if (proximoStatus === 'Saída de produtos') setNumReqExterna('');
+    if (proximoStatus === 'Faturamento') setNotaFiscal('');
   };
 
   if (req.status === 'Pendente') {
@@ -48,7 +48,7 @@ export default function EsteiraExterna({ req, onProcessar }) {
             <label>Nº da Ordem Interna (Req. Sistema)</label>
             <input type="text" placeholder="Ex: REQ-12345" value={numReqExterna} onChange={e => setNumReqExterna(e.target.value)} />
           </div>
-          <button className="btn-avancar-esteira" onClick={() => handleAvancar('Faturamento')}>
+          <button className="btn-avancar-esteira" onClick={() => handleAvancar('Saída de produtos')}>
             Confirmar Saída ➔
           </button>
         </div>
@@ -56,7 +56,7 @@ export default function EsteiraExterna({ req, onProcessar }) {
     );
   }
 
-  if (req.status === 'Faturamento' || req.status === 'Saída de produtos') {
+  if (req.status === 'Saída de produtos') {
     return (
       <div className="esteira-box">
         <h3>🧾 Etapa 2: Faturamento</h3>
@@ -69,8 +69,25 @@ export default function EsteiraExterna({ req, onProcessar }) {
             <label>Nº da Nota Fiscal</label>
             <input type="text" placeholder="Ex: NF 987654" value={notaFiscal} onChange={e => setNotaFiscal(e.target.value)} />
           </div>
-          <button className="btn-avancar-esteira" onClick={() => handleAvancar('Transporte')}>
+          <button className="btn-avancar-esteira" onClick={() => handleAvancar('Faturamento')}>
             Confirmar Faturamento ➔
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (req.status === 'Faturamento') {
+    return (
+      <div className="esteira-box">
+        <h3>🚛 Etapa 3: Transporte</h3>
+        <div className="esteira-inputs">
+          <div className="esteira-input-group">
+            <label>Nome do Motorista</label>
+            <input type="text" placeholder="Ex: Motorista Carlos" value={responsavel} onChange={e => setResponsavel(e.target.value)} />
+          </div>
+          <button className="btn-avancar-esteira" onClick={() => handleAvancar('Transporte')}>
+            Confirmar Envio ➔
           </button>
         </div>
       </div>
@@ -80,14 +97,14 @@ export default function EsteiraExterna({ req, onProcessar }) {
   if (req.status === 'Transporte') {
     return (
       <div className="esteira-box">
-        <h3>🚛 Etapa 3: Transporte</h3>
+        <h3>🏬 Etapa 4: Recebimento na Loja</h3>
         <div className="esteira-inputs">
           <div className="esteira-input-group">
-            <label>Nome do Motorista</label>
-            <input type="text" placeholder="Ex: Motorista Carlos" value={responsavel} onChange={e => setResponsavel(e.target.value)} />
+            <label>Nome de quem recebeu</label>
+            <input type="text" placeholder="Ex: Gerente Fernanda" value={responsavel} onChange={e => setResponsavel(e.target.value)} />
           </div>
           <button className="btn-avancar-esteira" onClick={() => handleAvancar('Recebimento')}>
-            Confirmar Envio ➔
+            Confirmar Recebimento ✔️
           </button>
         </div>
       </div>
@@ -97,14 +114,14 @@ export default function EsteiraExterna({ req, onProcessar }) {
   if (req.status === 'Recebimento') {
     return (
       <div className="esteira-box">
-        <h3>🏬 Etapa 4: Recebimento na Loja</h3>
+        <h3>🏁 Etapa 5: Arquivar Requisição</h3>
         <div className="esteira-inputs">
           <div className="esteira-input-group">
-            <label>Nome de quem recebeu</label>
-            <input type="text" placeholder="Ex: Gerente Fernanda" value={responsavel} onChange={e => setResponsavel(e.target.value)} />
+            <label>Nome de quem abasteceu/arquivou</label>
+            <input type="text" placeholder="Ex: Estoquista" value={responsavel} onChange={e => setResponsavel(e.target.value)} />
           </div>
           <button className="btn-avancar-esteira" onClick={() => handleAvancar('Concluída')}>
-            Confirmar Recebimento ✔️
+            Finalizar e Arquivar ✔️
           </button>
         </div>
       </div>

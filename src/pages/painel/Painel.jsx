@@ -113,6 +113,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     reqsAnterioresRef.current = requisicoes;
   }, [requisicoes]);
 
+  // CORREÇÃO: Retornando para a chave exata que o banco de dados grava
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
   
   const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Concluída' && req.status !== 'Cancelada');
@@ -198,6 +199,18 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     }
   };
 
+  // FORMATADOR DE TÍTULO DAS COLUNAS DINÂMICAS
+  const getNomeColunaHeader = (coluna) => {
+    switch(coluna) {
+      case 'Em Separação': return 'Resp. Separação';
+      case 'Saída de produtos': return 'Resp. pela Saída';
+      case 'Faturamento': return 'Resp. Faturamento';
+      case 'Transporte': return 'Resp. Transporte';
+      case 'Recebimento': return 'Resp. Recebimento';
+      default: return `Resp. ${coluna}`;
+    }
+  };
+
   const rankingCalculado = useMemo(() => {
     return calcularRanking(requisicoes, dataInicioRanking, dataFimRanking);
   }, [requisicoes, dataInicioRanking, dataFimRanking]);
@@ -259,7 +272,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   return (
     <div className="painel-container">
       
-      {/* INJEÇÃO DO MODAL DE NOVIDADES */}
       <ModalNovidades />
 
       {alertaDelta.visivel && (
@@ -290,8 +302,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       )}
 
       {colunaFiltroAberta && <div className="filtro-overlay" onClick={() => setColunaFiltroAberta(null)}></div>}
-
-      {/* ABAS REMOVIDAS DA TELA. A NAVEGAÇÃO OCORRE EXCLUSIVAMENTE PELO MENU LATERAL DO SISTEMA. */}
 
       {abaAtiva === 'interna' && (
         <>
@@ -325,10 +335,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                   <RenderHeaderFiltro titulo="Loja Destino" chave="destino" opcoes={opcoesDestino} />
                   <th>Itens</th>
                   
+                  {/* INJEÇÃO DO NOVO FORMATADOR DE TÍTULOS AQUI */}
                   {colunasDinamicas.map(coluna => (
                     <RenderHeaderFiltro 
                       key={coluna}
-                      titulo={`Resp. ${coluna}`} 
+                      titulo={getNomeColunaHeader(coluna)} 
                       chave={coluna} 
                       opcoes={[...new Set(requisicoesAtivas.map(r => r.historico && r.historico[coluna]).filter(Boolean))]} 
                     />

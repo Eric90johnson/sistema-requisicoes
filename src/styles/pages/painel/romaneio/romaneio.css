@@ -4,44 +4,62 @@
 }
 
 @media print {
-  /* 1. O PULO DO GATO DEFINITIVO: Esconde os elementos usando display: none */
+  /* 1. O PULO DO GATO DEFINITIVO: Esconde os novos menus laterais, wrapper e o resto da tela */
+  .pro-sidebar,
+  .sidebar-overlay,
   .cabecalho-global,
+  .btn-toggle-sidebar,
   footer,
   .detalhes-header,
   .card-info,
+  .detalhes-botoes-acao,
+  .botoes-acao,
+  .esteira-container,
+  .esteira-wrapper,
+  .separacao-container,
+  .observacoes-container,
+  .tabela-produtos-detalhes,
+  .tabela-container-scroll,
   .btn-salvar-progresso,
   .festa-confete,
+  .chat-notificacao-container,
   .container-notificacoes-bip {
     display: none !important;
   }
 
-  /* 2. Zera margens dos containers principais para a folha ficar 100% limpa */
-  .layout-container, 
-  main, 
-  .detalhes-container {
-    padding: 0 !important;
-    margin: 0 !important;
-    background: transparent !important;
+  /* 2. Zera margens dos containers principais e permite ocupar 100% da folha */
+  html, body, #root {
+    height: auto !important;
+    background-color: white !important;
   }
 
-  /* 3. Mostra o Romaneio no fluxo normal (sem absolute) */
+  .layout-container, 
+  .conteudo-principal-wrapper,
+  main, 
+  .detalhes-container {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: transparent !important;
+    position: static !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+
+  /* 3. Mostra o Romaneio no fluxo normal ocupando o papel todo */
   .romaneio-container {
     display: block !important;
     position: relative !important;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  /* Configuração das bordas da folha de papel */
+  /* Configuração das bordas da folha de papel A4 */
   @page {
     margin: 1cm;
-  }
-  
-  body {
-    margin: 0;
-    padding: 0;
-    background-color: white !important;
   }
 
   /* --- ESTILIZAÇÃO INTERNA DO ROMANEIO --- */
@@ -67,7 +85,7 @@
   .romaneio-tabela {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 20px; /* Margem reduzida para dar espaço à tabela de observações */
+    margin-bottom: 20px; 
   }
 
   .romaneio-tabela th, .romaneio-tabela td {
@@ -83,18 +101,19 @@
     print-color-adjust: exact;
   }
 
-  /* NOVO: Garante que o bloco de observações fique junto na mesma folha */
+  /* Garante que o bloco de observações fique junto na mesma folha */
   .romaneio-observacoes {
     margin-top: 10px;
     margin-bottom: 40px;
     page-break-inside: avoid; 
   }
 
+  /* Trava extra: impede a assinatura de ser cortada no meio na virada da página */
   .romaneio-assinaturas {
     display: flex;
     justify-content: center;
     margin-top: 30px;
-    page-break-inside: avoid; /* Trava extra: impede a assinatura de ser cortada no meio na virada da página */
+    page-break-inside: avoid; 
   }
 
   .assinatura-box {
