@@ -75,6 +75,21 @@
   background-color: #fff;
 }
 
+/* ========================================================= */
+/* --- CAIXA DE CÓDIGO DA MATRIZ (ARATURI DE-PARA) ---       */
+/* ========================================================= */
+.input-destaque-matriz {
+  border: 2px solid #8e44ad !important; /* Borda Lilás/Roxa */
+  background-color: #fcf8ff !important; /* Fundo bem suave */
+  color: #8e44ad;
+  font-weight: bold;
+}
+
+.input-destaque-matriz::placeholder {
+  color: #c39bd3;
+  font-weight: normal;
+}
+
 /* Ajuste de cor e peso para o campo de prioridade para destacá-lo */
 .campo-loja select[title="Defina o nível de urgência desta requisição"] {
   border: 2px solid #3498db;

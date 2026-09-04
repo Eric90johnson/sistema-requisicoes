@@ -5,6 +5,7 @@ import TabelaProdutosForm from './TabelaProdutosForm';
 import CronometroCheckout from './CronometroCheckout';
 import ModalAlerta from './ModalAlerta';
 import { parseValorMoeda, gerarIdSequencial } from './requisicaoUtils';
+import { supabase } from '../../../services/supabase'; 
 
 export default function NovaRequisicao({ 
   aoVoltar, 
@@ -22,10 +23,75 @@ export default function NovaRequisicao({
   
   const lojas = ['Araturi', 'Conjunto Ceará', 'Messejana', 'Mulungu'];
 
+  const mapTabelasLojas = {
+    'Araturi': 'base_produtos',
+    'Conjunto Ceará': 'base_produtos_conjunto_ceara',
+    'Messejana': 'base_produtos_messejana',
+    'Mulungu': 'base_produtos_mulungu'
+  };
+
   const [lojaDe, setLojaDe] = useState(lojas[0]);
   const [lojaPara, setLojaPara] = useState(lojas[1]);
   const [solicitante, setSolicitante] = useState(usuarioLogado?.nome_completo || '');
   
+  const [baseProdutosLojaAtendente, setBaseProdutosLojaAtendente] = useState(baseProdutos); 
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchEstoqueAtendente = async () => {
+      if (lojaDe === 'Araturi' && baseProdutos.length > 0) {
+        setBaseProdutosLojaAtendente(baseProdutos);
+        return;
+      }
+
+      try {
+        const tabelaAlvo = mapTabelasLojas[lojaDe];
+        if (!tabelaAlvo) return;
+
+        let todosOsProdutos = [];
+        let buscouTodos = false;
+        let indexAtual = 0;
+        const tamanhoPagina = 1000;
+
+        while (!buscouTodos) {
+          const { data, error } = await supabase
+            .from(tabelaAlvo)
+            .select('*')
+            .range(indexAtual, indexAtual + tamanhoPagina - 1);
+            
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            todosOsProdutos = [...todosOsProdutos, ...data];
+            indexAtual += tamanhoPagina;
+          }
+          
+          if (!data || data.length < tamanhoPagina) { 
+            buscouTodos = true; 
+          }
+        }
+
+        if (isMounted) {
+          const produtosFormatados = todosOsProdutos.map(p => ({
+            ...p, 
+            codigoBarra: p.codigo_barra, 
+            precoVenda: p.preco_venda, 
+            precoCusto: p.preco_custo
+          }));
+          setBaseProdutosLojaAtendente(produtosFormatados);
+        }
+      } catch (err) {
+        console.error(`Erro ao buscar estoque da loja atendente (${lojaDe}):`, err);
+        mostrarAlerta('erro', 'Erro de Conexão', `Não foi possível carregar a base de dados do(a) ${lojaDe}.`);
+      }
+    };
+
+    fetchEstoqueAtendente();
+
+    return () => { isMounted = false; };
+  }, [lojaDe, baseProdutos]); 
+
   const [motivo, setMotivo] = useState('');
   const [motivoOutro, setMotivoOutro] = useState('');
   const [prioridadeOutro, setPrioridadeOutro] = useState('3'); 
@@ -34,6 +100,8 @@ export default function NovaRequisicao({
   const [novaObs, setNovaObs] = useState(''); 
 
   const [codigo, setCodigo] = useState('');
+  // NOVO: Estado para armazenar o código da matriz preenchido manualmente
+  const [codigoMatriz, setCodigoMatriz] = useState(''); 
   const [descricao, setDescricao] = useState('');
   const [quantidade, setQuantidade] = useState('');
   const [itensAdicionados, setItensAdicionados] = useState([]);
@@ -138,7 +206,7 @@ export default function NovaRequisicao({
   };
 
   useEffect(() => {
-    if (isModoVitrine && !alertaPreenchimentoExibido.current && baseProdutos.length > 0) {
+    if (isModoVitrine && !alertaPreenchimentoExibido.current && baseProdutosLojaAtendente.length > 0) {
       alertaPreenchimentoExibido.current = true;
       
       const nomeSalvo = localStorage.getItem('nd_separador_gamificado');
@@ -147,7 +215,7 @@ export default function NovaRequisicao({
       }
 
       const itensAuto = produtosPreSelecionados.map(prod => {
-        const baseProd = baseProdutos.find(p => p.codigo === prod.codigo) || prod;
+        const baseProd = baseProdutosLojaAtendente.find(p => p.codigo === prod.codigo) || prod;
         const temEstoqueDefinido = baseProd.quantidade !== undefined && baseProd.quantidade !== null;
         const estoqueAtual = temEstoqueDefinido ? Number(baseProd.quantidade.toString().replace(',', '.')) : null;
 
@@ -163,6 +231,8 @@ export default function NovaRequisicao({
 
         return {
           cod: baseProd.codigo,
+          // NOVO: Adicionado codigoMatriz vindo da pré-requisição se existir
+          codigoMatriz: prod.codigoMatriz || null,
           descricao: baseProd.descricao || 'Produto não encontrado',
           quantidade: qtdSolicitada, 
           estoque: estoqueAtual,
@@ -184,11 +254,11 @@ export default function NovaRequisicao({
         ''
       );
     }
-  }, [produtosPreSelecionados, baseProdutos, isModoVitrine, tipoReposicaoGlobal]);
+  }, [produtosPreSelecionados, baseProdutosLojaAtendente, isModoVitrine, tipoReposicaoGlobal]);
 
   const handleMudancaCodigo = (valorDigitado) => {
     setCodigo(valorDigitado);
-    const produtoEncontrado = baseProdutos.find((prod) => String(prod.codigo) === String(valorDigitado));
+    const produtoEncontrado = baseProdutosLojaAtendente.find((prod) => String(prod.codigo) === String(valorDigitado));
     if (produtoEncontrado) {
       setDescricao(`${produtoEncontrado.descricao}`);
     } else {
@@ -202,7 +272,7 @@ export default function NovaRequisicao({
       return; 
     }
     
-    const produto = baseProdutos.find((p) => String(p.codigo) === String(codigo));
+    const produto = baseProdutosLojaAtendente.find((p) => String(p.codigo) === String(codigo));
     const temEstoqueDefinido = produto && produto.quantidade !== undefined && produto.quantidade !== null;
     const estoqueAtual = temEstoqueDefinido ? Number(produto.quantidade.toString().replace(',', '.')) : null;
     const qtdSolicitada = Number(quantidade);
@@ -218,6 +288,8 @@ export default function NovaRequisicao({
 
     const itemNovo = { 
       cod: codigo, 
+      // NOVO: Registra o código da matriz no item se a loja for Conj. Ceará
+      codigoMatriz: lojaDe === 'Conjunto Ceará' ? codigoMatriz : null, 
       descricao: descricao || 'Produto não encontrado', 
       quantidade: qtdSolicitada,
       estoque: estoqueAtual,
@@ -229,10 +301,11 @@ export default function NovaRequisicao({
       mostrarAlerta(
         'aviso', 
         'Estoque Insuficiente', 
-        `Você está solicitando ${qtdSolicitada} un, mas o estoque atual na base é de apenas ${estoqueAtual} un!\n\nDeseja adicionar este produto mesmo assim?`,
+        `Você está solicitando ${qtdSolicitada} un, mas o estoque atual no ${lojaDe} é de apenas ${estoqueAtual} un!\n\nDeseja adicionar este produto mesmo assim?`,
         () => { 
           setItensAdicionados([...itensAdicionados, itemNovo]);
-          setCodigo(''); setDescricao(''); setQuantidade('');
+          // NOVO: Limpa as duas caixas de código
+          setCodigo(''); setCodigoMatriz(''); setDescricao(''); setQuantidade('');
           if (inputCodigoRef.current) inputCodigoRef.current.focus();
           fecharAlerta();
         },
@@ -247,7 +320,8 @@ export default function NovaRequisicao({
     }
 
     setItensAdicionados([...itensAdicionados, itemNovo]);
-    setCodigo(''); setDescricao(''); setQuantidade('');
+    // NOVO: Limpa as duas caixas de código após adição com sucesso
+    setCodigo(''); setCodigoMatriz(''); setDescricao(''); setQuantidade('');
     if (inputCodigoRef.current) inputCodigoRef.current.focus();
   };
 
@@ -276,7 +350,7 @@ export default function NovaRequisicao({
       mostrarAlerta(
         'aviso', 
         'Estoque Insuficiente', 
-        `A nova quantidade solicitada (${novaQtd} un) ultrapassa o estoque atual (${itemAtual.estoque} un)!\n\nDeseja salvar a edição mesmo assim?`,
+        `A nova quantidade solicitada (${novaQtd} un) ultrapassa o estoque atual no ${lojaDe} (${itemAtual.estoque} un)!\n\nDeseja salvar a edição mesmo assim?`,
         () => { 
           itensAtualizados[index] = { ...itemAtual, quantidade: novaQtd, insuficiente: true };
           setItensAdicionados(itensAtualizados);
@@ -331,7 +405,7 @@ export default function NovaRequisicao({
 
           if (index === 0 && isNaN(Number(qtdFormatada))) return;
 
-          const produto = baseProdutos.find((p) => p.codigo === codFormatado);
+          const produto = baseProdutosLojaAtendente.find((p) => p.codigo === codFormatado);
           const descFinal = produto ? produto.descricao : 'Produto não encontrado';
           const temEstoqueDefinido = produto && produto.quantidade !== undefined && produto.quantidade !== null;
           const estoqueAtual = temEstoqueDefinido ? Number(produto.quantidade.toString().replace(',', '.')) : null;
@@ -347,6 +421,7 @@ export default function NovaRequisicao({
 
           novosItens.push({
             cod: codFormatado,
+            codigoMatriz: null, // Na importação em lote não temos a Matriz manual
             descricao: descFinal,
             quantidade: qtdSolicitada,
             estoque: estoqueAtual,
@@ -360,7 +435,7 @@ export default function NovaRequisicao({
         setItensAdicionados(prev => [...prev, ...novosItens]);
         const qtdAlertas = novosItens.filter(item => item.insuficiente).length;
         if (qtdAlertas > 0) {
-          mostrarAlerta('aviso', 'Importação Parcial', `${novosItens.length} produtos importados.\n\nATENÇÃO: ${qtdAlertas} produto(s) excedem o estoque atual e foram markedos em vermelho na lista.`);
+          mostrarAlerta('aviso', 'Importação Parcial', `${novosItens.length} produtos importados.\n\nATENÇÃO: ${qtdAlertas} produto(s) excedem o estoque atual do(a) ${lojaDe} e foram marcados em vermelho na lista.`);
         } else {
           mostrarAlerta('sucesso', 'Importação Concluída', `${novosItens.length} produtos importados com sucesso!`);
         }
@@ -430,7 +505,7 @@ export default function NovaRequisicao({
       mostrarAlerta(
         'erro', 
         'Estoque Insuficiente', 
-        `Você não pode salvar a requisição com produtos excedendo o estoque disponível.\n\nExistem ${itensComProblema.length} item(ns) destacado(s) em vermelho. Por favor, clique no ícone do lápis (✏️) para ajustar ou na lixeira (🗑️) para remover o item.`
+        `Você não pode salvar a requisição com produtos excedendo o estoque disponível no(a) ${lojaDe}.\n\nExistem ${itensComProblema.length} item(ns) destacado(s) em vermelho. Por favor, clique no ícone do lápis (✏️) para ajustar ou na lixeira (🗑️) para remover o item.`
       );
       return; 
     }
@@ -552,6 +627,11 @@ export default function NovaRequisicao({
         />
 
         <TabelaProdutosForm
+          // NOVO: Passando os dados necessários para exibir a caixa extra
+          lojaDe={lojaDe}
+          codigoMatriz={codigoMatriz}
+          setCodigoMatriz={setCodigoMatriz}
+          // ======================================
           codigo={codigo}
           setCodigo={setCodigo}
           descricao={descricao}

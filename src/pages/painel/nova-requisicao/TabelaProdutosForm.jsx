@@ -1,6 +1,9 @@
 import React from 'react';
 
 export default function TabelaProdutosForm({
+  lojaDe, // NOVO: Propriedade para saber qual loja está selecionada
+  codigoMatriz, // NOVO: Estado para a caixa de código do Araturi
+  setCodigoMatriz, // NOVO: Função para atualizar a caixa do Araturi
   codigo,
   setCodigo,
   descricao,
@@ -36,8 +39,30 @@ export default function TabelaProdutosForm({
       </div>
       
       <div className="linha-insercao">
+        
+        {/* CAIXA EXTRA DINÂMICA: Aparece apenas se a Loja Atendente for Conjunto Ceará */}
+        {lojaDe === 'Conjunto Ceará' && (
+          <div className="col-curta">
+            <input 
+              type="text" 
+              className="input-item input-destaque-matriz" 
+              placeholder="Cód. Araturi" 
+              value={codigoMatriz} 
+              onChange={(e) => setCodigoMatriz(e.target.value)} 
+              title="Insira o código correspondente na matriz Araturi"
+            />
+          </div>
+        )}
+
         <div className="col-curta">
-          <input type="text" className="input-item" placeholder="Cód" value={codigo} onChange={(e) => handleMudancaCodigo(e.target.value)} ref={inputCodigoRef} />
+          <input 
+            type="text" 
+            className="input-item" 
+            placeholder={lojaDe === 'Conjunto Ceará' ? "Cód. Conj. Ceará" : "Cód. Produto"} 
+            value={codigo} 
+            onChange={(e) => handleMudancaCodigo(e.target.value)} 
+            ref={inputCodigoRef} 
+          />
         </div>
         <div className="col-longa">
           <input type="text" className="input-item" placeholder="Descrição..." value={descricao} disabled />
@@ -54,6 +79,8 @@ export default function TabelaProdutosForm({
             <table className="tabela-itens">
               <thead>
                 <tr>
+                  {/* COLUNA EXTRA DINÂMICA NO CABEÇALHO */}
+                  {lojaDe === 'Conjunto Ceará' && <th>Cód. Araturi</th>}
                   <th>Cód. Produto</th>
                   <th>Descrição</th>
                   {isModoVitrine && <th className="td-centro">Qtd. no CD</th>}
@@ -63,6 +90,14 @@ export default function TabelaProdutosForm({
               <tbody>
                 {itensAdicionados.map((item, index) => (
                   <tr key={index} className={item.insuficiente ? 'linha-alerta-estoque' : ''}>
+                    
+                    {/* CÉLULA EXTRA DINÂMICA NA TABELA */}
+                    {lojaDe === 'Conjunto Ceará' && (
+                      <td>
+                        <strong style={{ color: '#8e44ad' }}>{item.codigoMatriz || '-'}</strong>
+                      </td>
+                    )}
+
                     <td><strong>{item.cod}</strong></td>
                     <td className={item.descricao === 'Produto não encontrado' ? 'texto-erro' : ''}>
                       {item.descricao}

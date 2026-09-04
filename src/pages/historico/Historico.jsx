@@ -9,6 +9,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
   const [filtroOrdem, setFiltroOrdem] = useState('');
   const [filtroNotaFiscal, setFiltroNotaFiscal] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
+  const [filtroMarca, setFiltroMarca] = useState(''); 
 
   const [linhaExpandida, setLinhaExpandida] = useState(null);
   const [ordenacao, setOrdenacao] = useState({ coluna: 'data', direcao: 'desc' });
@@ -32,7 +33,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
     return new Date(`${ano}-${mes}-${dia}T00:00:00`);
   };
 
-  const temFiltroAtivo = dataInicio || dataFim || filtroId || filtroCodigo || filtroOrdem || filtroNotaFiscal || filtroStatus;
+  const temFiltroAtivo = dataInicio || dataFim || filtroId || filtroCodigo || filtroOrdem || filtroNotaFiscal || filtroStatus || filtroMarca;
 
   const requisicoesFiltradas = temFiltroAtivo ? requisicoes.filter(req => {
     let passaFiltro = true;
@@ -58,6 +59,14 @@ export default function Historico({ requisicoes, aoVoltar }) {
         item.cod.toUpperCase().includes(filtroCodigo.toUpperCase())
       );
       if (!temProduto) passaFiltro = false;
+    }
+
+    if (filtroMarca && passaFiltro) {
+      const temProdutoMarca = req.listaItens && req.listaItens.some(item => 
+        (item.marca || '').toUpperCase().includes(filtroMarca.toUpperCase()) || 
+        (item.descricao || '').toUpperCase().includes(filtroMarca.toUpperCase())
+      );
+      if (!temProdutoMarca) passaFiltro = false;
     }
 
     if (filtroOrdem && passaFiltro) {
@@ -120,6 +129,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
     setFiltroOrdem('');
     setFiltroNotaFiscal('');
     setFiltroStatus('');
+    setFiltroMarca(''); 
     setLinhaExpandida(null);
   };
 
@@ -162,14 +172,12 @@ export default function Historico({ requisicoes, aoVoltar }) {
 
   const opcoesStatus = [...new Set(requisicoes.map(r => r.status))].filter(Boolean);
 
-  // --- NOVA ORDENAÇÃO NO ARQUIVO EXCEL ---
   const exportarParaExcel = () => {
     if (requisicoesOrdenadas.length === 0) {
       alert("Não há dados para exportar com os filtros atuais.");
       return;
     }
 
-    // Cabecalho reorganizado com os Produtos logo no começo
     let csv = "ID da Requisicao;Cod. do Produto;Descricao do Produto;Qtd. Solicitada;Qtd. Bipada;Motivo (Tipo);Status Atual;Data da Requisicao;Solicitante;Destino;Criado as;Finalizado as;Tempo Total Estimado;Tempo Separacao;Tempo Bip Medio;Separador;N do Sistema;Nota Fiscal;Observacoes do Produto\n";
 
     requisicoesOrdenadas.forEach(req => {
@@ -198,11 +206,9 @@ export default function Historico({ requisicoes, aoVoltar }) {
           const qtdBipada = item.bipContagem || '0';
           const obs = item.observacao ? item.observacao.replace(/"/g, '""').replace(/\n/g, ' ') : '-';
 
-          // As informações do produto agora vêm logo após o ID da Requisição
           csv += `"${id}";"${codProduto}";"${descProduto}";"${qtd}";"${qtdBipada}";"${motivo}";"${status}";"${dataReq}";"${solicitante}";"${destino}";"${horaCriacao}";"${horaFim}";"${tempoTotal}";"${tempoSep}";"${tempoBip}";"${separador}";"${ordemInterna}";"${nf}";"${obs}"\n`;
         });
       } else {
-        // Fallback preenchendo os traços nas colunas de produto se estiverem vazias
         csv += `"${id}";"-";"-";"-";"-";"${motivo}";"${status}";"${dataReq}";"${solicitante}";"${destino}";"${horaCriacao}";"${horaFim}";"${tempoTotal}";"${tempoSep}";"${tempoBip}";"${separador}";"${ordemInterna}";"${nf}";"-"\n`;
       }
     });
@@ -256,42 +262,56 @@ export default function Historico({ requisicoes, aoVoltar }) {
         </button>
       </div>
 
-      <div className="filtros-container">
-        <div className="filtro-item">
-          <label>Nº Requisição (ID)</label>
-          <input type="text" className="input-filtro" placeholder="Ex: REQ-001" value={filtroId} onChange={(e) => setFiltroId(e.target.value)} />
-        </div>
-        <div className="filtro-item">
-          <label>Data Início</label>
-          <input type="date" className="input-filtro" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
-        </div>
-        <div className="filtro-item">
-          <label>Data Fim</label>
-          <input type="date" className="input-filtro" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
-        </div>
-        <div className="filtro-item">
-          <label>Status</label>
-          <select className="input-filtro select-filtro-historico" value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
-            <option value="">(Todos os Status)</option>
-            {opcoesStatus.map(status => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </select>
-        </div>
-        <div className="filtro-item">
-          <label>Cód. Produto</label>
-          <input type="text" className="input-filtro" placeholder="Ex: 1001" value={filtroCodigo} onChange={(e) => setFiltroCodigo(e.target.value)} />
-        </div>
-        <div className="filtro-item">
-          <label>Nº Sistema</label>
-          <input type="text" className="input-filtro" placeholder="Buscar Ordem" value={filtroOrdem} onChange={(e) => setFiltroOrdem(e.target.value)} />
-        </div>
-        <div className="filtro-item">
-          <label>Nota Fiscal</label>
-          <input type="text" className="input-filtro" placeholder="Buscar NF" value={filtroNotaFiscal} onChange={(e) => setFiltroNotaFiscal(e.target.value)} />
-        </div>
+      {/* LÓGICA DE UX APLICADA: Container externo modificado para empilhar duas linhas */}
+      <div className="filtros-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         
-        <button className="btn-limpar" onClick={limparFiltros}>Limpar Tudo</button>
+        {/* LINHA 1: Seleções e Datas */}
+        <div className="filtros-linha" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
+          <div className="filtro-item">
+            <label>Data Início</label>
+            <input type="date" className="input-filtro" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+          </div>
+          <div className="filtro-item">
+            <label>Data Fim</label>
+            <input type="date" className="input-filtro" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+          </div>
+          <div className="filtro-item">
+            <label>Status</label>
+            <select className="input-filtro select-filtro-historico" value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
+              <option value="">(Todos os Status)</option>
+              {opcoesStatus.map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* LINHA 2: Textos Livres e Botão de Limpar */}
+        <div className="filtros-linha" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', alignItems: 'end' }}>
+          <div className="filtro-item">
+            <label>Nº Requisição (ID)</label>
+            <input type="text" className="input-filtro" placeholder="Ex: REQ-001" value={filtroId} onChange={(e) => setFiltroId(e.target.value)} />
+          </div>
+          <div className="filtro-item">
+            <label>Marca</label>
+            <input type="text" className="input-filtro" placeholder="Buscar Marca..." value={filtroMarca} onChange={(e) => setFiltroMarca(e.target.value)} />
+          </div>
+          <div className="filtro-item">
+            <label>Cód. Produto</label>
+            <input type="text" className="input-filtro" placeholder="Ex: 1001" value={filtroCodigo} onChange={(e) => setFiltroCodigo(e.target.value)} />
+          </div>
+          <div className="filtro-item">
+            <label>Nº Sistema</label>
+            <input type="text" className="input-filtro" placeholder="Buscar Ordem" value={filtroOrdem} onChange={(e) => setFiltroOrdem(e.target.value)} />
+          </div>
+          <div className="filtro-item">
+            <label>Nota Fiscal</label>
+            <input type="text" className="input-filtro" placeholder="Buscar NF" value={filtroNotaFiscal} onChange={(e) => setFiltroNotaFiscal(e.target.value)} />
+          </div>
+          
+          <button className="btn-limpar" onClick={limparFiltros} style={{ width: '100%' }}>Limpar Tudo</button>
+        </div>
+
       </div>
 
       <div className="card-historico">
@@ -371,10 +391,11 @@ export default function Historico({ requisicoes, aoVoltar }) {
                       <tr className="linha-expandida-historico">
                         <td colSpan="12">
                           <div className="conteudo-expandido-historico">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-                              <h4 style={{ margin: 0 }}>📦 Itens Solicitados na {req.id}</h4>
-                              <div style={{ fontSize: '0.9rem' }}>
-                                <strong style={{ color: '#2980b9' }}>Nº Sistema:</strong> {req.numeroRequisicaoExterna || 'N/D'} | <strong style={{ color: '#e67e22' }}>NF:</strong> {req.notaFiscal || 'N/D'}
+                            
+                            <div style={{ marginBottom: '15px' }}>
+                              <h4 style={{ margin: '0 0 5px 0' }}>📦 Itens Solicitados na {req.id}</h4>
+                              <div style={{ fontSize: '0.9rem', color: '#7f8c8d' }}>
+                                <strong style={{ color: '#2980b9' }}>Nº Sistema:</strong> {req.numeroRequisicaoExterna || 'N/D'} &nbsp;|&nbsp; <strong style={{ color: '#e67e22' }}>NF:</strong> {req.notaFiscal || 'N/D'}
                               </div>
                             </div>
                             

@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Html5QrcodeScanner, Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { supabase } from '../../services/supabase';
 import '../../styles/pages/base-dados/baseDados.css';
 
 const parseValorMoeda = (valorStr) => {
@@ -25,23 +26,77 @@ export default function BaseDados({
   inicioCronometroGlobal,
   setInicioCronometroGlobal
 }) {
+  
+  const [lojaAtiva, setLojaAtiva] = useState('ARATURI');
+  const [produtosDaLoja, setProdutosDaLoja] = useState([]);
+  const [carregandoLoja, setCarregandoLoja] = useState(false);
+
+  const lojas = ['ARATURI', 'CONJUNTO CEARA', 'MESSEJANA', 'MULUNGU'];
+  
+  // CORREÇÃO: Apontando o Araturi para a tabela original que já contém os 7.253 produtos
+  const tabelasPorLoja = {
+    'ARATURI': 'base_produtos', 
+    'CONJUNTO CEARA': 'base_produtos_conjunto_ceara',
+    'MESSEJANA': 'base_produtos_messejana',
+    'MULUNGU': 'base_produtos_mulungu'
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchEstoqueLoja = async () => {
+      setCarregandoLoja(true);
+      try {
+        let todosOsProdutos = [];
+        let buscouTodos = false;
+        let indexAtual = 0;
+        const tamanhoPagina = 1000;
+
+        while (!buscouTodos) {
+          const { data, error } = await supabase
+            .from(tabelasPorLoja[lojaAtiva])
+            .select('*')
+            .range(indexAtual, indexAtual + tamanhoPagina - 1);
+            
+          if (error) break;
+          if (data && data.length > 0) {
+            todosOsProdutos = [...todosOsProdutos, ...data];
+            indexAtual += tamanhoPagina;
+          }
+          if (!data || data.length < tamanhoPagina) { buscouTodos = true; }
+        }
+
+        if (isMounted) {
+          const produtosFormatados = todosOsProdutos.map(p => ({
+            ...p, codigoBarra: p.codigo_barra, precoVenda: p.preco_venda, precoCusto: p.preco_custo
+          }));
+          setProdutosDaLoja(produtosFormatados);
+        }
+      } catch (err) {
+        console.error("Erro ao buscar estoque da loja:", err);
+      } finally {
+        if (isMounted) setCarregandoLoja(false);
+      }
+    };
+
+    fetchEstoqueLoja();
+    return () => { isMounted = false; };
+  }, [lojaAtiva]);
+
   const [buscaCodigo, setBuscaCodigo] = useState('');
   const [buscaDescricao, setBuscaDescricao] = useState('');
   const [buscaCodigoBarra, setBuscaCodigoBarra] = useState('');
   const [buscaMarca, setBuscaMarca] = useState('');
 
   const [linhaExpandida, setLinhaExpandida] = useState(null);
-  
   const [qtds, setQtds] = useState({}); 
 
   const [bipState, setBipState] = useState({}); 
   const [bipInputVal, setBipInputVal] = useState({}); 
   const [alertaExterna, setAlertaExterna] = useState(false); 
   const [cameraAtiva, setCameraAtiva] = useState(null); 
-  const [cameraBuscaAtiva, setCameraBuscaAtiva] = useState(false); // NOVO: Estado para a câmera de pesquisa
+  const [cameraBuscaAtiva, setCameraBuscaAtiva] = useState(false); 
 
   const [nomeSeparador, setNomeSeparador] = useState('');
-
   const [tempoAtual, setTempoAtual] = useState(Date.now());
 
   const [menuAberto, setMenuAberto] = useState(null);
@@ -90,7 +145,6 @@ export default function BaseDados({
     return `${h}:${m}:${s}`;
   };
 
-  // --- EFEITO DA CÂMERA DE BIPAGEM PARA ADICIONAR (Gamificação) ---
   useEffect(() => {
     let scanner = null;
     if (cameraAtiva) {
@@ -102,7 +156,7 @@ export default function BaseDados({
       
       scanner.render(
         (decodedText) => {
-          const prod = produtos.find(p => p.codigo === cameraAtiva);
+          const prod = produtosDaLoja.find(p => p.codigo === cameraAtiva);
           if (prod && (decodedText === prod.codigoBarra || decodedText === prod.codigo)) {
             setBipState(prev => ({ ...prev, [prod.codigo]: { ...prev[prod.codigo], bipada: prev[prod.codigo].bipada + 1 } }));
             
@@ -127,9 +181,8 @@ export default function BaseDados({
         scanner.clear().catch(e => console.error(e));
       }
     };
-  }, [cameraAtiva, produtos]);
+  }, [cameraAtiva, produtosDaLoja]);
 
-  // --- EFEITO DA CÂMERA DE PESQUISA GERAL (NOVO) ---
   useEffect(() => {
     let scanner = null;
     let isMounted = true;
@@ -146,7 +199,6 @@ export default function BaseDados({
           (decodedText) => {
             if (!decodedText || !decodedText.trim()) return;
             
-            // Emite som de sucesso
             try {
               const ctx = new (window.AudioContext || window.webkitAudioContext)();
               const osc = ctx.createOscillator();
@@ -154,7 +206,6 @@ export default function BaseDados({
               osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); 
             } catch(e) {}
             
-            // Aplica a busca e fecha a câmera
             setBuscaCodigoBarra(decodedText);
             setItensVisiveis(50);
             setCameraBuscaAtiva(false);
@@ -216,7 +267,7 @@ export default function BaseDados({
   };
 
   const abrirMenu = (coluna) => {
-    let tempProdutos = produtos;
+    let tempProdutos = produtosDaLoja;
     Object.keys(filtrosAtivos).forEach(col => {
       if (col !== coluna && filtrosAtivos[col]) {
         tempProdutos = tempProdutos.filter(p => filtrosAtivos[col].includes(p[col]));
@@ -262,7 +313,7 @@ export default function BaseDados({
     else setFiltroTemporario([...filtroTemporario, valor]);
   };
 
-  let produtosFiltrados = [...produtos];
+  let produtosFiltrados = [...produtosDaLoja];
   if (buscaCodigo.trim() !== '') produtosFiltrados = produtosFiltrados.filter(p => p.codigo && p.codigo.toLowerCase().includes(buscaCodigo.toLowerCase()));
   if (buscaDescricao.trim() !== '') produtosFiltrados = produtosFiltrados.filter(p => p.descricao && p.descricao.toLowerCase().includes(buscaDescricao.toLowerCase()));
   if (buscaCodigoBarra.trim() !== '') produtosFiltrados = produtosFiltrados.filter(p => p.codigoBarra && p.codigoBarra.toLowerCase().includes(buscaCodigoBarra.toLowerCase()));
@@ -340,7 +391,7 @@ export default function BaseDados({
   const handleAdicionarInterno = (e, prod) => {
     e.stopPropagation();
     const qtdDigitada = qtds[prod.codigo] || 1;
-    const produtoComQtd = { ...prod, quantidadeDesejada: qtdDigitada };
+    const produtoComQtd = { ...prod, quantidadeDesejada: qtdDigitada, origemLoja: lojaAtiva };
     aoAdicionarPreRequisicao(produtoComQtd);
     setLinhaExpandida(null); 
   };
@@ -404,7 +455,7 @@ export default function BaseDados({
       alert(`Você bipou ${estadoLocal ? estadoLocal.bipada : 0} de ${estadoLocal ? estadoLocal.desejada : '?'}. Conclua a separação antes de adicionar!`);
       return;
     }
-    const produtoComQtd = { ...prod, quantidadeDesejada: estadoLocal.desejada };
+    const produtoComQtd = { ...prod, quantidadeDesejada: estadoLocal.desejada, origemLoja: lojaAtiva };
     aoAdicionarPreRequisicao(produtoComQtd);
     setLinhaExpandida(null); 
   };
@@ -412,7 +463,6 @@ export default function BaseDados({
   return (
     <div className="base-dados-container">
       
-      {/* MODAL CÂMERA DE BUSCA GLOBAL (NOVO) */}
       {cameraBuscaAtiva && (
         <div className="camera-modal-overlay">
           <div className="camera-modal-content">
@@ -464,7 +514,6 @@ export default function BaseDados({
         </div>
       )}
 
-      {/* MODAL CÂMERA DE SEPARAÇÃO INTERNA/EXTERNA */}
       {cameraAtiva && (
         <div className="camera-modal-overlay">
           <div className="camera-modal-content">
@@ -477,198 +526,222 @@ export default function BaseDados({
         </div>
       )}
 
-      <div className="base-dados-header">
-        <h2>Consulta de Estoque e Produtos</h2>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {itensPreRequisicao.length > 0 && (
-            <button className="btn-ir-pre-requisicao" onClick={aoIrParaPreRequisicao}>
-              🛒 Ir para Pré-requisição ({itensPreRequisicao.length})
+      <div className="painel-abas-premium">
+        
+        <div className="abas-lojas-container">
+          {lojas.map((loja, index) => (
+            <button 
+              key={loja}
+              type="button"
+              className={`aba-loja-btn ${lojaAtiva === loja ? 'ativa' : ''}`}
+              onClick={() => setLojaAtiva(loja)}
+              style={{ zIndex: lojaAtiva === loja ? 10 : lojas.length - index }}
+            >
+              <span>{loja}</span>
             </button>
-          )}
-          <button className="btn-voltar" onClick={aoVoltar}>← Voltar ao Painel</button>
+          ))}
         </div>
-      </div>
 
-      <div className="modo-reposicao-container">
-        <button 
-          className={`btn-modo-reposicao ${tipoReposicaoGlobal === 'interna' ? 'ativo' : ''}`}
-          onClick={() => handleSelecionarModo('interna')}
-        >
-          🏢 Reposição Interna
-        </button>
-        <button 
-          className={`btn-modo-reposicao externa ${tipoReposicaoGlobal === 'externa' ? 'ativo' : ''}`}
-          onClick={() => handleSelecionarModo('externa')}
-        >
-          🚚 Reposição Externa 🏆
-        </button>
-      </div>
+        <div className="conteudo-aba-ativa">
 
-      {tipoReposicaoGlobal === 'externa' && inicioCronometroGlobal && (
-        <div className="painel-cronometro-global">
-          <span className="cronometro-titulo">⏱️ Tempo de Separação:</span>
-          <span className="cronometro-relogio">{formatarTempo(segundosDecorridos)}</span>
-        </div>
-      )}
-
-      {produtos.length > 0 ? (
-        <>
-          <div className="filtros-topo-container" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
-            <input type="text" placeholder="🔍 Código..." value={buscaCodigo} onChange={(e) => { setBuscaCodigo(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
-            <input type="text" placeholder="🔍 Descrição..." value={buscaDescricao} onChange={(e) => { setBuscaDescricao(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
-            
-            {/* NOVO: CAMPO DE CÓDIGO DE BARRAS COM BOTÃO DE CÂMERA EMBUTIDO */}
-            <div style={{ display: 'flex', flex: '1 1 200px', minWidth: '150px' }}>
-              <input 
-                type="text" 
-                placeholder="🔍 Cód. Barras..." 
-                value={buscaCodigoBarra} 
-                onChange={(e) => { setBuscaCodigoBarra(e.target.value); setItensVisiveis(50); }} 
-                style={{ ...estiloInputBusca, flex: 1, borderTopRightRadius: '0', borderBottomRightRadius: '0', borderRight: 'none' }} 
-              />
-              <button 
-                onClick={() => setCameraBuscaAtiva(true)}
-                title="Escanear Código de Barras"
-                style={{ 
-                  backgroundColor: '#3498db', color: 'white', border: '1px solid #2980b9', 
-                  borderTopRightRadius: '6px', borderBottomRightRadius: '6px', 
-                  padding: '0 15px', cursor: 'pointer', fontSize: '1.2rem',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}
-              >
-                📷
-              </button>
+          <div className="base-dados-header">
+            <h2 style={{ color: '#2c3e50', fontSize: '1.4rem' }}>Consulta de Estoque e Produtos</h2>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {itensPreRequisicao.length > 0 && (
+                <button className="btn-ir-pre-requisicao" onClick={aoIrParaPreRequisicao}>
+                  🛒 Ir para Pré-requisição ({itensPreRequisicao.length})
+                </button>
+              )}
+              <button className="btn-voltar" onClick={aoVoltar}>← Voltar ao Painel</button>
             </div>
-
-            <input type="text" placeholder="🔍 Marca..." value={buscaMarca} onChange={(e) => { setBuscaMarca(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
-            
-            {temBuscaAtiva && (
-              <button onClick={limparTodasAsBuscas} className="btn-limpar-buscas">Limpar Buscas</button>
-            )}
           </div>
 
-          <div className="tabela-responsiva" onScroll={handleScroll}>
-            <table id="tabela-dados" className="tabela-produtos" style={{ width: `${larguraTotalTabela}px` }}>
-              <thead>
-                <tr>
-                  {renderCabecalho("CÓD.", "codigo")}
-                  {renderCabecalho("DESCRIÇÃO", "descricao")}
-                  {renderCabecalho("ESTOQUE", "quantidade")}
-                  {renderCabecalho("CÓDIGO BARRA", "codigoBarra")}
-                  {renderCabecalho("NCM", "ncm")}
-                  {renderCabecalho("FORNECEDOR", "fornecedor")}
-                  {renderCabecalho("MARCA", "marca")}
-                  {renderCabecalho("PREÇO VENDA", "precoVenda")}
-                  {renderCabecalho("PREÇO CUSTO", "precoCusto")}
-                </tr>
-              </thead>
-              <tbody>
-                {produtosParaExibir.length > 0 ? (
-                  produtosParaExibir.map((prod, index) => {
-                    const estaExpandido = linhaExpandida === prod.codigo;
-                    const jaAdicionado = isProdutoNaPreRequisicao(prod.codigo);
-                    const estadoBip = bipState[prod.codigo]; 
+          <div className="modo-reposicao-container">
+            <button 
+              className={`btn-modo-reposicao ${tipoReposicaoGlobal === 'interna' ? 'ativo' : ''}`}
+              onClick={() => handleSelecionarModo('interna')}
+            >
+              🏢 Reposição Interna
+            </button>
+            <button 
+              className={`btn-modo-reposicao externa ${tipoReposicaoGlobal === 'externa' ? 'ativo' : ''}`}
+              onClick={() => handleSelecionarModo('externa')}
+            >
+              🚚 Reposição Externa 🏆
+            </button>
+          </div>
 
-                    return (
-                      <React.Fragment key={prod.codigo || index}>
-                        <tr 
-                          onClick={() => toggleExpandirLinha(prod.codigo)}
-                          style={{ cursor: 'pointer', backgroundColor: estaExpandido ? '#f0f8ff' : (jaAdicionado ? '#f4fcf5' : 'inherit') }}
-                          title="Clique para expandir e adicionar à pré-requisição"
-                        >
-                          <td title={prod.codigo}><strong>{prod.codigo}</strong> {jaAdicionado && '✅'}</td>
-                          <td title={prod.descricao}>{prod.descricao}</td> 
-                          <td style={{ color: '#27ae60', fontWeight: 'bold' }}>{prod.quantidade}</td>
-                          <td title={prod.codigoBarra}>{prod.codigoBarra}</td>
-                          <td title={prod.ncm}>{prod.ncm}</td>
-                          <td title={prod.fornecedor}>{prod.fornecedor}</td>
-                          <td title={prod.marca}>{prod.marca}</td>
-                          <td>R$ {prod.precoVenda}</td>
-                          <td>R$ {prod.precoCusto}</td>
-                        </tr>
+          {tipoReposicaoGlobal === 'externa' && inicioCronometroGlobal && (
+            <div className="painel-cronometro-global">
+              <span className="cronometro-titulo">⏱️ Tempo de Separação:</span>
+              <span className="cronometro-relogio">{formatarTempo(segundosDecorridos)}</span>
+            </div>
+          )}
 
-                        {estaExpandido && (
-                          <tr style={{ backgroundColor: '#f9fafd' }}>
-                            <td colSpan="9" style={{ padding: 0, borderBottom: '2px solid #3498db' }}>
-                              
-                              {tipoReposicaoGlobal === 'interna' && (
-                                <div className="painel-acao-expandido">
-                                  <div className="info-estoque-mobile">Quant. em estoque = <strong>{prod.quantidade}</strong></div>
-                                  <div className="painel-acao-controles">
-                                    <div className="input-qtd-container">
-                                      <label>Qtd a Separar:</label>
-                                      <input type="number" min="1" placeholder="Ex: 5" value={qtds[prod.codigo] || ''} onChange={(e) => setQtds({...qtds, [prod.codigo]: e.target.value})} onClick={(e) => e.stopPropagation()} />
-                                    </div>
-                                    {jaAdicionado ? (
-                                      <button onClick={(e) => { e.stopPropagation(); aoRemoverPreRequisicao(prod.codigo); }} className="btn-acao-remover">❌ Remover</button>
-                                    ) : (
-                                      <button onClick={(e) => handleAdicionarInterno(e, prod)} className="btn-acao-adicionar">➕ Adicionar</button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
+          {carregandoLoja ? (
+            <div style={{ textAlign: 'center', padding: '50px', color: '#8e44ad', fontSize: '1.2rem', fontWeight: 'bold' }}>
+              ⏳ Buscando prateleiras da loja {lojaAtiva}...
+            </div>
+          ) : produtosDaLoja.length > 0 ? (
+            <>
+              <div className="filtros-topo-container" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                <input type="text" placeholder="🔍 Código..." value={buscaCodigo} onChange={(e) => { setBuscaCodigo(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
+                <input type="text" placeholder="🔍 Descrição..." value={buscaDescricao} onChange={(e) => { setBuscaDescricao(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
+                
+                <div style={{ display: 'flex', flex: '1 1 200px', minWidth: '150px' }}>
+                  <input 
+                    type="text" 
+                    placeholder="🔍 Cód. Barras..." 
+                    value={buscaCodigoBarra} 
+                    onChange={(e) => { setBuscaCodigoBarra(e.target.value); setItensVisiveis(50); }} 
+                    style={{ ...estiloInputBusca, flex: 1, borderTopRightRadius: '0', borderBottomRightRadius: '0', borderRight: 'none' }} 
+                  />
+                  <button 
+                    onClick={() => setCameraBuscaAtiva(true)}
+                    title="Escanear Código de Barras"
+                    style={{ 
+                      backgroundColor: '#3498db', color: 'white', border: '1px solid #2980b9', 
+                      borderTopRightRadius: '6px', borderBottomRightRadius: '6px', 
+                      padding: '0 15px', cursor: 'pointer', fontSize: '1.2rem',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                  >
+                    📷
+                  </button>
+                </div>
 
-                              {tipoReposicaoGlobal === 'externa' && (
-                                <div className="painel-acao-expandido modo-externa">
-                                  <div className="info-estoque-mobile">Quant. em estoque = <strong>{prod.quantidade}</strong></div>
-                                  
-                                  <div className="bipagem-flow-container">
-                                    
-                                    <div className="bipagem-linha-1">
-                                      <div className="input-qtd-container">
-                                        <label>Qtd a Separar:</label>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                          <input type="number" min="1" placeholder="Ex: 5" value={qtds[prod.codigo] || ''} onChange={(e) => setQtds({...qtds, [prod.codigo]: e.target.value})} onClick={(e) => e.stopPropagation()} />
-                                          <button className="btn-chave-confirmar" onClick={(e) => confirmarChaveExterna(e, prod)} title="Confirmar quantidade e abrir leitor">🔑 Confirmar</button>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {estadoBip && (
-                                      <div className="bipagem-linha-2">
-                                        <input 
-                                          type="text" className="input-leitor-bip" placeholder="Bipe o código..." 
-                                          value={bipInputVal[prod.codigo] || ''} 
-                                          onChange={(e) => setBipInputVal({...bipInputVal, [prod.codigo]: e.target.value})}
-                                          onKeyDown={(e) => checkBip(e, prod)}
-                                          onClick={(e) => e.stopPropagation()}
-                                        />
-                                        <div className={`contador-bip ${estadoBip.bipada >= estadoBip.desejada ? 'completo' : ''}`}>
-                                          {estadoBip.bipada}/{estadoBip.desejada}
-                                        </div>
-                                        <button className="btn-icon-bip" onClick={(e) => { e.stopPropagation(); setCameraAtiva(prod.codigo); }} title="Abrir Câmera">📷</button>
-                                        <button className="btn-icon-bip" onClick={(e) => editarBipManual(e, prod)} title="Aprovar manualmente">✏️</button>
-                                      </div>
-                                    )}
-
-                                    <div className="bipagem-linha-3">
-                                      {jaAdicionado ? (
-                                        <button onClick={(e) => { e.stopPropagation(); aoRemoverPreRequisicao(prod.codigo); }} className="btn-acao-remover">❌ Remover da Lista</button>
-                                      ) : (
-                                        <button onClick={(e) => handleAdicionarExterno(e, prod)} className={`btn-acao-adicionar ${(!estadoBip || estadoBip.bipada < estadoBip.desejada) ? 'btn-desativado' : ''}`}>➕ Adicionar à Lista</button>
-                                      )}
-                                    </div>
-
-                                  </div>
-                                </div>
-                              )}
-
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })
-                ) : (
-                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '50px', color: '#888' }}>Nenhum produto encontrado.</td></tr>
+                <input type="text" placeholder="🔍 Marca..." value={buscaMarca} onChange={(e) => { setBuscaMarca(e.target.value); setItensVisiveis(50); }} style={estiloInputBusca} />
+                
+                {temBuscaAtiva && (
+                  <button onClick={limparTodasAsBuscas} className="btn-limpar-buscas">Limpar Buscas</button>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : (
-        <div className="mensagem-vazia">A base de dados de produtos ainda não foi sincronizada.</div>
-      )}
+              </div>
+
+              <div className="tabela-responsiva" onScroll={handleScroll}>
+                <table id="tabela-dados" className="tabela-produtos" style={{ width: `${larguraTotalTabela}px` }}>
+                  <thead>
+                    <tr>
+                      {renderCabecalho("CÓD.", "codigo")}
+                      {renderCabecalho("DESCRIÇÃO", "descricao")}
+                      {renderCabecalho("ESTOQUE", "quantidade")}
+                      {renderCabecalho("CÓDIGO BARRA", "codigoBarra")}
+                      {renderCabecalho("NCM", "ncm")}
+                      {renderCabecalho("FORNECEDOR", "fornecedor")}
+                      {renderCabecalho("MARCA", "marca")}
+                      {renderCabecalho("PREÇO VENDA", "precoVenda")}
+                      {renderCabecalho("PREÇO CUSTO", "precoCusto")}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {produtosParaExibir.length > 0 ? (
+                      produtosParaExibir.map((prod, index) => {
+                        const estaExpandido = linhaExpandida === prod.codigo;
+                        const jaAdicionado = isProdutoNaPreRequisicao(prod.codigo);
+                        const estadoBip = bipState[prod.codigo]; 
+
+                        return (
+                          <React.Fragment key={prod.codigo || index}>
+                            <tr 
+                              onClick={() => toggleExpandirLinha(prod.codigo)}
+                              style={{ cursor: 'pointer', backgroundColor: estaExpandido ? '#f0f8ff' : (jaAdicionado ? '#f4fcf5' : 'inherit') }}
+                              title="Clique para expandir e adicionar à pré-requisição"
+                            >
+                              <td title={prod.codigo}><strong>{prod.codigo}</strong> {jaAdicionado && '✅'}</td>
+                              <td title={prod.descricao}>{prod.descricao}</td> 
+                              <td style={{ color: '#27ae60', fontWeight: 'bold' }}>{prod.quantidade}</td>
+                              <td title={prod.codigoBarra}>{prod.codigoBarra}</td>
+                              <td title={prod.ncm}>{prod.ncm}</td>
+                              <td title={prod.fornecedor}>{prod.fornecedor}</td>
+                              <td title={prod.marca}>{prod.marca}</td>
+                              <td>R$ {prod.precoVenda}</td>
+                              <td>R$ {prod.precoCusto}</td>
+                            </tr>
+
+                            {estaExpandido && (
+                              <tr style={{ backgroundColor: '#f9fafd' }}>
+                                <td colSpan="9" style={{ padding: 0, borderBottom: '2px solid #3498db' }}>
+                                  
+                                  {tipoReposicaoGlobal === 'interna' && (
+                                    <div className="painel-acao-expandido">
+                                      <div className="info-estoque-mobile">Quant. em estoque = <strong>{prod.quantidade}</strong></div>
+                                      <div className="painel-acao-controles">
+                                        <div className="input-qtd-container">
+                                          <label>Qtd a Separar:</label>
+                                          <input type="number" min="1" placeholder="Ex: 5" value={qtds[prod.codigo] || ''} onChange={(e) => setQtds({...qtds, [prod.codigo]: e.target.value})} onClick={(e) => e.stopPropagation()} />
+                                        </div>
+                                        {jaAdicionado ? (
+                                          <button onClick={(e) => { e.stopPropagation(); aoRemoverPreRequisicao(prod.codigo); }} className="btn-acao-remover">❌ Remover</button>
+                                        ) : (
+                                          <button onClick={(e) => handleAdicionarInterno(e, prod)} className="btn-acao-adicionar">➕ Adicionar</button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {tipoReposicaoGlobal === 'externa' && (
+                                    <div className="painel-acao-expandido modo-externa">
+                                      <div className="info-estoque-mobile">Quant. em estoque = <strong>{prod.quantidade}</strong></div>
+                                      
+                                      <div className="bipagem-flow-container">
+                                        
+                                        <div className="bipagem-linha-1">
+                                          <div className="input-qtd-container">
+                                            <label>Qtd a Separar:</label>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                              <input type="number" min="1" placeholder="Ex: 5" value={qtds[prod.codigo] || ''} onChange={(e) => setQtds({...qtds, [prod.codigo]: e.target.value})} onClick={(e) => e.stopPropagation()} />
+                                              <button className="btn-chave-confirmar" onClick={(e) => confirmarChaveExterna(e, prod)} title="Confirmar quantidade e abrir leitor">🔑 Confirmar</button>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {estadoBip && (
+                                          <div className="bipagem-linha-2">
+                                            <input 
+                                              type="text" className="input-leitor-bip" placeholder="Bipe o código..." 
+                                              value={bipInputVal[prod.codigo] || ''} 
+                                              onChange={(e) => setBipInputVal({...bipInputVal, [prod.codigo]: e.target.value})}
+                                              onKeyDown={(e) => checkBip(e, prod)}
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                            <div className={`contador-bip ${estadoBip.bipada >= estadoBip.desejada ? 'completo' : ''}`}>
+                                              {estadoBip.bipada}/{estadoBip.desejada}
+                                            </div>
+                                            <button className="btn-icon-bip" onClick={(e) => { e.stopPropagation(); setCameraAtiva(prod.codigo); }} title="Abrir Câmera">📷</button>
+                                            <button className="btn-icon-bip" onClick={(e) => editarBipManual(e, prod)} title="Aprovar manualmente">✏️</button>
+                                          </div>
+                                        )}
+
+                                        <div className="bipagem-linha-3">
+                                          {jaAdicionado ? (
+                                            <button onClick={(e) => { e.stopPropagation(); aoRemoverPreRequisicao(prod.codigo); }} className="btn-acao-remover">❌ Remover da Lista</button>
+                                          ) : (
+                                            <button onClick={(e) => handleAdicionarExterno(e, prod)} className={`btn-acao-adicionar ${(!estadoBip || estadoBip.bipada < estadoBip.desejada) ? 'btn-desativado' : ''}`}>➕ Adicionar à Lista</button>
+                                          )}
+                                        </div>
+
+                                      </div>
+                                    </div>
+                                  )}
+
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })
+                    ) : (
+                      <tr><td colSpan="9" style={{ textAlign: 'center', padding: '50px', color: '#888' }}>Nenhum produto encontrado na loja {lojaAtiva}.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="mensagem-vazia">A base de dados desta loja ainda não foi sincronizada.</div>
+          )}
+
+        </div>
+      </div>
     </div>
   );
 }

@@ -133,7 +133,6 @@ function App() {
           const isAdmin = usuarioLogado.username === 'admin' || usuarioLogado.acesso_admin;
 
           // --- BUSCA BIPS PENDENTES ---
-          // Se for Admin, busca de todos. Se não for, busca só o que tem o nome dele.
           let queryBip = supabase.from('autorizacoes_bip').select('*').eq('status', 'pendente');
           if (!isAdmin) {
              queryBip = queryBip.ilike('encarregado_destino', `%${usuarioLogado.nome_completo}%`);

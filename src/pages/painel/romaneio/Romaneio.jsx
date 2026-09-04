@@ -6,6 +6,9 @@ export default function Romaneio({ req, baseProdutos = [] }) {
 
   const dataImpressao = new Date().toLocaleString('pt-BR');
 
+  // NOVO: Verifica se precisa exibir a coluna do Araturi no romaneio impresso
+  const exibirCodigoMatriz = req.origem === 'Conjunto Ceará';
+
   // Função inteligente que busca o código de barras cruzando com a base de dados
   const buscarCodigoBarras = (item) => {
     if (baseProdutos && baseProdutos.length > 0) {
@@ -61,8 +64,10 @@ export default function Romaneio({ req, baseProdutos = [] }) {
       <table className="romaneio-tabela">
         <thead>
           <tr>
-            <th style={{ width: '15%' }}>Código</th>
-            <th style={{ width: '45%' }}>Descrição</th>
+            {/* NOVO: Coluna extra condicional ajustando a largura das demais */}
+            {exibirCodigoMatriz && <th style={{ width: '15%' }}>Cód. Araturi</th>}
+            <th style={{ width: exibirCodigoMatriz ? '12%' : '15%' }}>Código</th>
+            <th style={{ width: exibirCodigoMatriz ? '33%' : '45%' }}>Descrição</th>
             <th style={{ width: '25%' }}>Código de Barras</th>
             <th style={{ width: '15%', textAlign: 'center' }}>Quantidade</th>
           </tr>
@@ -70,6 +75,11 @@ export default function Romaneio({ req, baseProdutos = [] }) {
         <tbody>
           {req.listaItens && req.listaItens.map((item, index) => (
             <tr key={index}>
+              {/* NOVO: Exibe a Célula do Código Araturi se for o caso */}
+              {exibirCodigoMatriz && (
+                <td style={{ fontWeight: 'bold' }}>{item.codigoMatriz || '-'}</td>
+              )}
+              
               <td>{item.cod}</td>
               <td>{item.descricao}</td>
               <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>

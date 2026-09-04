@@ -31,6 +31,9 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
   const ultimoBipTexto = useRef("");
   const pedidosBipAntigoRef = useRef({});
 
+  // NOVO: Verifica se precisa exibir a coluna De-Para do Araturi
+  const exibirCodigoMatriz = req.origem === 'Conjunto Ceará';
+
   const todosBipados = itens.length > 0 && itens.every(item => {
     const meta = item.quantidadeEditada !== undefined ? Number(item.quantidadeEditada) : Number(item.quantidade);
     return (item.bipContagem || 0) >= meta;
@@ -324,7 +327,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     setModoExpansao('resumo'); 
   };
 
-  // --- NOVA INTERFACE DE SEPARAÇÃO PAUSADA ---
   if (isPausado) {
     return (
       <div style={{ textAlign: 'center', padding: '50px 20px', backgroundColor: '#fff3cd', border: '3px dashed #f39c12', borderRadius: '12px', marginTop: '20px' }}>
@@ -340,7 +342,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     );
   }
 
-  // --- INTERFACE NORMAL DE SEPARAÇÃO ---
   return (
     <>
       {mostrarFesta && <div className="festa-confete">🎉🏆🎉</div>}
@@ -351,7 +352,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
           <p className="subtitulo-lista-produtos" style={{ margin: 0 }}>Clique na linha do produto para expandir as opções.</p>
         </div>
 
-        {/* BOTÕES PARA SOLICITAR PAUSA - Aparecem apenas se estiver na etapa de separação e não logado como líder principal */}
         {req.status === 'Em Separação' && !req.metricasSeparacao && !isEncarregado && (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <button 
@@ -376,6 +376,8 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
         <table className="tabela-itens">
           <thead>
             <tr className="tabela-itens-header-tr">
+              {/* NOVO: Coluna Extra no Cabeçalho Dinamicamente */}
+              {exibirCodigoMatriz && <th className="th-tabela-itens" style={{ color: '#8e44ad' }}>Cód. Araturi</th>}
               <th className="th-tabela-itens">Código</th>
               <th className="th-tabela-itens">Descrição</th>
               <th className="th-tabela-itens td-tabela-itens-centro">Quantidade</th>
@@ -384,11 +386,8 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
           <tbody>
             {itens.map((item, index) => {
               const meta = item.quantidadeEditada !== undefined ? Number(item.quantidadeEditada) : Number(item.quantidade);
-              
-              // Lógica inteligente para preservar a visualização após a etapa de separação
               const jaPassouSeparacao = req.status !== 'Pendente' && req.status !== 'Em Separação';
               const contagemBipada = item.bipContagem !== undefined ? item.bipContagem : (jaPassouSeparacao ? meta : 0);
-              
               const completo = contagemBipada >= meta;
               const teveEdicao = item.quantidadeEditada !== undefined && Number(item.quantidadeEditada) !== Number(item.quantidade);
               const estaExpandido = linhaExpandida === index;
@@ -397,6 +396,16 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
               return (
                 <React.Fragment key={index}>
                   <tr className={`tr-clicavel ${estaExpandido ? 'linha-expandida-ativa' : ''} ${completo ? 'linha-item-completo' : 'linha-item-normal'}`} onClick={() => alternarExpansao(index)}>
+                    
+                    {/* NOVO: Exibe a Célula do Código Araturi se for o caso */}
+                    {exibirCodigoMatriz && (
+                      <td className="td-tabela-itens">
+                        <strong style={{ color: '#8e44ad', backgroundColor: '#fcf8ff', padding: '2px 6px', borderRadius: '4px' }}>
+                          {item.codigoMatriz || '-'}
+                        </strong>
+                      </td>
+                    )}
+
                     <td className="td-tabela-itens"><strong>{item.cod}</strong></td>
                     <td className="td-tabela-itens">{item.descricao}</td>
                     <td className={`td-tabela-itens td-tabela-itens-centro ${completo ? 'texto-verde-sucesso' : ''}`}>
@@ -410,7 +419,8 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
                   
                   {estaExpandido && (
                     <tr className="linha-expandida">
-                      <td colSpan="3">
+                      {/* NOVO: Ajusta o colSpan para mesclar as colunas corretamente */}
+                      <td colSpan={exibirCodigoMatriz ? "4" : "3"}>
                         <div className="detalhes-produto-expandido">
                           {modoExpansao === 'resumo' && (
                             <div className="info-bipagem-resumo">
@@ -487,7 +497,10 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
         return (
           <div className="camera-modal-overlay">
             <div className="camera-modal-content">
-              <div className="camera-modal-header">Lendo: {itemAtivo?.cod} - {itemAtivo?.descricao}</div>
+              {/* NOVO: Mostra o código da Matriz também na tela da Câmera para facilitar */}
+              <div className="camera-modal-header">
+                Lendo: {itemAtivo?.cod} {itemAtivo?.codigoMatriz ? `(Cód. Araturi: ${itemAtivo.codigoMatriz})` : ''} - {itemAtivo?.descricao}
+              </div>
               <div className="camera-modal-body">
                 <div id="leitor-camera-modal" className="camera-box-modal"></div>
                 <div className="info-bipagem">
