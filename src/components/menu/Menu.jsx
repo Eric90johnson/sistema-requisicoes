@@ -7,6 +7,14 @@ const IconHome = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
 );
 
+const IconPlusCircle = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+);
+
+const IconCheckSquare = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+);
+
 const IconHistory = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
 );
@@ -27,21 +35,34 @@ const IconDashboard = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
 );
 
+const IconMetas = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+);
+
 const IconLogout = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
 );
 
 export default function Menu({ 
-  aoClicarTransferencias, aoClicarMarketplace, aoClicarHistorico, aoClicarBaseDados, aoClicarAdmin, aoClicarContatos, aoClicarDashboard,
+  aoClicarTransferencias, aoClicarMarketplace, aoClicarPainelRecebimento, aoClicarHistorico, aoClicarBaseDados, aoClicarAdmin, aoClicarContatos, aoClicarDashboard, aoClicarMetas, aoClicarNovaRequisicao, aoClicarNovoRecebimento,
   usuarioLogado, aoSair, telaAtual, menuMobileAberto, setMenuMobileAberto 
 }) { 
   const [colapsado, setColapsado] = useState(true);
   const [mostrarModalAcessoNegado, setMostrarModalAcessoNegado] = useState(false);
 
-  // Estados para controlar a abertura dos submenus por toque no mobile
   const [painelMobileAberto, setPainelMobileAberto] = useState(false);
-  const [transferenciasMobileAberto, setTransferenciasMobileAberto] = useState(false);
   const [adminMobileAberto, setAdminMobileAberto] = useState(false);
+
+  const isMaster = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
+  const canViewHistory = isMaster || usuarioLogado?.perm_ver_relatorios;
+  const canUpdateStock = isMaster || usuarioLogado?.perm_atualizar_estoque;
+  const canManageUsers = isMaster || usuarioLogado?.perm_gerenciar_usuarios;
+  const canManageMetas = isMaster || usuarioLogado?.perm_gerenciar_metas;
+  const canViewStockData = isMaster || usuarioLogado?.perm_consulta_estoque;
+  const canManageNovidades = isMaster || usuarioLogado?.perm_gerenciar_novidades;
+  const canViewDashboard = isMaster || usuarioLogado?.perm_dashboard;
+  
+  const canSeeAdminMenu = isMaster || canUpdateStock || canManageUsers || canManageNovidades;
 
   const handleNavegacao = (acao) => {
     if (acao) acao();
@@ -57,16 +78,29 @@ export default function Menu({
       return;
     }
 
-    if (usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin) {
-      if (aoClicarAdmin) aoClicarAdmin(aba);
+    if (canSeeAdminMenu) {
+      const abaDestino = canUpdateStock ? 'base-dados' : (canManageUsers ? 'usuarios' : 'novidades');
+      if (aoClicarAdmin) aoClicarAdmin(abaDestino);
     } else {
       setMostrarModalAcessoNegado(true);
+      if (window.innerWidth <= 768) setMenuMobileAberto(false);
     }
   };
 
   const handleSubItemAdminClick = (aba, e) => {
     e.preventDefault();
-    if (usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin) {
+    
+    if (
+      (aba === 'base-dados' && !canUpdateStock) ||
+      (aba === 'usuarios' && !canManageUsers) ||
+      (aba === 'novidades' && !canManageNovidades)
+    ) {
+      setMostrarModalAcessoNegado(true);
+      if (window.innerWidth <= 768) setMenuMobileAberto(false);
+      return;
+    }
+
+    if (canSeeAdminMenu) {
       if (aoClicarAdmin) aoClicarAdmin(aba);
       if (window.innerWidth <= 768) {
         setMenuMobileAberto(false);
@@ -88,16 +122,6 @@ export default function Menu({
     }
   };
 
-  const handleTransferenciasClick = (e) => {
-    e.preventDefault();
-    if (window.innerWidth <= 768) {
-      // No mobile, alterna o nível 3 (Transferência Externa / Reposição Interna)
-      setTransferenciasMobileAberto(!transferenciasMobileAberto);
-    } else {
-      handleNavegacao(aoClicarTransferencias);
-    }
-  };
-
   return (
     <>
       <div 
@@ -105,13 +129,12 @@ export default function Menu({
         onClick={() => setMenuMobileAberto(false)}
       ></div>
 
-      {/* POPUP DE ACESSO NEGADO */}
       {mostrarModalAcessoNegado && (
         <div className="modal-acesso-negado-overlay" onClick={() => setMostrarModalAcessoNegado(false)}>
           <div className="modal-acesso-negado-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-acesso-negado-icone">🚫</div>
             <h3>Acesso Restrito</h3>
-            <p>Você não tem permissão para acessar esta função de Administrador.</p>
+            <p>Você não tem permissão para acessar esta funcionalidade.</p>
             <button className="btn-fechar-modal-acesso" onClick={() => setMostrarModalAcessoNegado(false)}>
               Entendi
             </button>
@@ -136,7 +159,7 @@ export default function Menu({
             <ul>
               <li className="menu-header-texto"><span>SISTEMA</span></li>
               
-              {/* NÍVEL 1: PAINEL PRINCIPAL */}
+              {/* NÍVEL 1: PAINEL PRINCIPAL (Transferência, Marketplace, Recebimento) */}
               <li className={`menu-item sub-menu-parent ${painelMobileAberto ? 'mobile-expandido' : ''}`}>
                 <a href="#" onClick={handlePainelClick}>
                   <span className="menu-icon"><IconHome /></span>
@@ -144,10 +167,17 @@ export default function Menu({
                   <span className="menu-seta">▾</span>
                 </a>
 
-                {/* NÍVEL 2 */}
                 <div className="sub-menu-container">
                   <ul>
-                    {/* MARKETPLACE */}
+                    <li className={`menu-item sub-nivel-2 ${telaAtual === 'painel' ? 'ativo-link' : ''}`}>
+                      <a href="#" onClick={(e) => { 
+                        e.preventDefault(); 
+                        handleNavegacao(aoClicarTransferencias);
+                      }}>
+                        <span className="menu-title">Transferência</span>
+                      </a>
+                    </li>
+
                     <li className={`menu-item sub-nivel-2 ${telaAtual === 'marketplace' ? 'ativo-link' : ''}`}>
                       <a href="#" onClick={(e) => { 
                         e.preventDefault(); 
@@ -157,42 +187,66 @@ export default function Menu({
                       </a>
                     </li>
 
-                    {/* TRANSFERÊNCIAS */}
-                    <li className={`menu-item sub-menu-parent sub-nivel-2 ${telaAtual === 'painel' ? 'ativo-link' : ''} ${transferenciasMobileAberto ? 'mobile-expandido-nivel3' : ''}`}>
-                      <a href="#" onClick={handleTransferenciasClick}>
-                        <span className="menu-title">Transferências</span>
-                        <span className="menu-seta">▸</span>
+                    {/* NOVO SUBMENU: PAINEL DE RECEBIMENTO */}
+                    <li className={`menu-item sub-nivel-2 ${telaAtual === 'painel-recebimento' ? 'ativo-link' : ''}`}>
+                      <a href="#" onClick={(e) => { 
+                        e.preventDefault(); 
+                        handleNavegacao(aoClicarPainelRecebimento);
+                      }}>
+                        <span className="menu-title">Recebimento</span>
                       </a>
-
-                      {/* NÍVEL 3: OPÇÕES DE TRANSFERÊNCIAS */}
-                      <div className="sub-menu-container sub-nivel-3-container">
-                        <ul>
-                          <li className="menu-item sub-nivel-3">
-                            <a href="#" onClick={(e) => e.preventDefault()}>
-                              <span className="menu-title">Transferência Externa</span>
-                            </a>
-                          </li>
-                          <li className="menu-item sub-nivel-3">
-                            <a href="#" onClick={(e) => e.preventDefault()}>
-                              <span className="menu-title">Reposição Interna</span>
-                            </a>
-                          </li>
-                        </ul>
-                      </div>
                     </li>
                   </ul>
                 </div>
               </li>
 
+              {/* NOVA REQUISIÇÃO */}
+              <li className={`menu-item ${telaAtual === 'nova' ? 'ativo' : ''}`}>
+                <a href="#" onClick={(e) => { e.preventDefault(); handleNavegacao(aoClicarNovaRequisicao); }}>
+                  <span className="menu-icon"><IconPlusCircle /></span>
+                  <span className="menu-title">Nova Requisição</span>
+                </a>
+              </li>
+
+              {/* NOVO RECEBIMENTO */}
+              <li className={`menu-item ${telaAtual === 'novo-recebimento' ? 'ativo' : ''}`}>
+                <a href="#" onClick={(e) => { 
+                  e.preventDefault(); 
+                  if (aoClicarNovoRecebimento) handleNavegacao(aoClicarNovoRecebimento);
+                  else alert("📦 O módulo de Recebimento está em desenvolvimento!");
+                }}>
+                  <span className="menu-icon"><IconCheckSquare /></span>
+                  <span className="menu-title">Novo Recebimento</span>
+                </a>
+              </li>
+
+              {/* HISTÓRICO */}
               <li className={`menu-item ${telaAtual === 'historico' ? 'ativo' : ''}`}>
-                <a href="#" onClick={(e) => { e.preventDefault(); handleNavegacao(aoClicarHistorico); }}>
+                <a href="#" onClick={(e) => { 
+                  e.preventDefault(); 
+                  if (canViewHistory) {
+                    handleNavegacao(aoClicarHistorico);
+                  } else {
+                    setMostrarModalAcessoNegado(true);
+                    if (window.innerWidth <= 768) setMenuMobileAberto(false);
+                  }
+                }}>
                   <span className="menu-icon"><IconHistory /></span>
                   <span className="menu-title">Histórico</span>
                 </a>
               </li>
 
+              {/* CONSULTA DE ESTOQUE */}
               <li className={`menu-item ${telaAtual === 'base-dados' ? 'ativo' : ''}`}>
-                <a href="#" onClick={(e) => { e.preventDefault(); handleNavegacao(aoClicarBaseDados); }}>
+                <a href="#" onClick={(e) => { 
+                  e.preventDefault(); 
+                  if (canViewStockData) {
+                    handleNavegacao(aoClicarBaseDados);
+                  } else {
+                    setMostrarModalAcessoNegado(true);
+                    if (window.innerWidth <= 768) setMenuMobileAberto(false);
+                  }
+                }}>
                   <span className="menu-icon"><IconDatabase /></span>
                   <span className="menu-title">Consulta de Estoque</span>
                 </a>
@@ -205,18 +259,40 @@ export default function Menu({
                 </a>
               </li>
 
-              {/* SEÇÃO DE GESTÃO */}
               <li className="menu-header-texto mt-2"><span>GESTÃO</span></li>
               
               {/* Dashboard */}
               <li className={`menu-item ${telaAtual === 'dashboard' ? 'ativo' : ''}`}>
-                <a href="#" onClick={(e) => { e.preventDefault(); handleNavegacao(aoClicarDashboard); }}>
+                <a href="#" onClick={(e) => { 
+                  e.preventDefault(); 
+                  if (canViewDashboard) {
+                    handleNavegacao(aoClicarDashboard);
+                  } else {
+                    setMostrarModalAcessoNegado(true);
+                    if (window.innerWidth <= 768) setMenuMobileAberto(false);
+                  }
+                }}>
                   <span className="menu-icon"><IconDashboard /></span>
                   <span className="menu-title">Dashboard</span>
                 </a>
               </li>
 
-              {/* Administrador */}
+              <li className={`menu-item ${telaAtual === 'metas' ? 'ativo' : ''}`}>
+                <a href="#" onClick={(e) => { 
+                  e.preventDefault(); 
+                  if (canManageMetas) {
+                    if (aoClicarMetas) handleNavegacao(aoClicarMetas);
+                    else alert("🚀 O módulo de Metas de Estoque está em desenvolvimento!");
+                  } else {
+                    setMostrarModalAcessoNegado(true);
+                    if (window.innerWidth <= 768) setMenuMobileAberto(false);
+                  }
+                }}>
+                  <span className="menu-icon"><IconMetas /></span>
+                  <span className="menu-title">Metas Estoque</span>
+                </a>
+              </li>
+
               <li className={`menu-item sub-menu-parent ${adminMobileAberto ? 'mobile-expandido' : ''}`}>
                 <a href="#" onClick={(e) => handleAdminClick('base-dados', e)}>
                   <span className="menu-icon icon-admin"><IconAdmin /></span>

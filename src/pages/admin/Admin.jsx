@@ -25,7 +25,6 @@ export default function Admin({ setProdutos, abaAtiva }) {
         {abaAtiva === 'base-dados' && (
           <div className="painel-abas-premium">
             
-            {/* AQUI ESTÃO AS ABAS NO TOPO ABSOLUTO DO ADMIN CONTENT */}
             <div className="abas-lojas-container">
               {lojas.map((loja, index) => (
                 <button 
@@ -41,7 +40,6 @@ export default function Admin({ setProdutos, abaAtiva }) {
             </div>
 
             <div className="conteudo-aba-ativa">
-              {/* Passamos o nome da loja escolhida para o componente de envio */}
               <AdminBaseDados setProdutos={setProdutos} lojaAtiva={lojaAtiva} />
             </div>
 

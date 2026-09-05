@@ -1,25 +1,17 @@
 /* src/styles/pages/painel/painel.css */
-/* src/styles/pages/painel/painel.css */
 .painel-container {
-  padding: 30px;
-  /* max-width foi removido. O painel agora usa o espaço total. */
-  width: 100%;
-  flex: 1; /* Garante expansão vertical se necessário */
   display: flex;
   flex-direction: column;
+  flex: 1; 
+  height: 100%;
+  overflow: hidden;
 }
 
-/* Para garantir que a tabela cresça, você pode adicionar/atualizar: */
 .tabela-container-scroll {
-  width: 100%;
-  flex-grow: 1; /* Faz a tabela empurrar o layout pra baixo pra ocupar o espaço vago */
-  min-height: 400px;
-  max-height: calc(100vh - 250px); /* Usa o tamanho útil da tela */
-  overflow-y: auto;
-  overflow-x: auto;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  background-color: var(--cor-branca);
+  flex: 1; 
+  overflow: auto; 
+  min-height: 0; 
+  margin-bottom: 5px;
 }
 
 /* --- SISTEMA DE ABAS --- */
@@ -358,6 +350,7 @@
   font-size: 0.8em;
   display: block;
   color: #666;
+  margin-top: 2px; /* Substitui o inline style */
 }
 
 .td-historico-texto {
@@ -498,3 +491,87 @@
 .th-com-filtro.filtro-aberto { z-index: 101; }
 .chat-pergunta-bold { margin-top: 10px; font-weight: bold; }
 .chat-despedida-azul { text-align: center; font-size: 1.1rem; font-weight: bold; color: #2980b9; }
+
+/* ========================================================= */
+/* --- AJUSTE DE ALTURA DINÂMICA DA TABELA (FULL SCREEN) --- */
+/* ========================================================= */
+
+.painel-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+}
+
+.tabela-container-scroll {
+  flex: 1; 
+  min-height: 300px; 
+  max-height: calc(100vh - 220px); 
+  overflow-y: auto;
+  overflow-x: auto;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+/* ========================================================= */
+/* --- ESTILOS DO EXTRATO DE PEDIDOS (RANKING EXPANDIDO) --- */
+/* ========================================================= */
+
+.linha-expandida-extrato {
+  background-color: #f9fafd;
+}
+
+.extrato-td-container {
+  padding: 20px;
+  border-bottom: 2px solid #bdc3c7;
+}
+
+.extrato-card {
+  border: 1px solid #dcdde1;
+  border-radius: 8px;
+  padding: 15px;
+  background-color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.extrato-titulo {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+  border-bottom: 1px solid #ecf0f1;
+  padding-bottom: 8px;
+}
+
+.extrato-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.extrato-tabela th, 
+.extrato-tabela td {
+  padding: 10px;
+}
+
+.extrato-thead-tr {
+  background-color: #f4f6f8;
+  color: #7f8c8d;
+}
+
+.extrato-th-destaque {
+  color: #e67e22;
+}
+
+.extrato-tabela tbody tr {
+  border-bottom: 1px solid #ecf0f1;
+}
+
+.badge-reposicao-interna {
+  color: #8e44ad;
+  font-weight: bold;
+}
+
+.extrato-pontos-positivos {
+  font-weight: bold;
+  color: #27ae60;
+}

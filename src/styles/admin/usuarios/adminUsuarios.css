@@ -5,11 +5,10 @@
   gap: 30px;
   animation: fadeIn 0.4s ease;
   width: 100%;
-  min-width: 0; /* A MÁGICA: Evita que itens internos estiquem a tela no Flexbox */
+  min-width: 0; 
   box-sizing: border-box;
 }
 
-/* Área de cadastro de novo usuário */
 .card-novo-usuario {
   background: #f8f9fa;
   border: 1px solid #e0e0e0;
@@ -26,7 +25,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap; /* Permite que o título quebre linha no celular */
+  flex-wrap: wrap; 
 }
 
 .form-usuarios {
@@ -41,14 +40,19 @@
   flex-direction: column;
   gap: 5px;
   width: 100%;
-  min-width: 0; /* Previne estouro horizontal */
+  min-width: 0; 
+}
+
+/* NOVA CLASSE: Faz a caixa ocupar as duas colunas do grid */
+.span-2-colunas {
+  grid-column: span 2;
 }
 
 .input-group-admin label {
   font-weight: bold;
   color: #34495e;
   font-size: 0.9rem;
-  white-space: normal; /* Permite que textos longos quebrem linha */
+  white-space: normal; 
   word-wrap: break-word;
 }
 
@@ -60,14 +64,66 @@
   font-size: 1rem;
   outline: none;
   transition: border-color 0.2s;
-  width: 100%; /* Força os inputs a caberem na tela */
+  width: 100%; 
   box-sizing: border-box;
 }
 
-/* Tabela de Usuários Cadastrados */
+/* ========================================================= */
+/* --- GRID DE PERMISSÕES ADMINISTRATIVAS ---                */
+/* ========================================================= */
+
+.grid-permissoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.label-permissao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: #ffffff;
+  padding: 12px 15px;
+  border: 1px solid #dcdde1;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem !important; 
+  font-weight: normal !important;
+  color: #34495e !important;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.label-permissao:hover {
+  border-color: #f39c12;
+  box-shadow: 0 2px 5px rgba(243, 156, 18, 0.1);
+}
+
+.label-permissao input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  cursor: pointer;
+  accent-color: #d35400; 
+  margin: 0;
+}
+
+.label-permissao input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.permissao-master-ativa {
+  background-color: #fdebd0;
+  border-color: #f39c12;
+  font-weight: bold !important;
+  color: #d35400 !important;
+}
+
 .lista-usuarios-section {
   width: 100%;
-  min-width: 0; /* Essencial para o scroll interno da tabela funcionar */
+  min-width: 0; 
   box-sizing: border-box;
 }
 
@@ -83,13 +139,13 @@
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
   background: white;
-  -webkit-overflow-scrolling: touch; /* Rolagem suave no iOS */
+  -webkit-overflow-scrolling: touch; 
 }
 
 .tabela-usuarios {
   width: 100%;
   border-collapse: collapse;
-  min-width: 650px; /* Mantém a largura mínima, mas agora rolando por dentro */
+  min-width: 650px; 
 }
 
 .tabela-usuarios th {
@@ -107,10 +163,6 @@
   color: #34495e;
 }
 
-.tabela-usuarios tr:last-child td {
-  border-bottom: none;
-}
-
 .tabela-usuarios tr:hover {
   background-color: #f9f9f9;
 }
@@ -124,10 +176,6 @@
   font-weight: bold;
   white-space: nowrap;
 }
-
-/* ========================================================= */
-/* --- CLASSES EXTRAÍDAS DO JSX E BOTÕES ---                 */
-/* ========================================================= */
 
 .texto-protegido {
   color: #7f8c8d;
@@ -149,44 +197,35 @@
   margin-top: 10px;
 }
 
+.btn-cancelar-edicao,
+.btn-salvar-usuario {
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s ease;
+}
+
 .btn-cancelar-edicao {
   background-color: #95a5a6;
   color: white;
-  border: none;
   padding: 12px 20px;
   font-size: 1rem;
-  font-weight: bold;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
   flex: 1;
 }
 
-.btn-cancelar-edicao:hover {
-  background-color: #7f8c8d;
-}
+.btn-cancelar-edicao:hover { background-color: #7f8c8d; }
 
 .btn-salvar-usuario {
   background-color: #8e44ad;
   color: white;
-  border: none;
   padding: 12px;
   font-size: 1.1rem;
-  font-weight: bold;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
   flex: 2;
 }
 
-.btn-salvar-usuario:hover {
-  background-color: #732d91;
-}
-
-.btn-salvar-usuario:disabled {
-  background-color: #bdc3c7;
-  cursor: not-allowed;
-}
+.btn-salvar-usuario:hover { background-color: #732d91; }
+.btn-salvar-usuario:disabled { background-color: #bdc3c7; cursor: not-allowed; }
 
 .acoes-tabela-container {
   display: flex;
@@ -208,47 +247,20 @@
 
 .btn-editar-usuario { background-color: #f39c12; }
 .btn-editar-usuario:hover { background-color: #d35400; }
-
 .btn-excluir-usuario { background-color: #e74c3c; }
 .btn-excluir-usuario:hover { background-color: #c0392b; }
-.btn-excluir-usuario:disabled { background-color: #fab1a0; cursor: not-allowed; }
 
-/* ========================================================= */
-/* --- RESPONSIVIDADE NO SMARTPHONE ---                      */
-/* ========================================================= */
 @media (max-width: 768px) {
-  .admin-usuarios-container {
-    gap: 20px;
-  }
-
-  .card-novo-usuario {
-    padding: 15px;
-  }
-
-  .form-usuarios {
-    grid-template-columns: 1fr; /* O formulário vira uma coluna única */
-  }
+  .admin-usuarios-container { gap: 20px; }
+  .card-novo-usuario { padding: 15px; }
+  .form-usuarios { grid-template-columns: 1fr; }
   
-  .botoes-form-acoes {
-    grid-column: span 1;
-    flex-direction: column; /* Empilha os botões Salvar/Cancelar */
-    gap: 10px;
-  }
-
-  .btn-salvar-usuario, 
-  .btn-cancelar-edicao {
-    width: 100%;
-    flex: none;
-  }
-
-  .acoes-tabela-container {
-    flex-direction: column; /* Empilha Editar e Excluir */
-    align-items: stretch;
-  }
+  /* Remove o span duplo no mobile para evitar erros */
+  .span-2-colunas { grid-column: span 1; }
   
-  .btn-editar-usuario, 
-  .btn-excluir-usuario {
-    width: 100%;
-    text-align: center;
-  }
+  .grid-permissoes { grid-template-columns: 1fr; }
+  .botoes-form-acoes { grid-column: span 1; flex-direction: column; gap: 10px; }
+  .btn-salvar-usuario, .btn-cancelar-edicao { width: 100%; flex: none; }
+  .acoes-tabela-container { flex-direction: column; align-items: stretch; }
+  .btn-editar-usuario, .btn-excluir-usuario { width: 100%; text-align: center; }
 }

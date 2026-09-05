@@ -6,11 +6,10 @@ import PainelMarketplace from '../marketplace/painel/PainelMarketplace';
 import { supabase } from '../../services/supabase';
 import { calcularRanking } from './utils/calculadoraRanking';
 
-export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, pedidosMarketplace = [], aoAbrirDetalhes, abaExterna = 'interna' }) {
+export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, recebimentos = [], pedidosMarketplace = [], aoAbrirDetalhes, abaExterna = 'interna', usuarioLogado }) {
   
   const [abaAtiva, setAbaAtiva] = useState(abaExterna); 
 
-  // Sincroniza a aba ativa sempre que houver alteração na prop externa (clique no menu lateral)
   useEffect(() => {
     setAbaAtiva(abaExterna);
   }, [abaExterna]);
@@ -19,9 +18,10 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const [dataInicioRanking, setDataInicioRanking] = useState('');
   const [dataFimRanking, setDataFimRanking] = useState('');
   
-  // Estados do Extrato e Alertas visuais
   const [colaboradorExpandido, setColaboradorExpandido] = useState(null);
   const [mostrarAvisoData, setMostrarAvisoData] = useState(false); 
+  
+  const [mostrarModalAcessoNegado, setMostrarModalAcessoNegado] = useState(false);
 
   const [filtros, setFiltros] = useState({});
   const [colunaFiltroAberta, setColunaFiltroAberta] = useState(null);
@@ -30,6 +30,18 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const [idsDestacados, setIdsDestacados] = useState([]);
   const reqsAnterioresRef = useRef(requisicoes);
+
+  const canViewRanking = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin || usuarioLogado?.perm_ver_ranking;
+
+  const handleAbrirRanking = () => {
+    if (canViewRanking) {
+      setMostrarRanking(true);
+      setColaboradorExpandido(null);
+      setMostrarAvisoData(false);
+    } else {
+      setMostrarModalAcessoNegado(true);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -113,7 +125,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     reqsAnterioresRef.current = requisicoes;
   }, [requisicoes]);
 
-  // CORREÇÃO: Retornando para a chave exata que o banco de dados grava
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
   
   const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Concluída' && req.status !== 'Cancelada');
@@ -138,7 +149,9 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     if (filtros.status) filtradas = filtradas.filter(req => req.status === filtros.status);
     if (filtros.destino) filtradas = filtradas.filter(req => getNomeLojaCurto(req.destino) === filtros.destino);
     if (filtros.data) filtradas = filtradas.filter(req => req.data === filtros.data);
-    if (filtros.solicitante) filtradas = filtradas.filter(req => req.solicitante === filtros.solicitante);
+    
+    // Filtra por Origem (Loja Atendente)
+    if (filtros.origem) filtradas = filtradas.filter(req => (req.origem || 'Matriz') === filtros.origem);
 
     colunasDinamicas.forEach(coluna => {
       if (filtros[coluna]) {
@@ -171,7 +184,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const opcoesStatus = [...new Set(requisicoesAtivas.map(r => r.status))].filter(Boolean);
   const opcoesDestino = [...new Set(requisicoesAtivas.map(r => getNomeLojaCurto(r.destino)))].filter(Boolean);
   const opcoesData = [...new Set(requisicoesAtivas.map(r => r.data))].filter(Boolean);
-  const opcoesSolicitante = [...new Set(requisicoesAtivas.map(r => r.solicitante))].filter(Boolean);
+  const opcoesOrigem = [...new Set(requisicoesAtivas.map(r => r.origem || 'Matriz'))].filter(Boolean);
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -199,7 +212,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     }
   };
 
-  // FORMATADOR DE TÍTULO DAS COLUNAS DINÂMICAS
   const getNomeColunaHeader = (coluna) => {
     switch(coluna) {
       case 'Em Separação': return 'Resp. Separação';
@@ -212,8 +224,8 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   };
 
   const rankingCalculado = useMemo(() => {
-    return calcularRanking(requisicoes, dataInicioRanking, dataFimRanking);
-  }, [requisicoes, dataInicioRanking, dataFimRanking]);
+    return calcularRanking(requisicoes, recebimentos, dataInicioRanking, dataFimRanking);
+  }, [requisicoes, recebimentos, dataInicioRanking, dataFimRanking]);
 
   const formatarTempo = (segundos) => {
     const h = Math.floor(segundos / 3600).toString().padStart(2, '0');
@@ -274,6 +286,19 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       
       <ModalNovidades />
 
+      {mostrarModalAcessoNegado && (
+        <div className="modal-acesso-negado-overlay" onClick={() => setMostrarModalAcessoNegado(false)}>
+          <div className="modal-acesso-negado-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-acesso-negado-icone">🚫</div>
+            <h3>Acesso Restrito</h3>
+            <p>Você não tem permissão para visualizar o Ranking da Equipe.</p>
+            <button className="btn-fechar-modal-acesso" onClick={() => setMostrarModalAcessoNegado(false)}>
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
+
       {alertaDelta.visivel && (
         <div className="chat-notificacao-container">
           <div className="chat-notificacao-header">
@@ -306,9 +331,10 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       {abaAtiva === 'interna' && (
         <>
           <div className="painel-header">
+            
             <button 
               className="btn-ranking-abrir" 
-              onClick={() => { setMostrarRanking(true); setColaboradorExpandido(null); setMostrarAvisoData(false); }}
+              onClick={handleAbrirRanking}
             >
               🏆 Ranking da Equipe
             </button>
@@ -331,11 +357,12 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                   <th>ID</th>
                   <RenderHeaderFiltro titulo="Status" chave="status" opcoes={opcoesStatus} />
                   <RenderHeaderFiltro titulo="Data" chave="data" opcoes={opcoesData} />
-                  <RenderHeaderFiltro titulo="Solicitante" chave="solicitante" opcoes={opcoesSolicitante} />
+                  
+                  <RenderHeaderFiltro titulo="Loja Atendente (De)" chave="origem" opcoes={opcoesOrigem} />
+                  
                   <RenderHeaderFiltro titulo="Loja Destino" chave="destino" opcoes={opcoesDestino} />
                   <th>Itens</th>
                   
-                  {/* INJEÇÃO DO NOVO FORMATADOR DE TÍTULOS AQUI */}
                   {colunasDinamicas.map(coluna => (
                     <RenderHeaderFiltro 
                       key={coluna}
@@ -364,7 +391,14 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       <td>{req.id}</td>
                       <td><span className={`status-badge ${getStatusClass(req.status)}`}>{req.status}</span></td>
                       <td>{req.data}</td>
-                      <td><strong>{req.solicitante}</strong></td>
+                      
+                      <td>
+                        <strong>{req.origem || 'Matriz'}</strong>
+                        <span className="span-prioridade-subtexto">
+                          Por: {req.solicitante}
+                        </span>
+                      </td>
+                      
                       <td>{getNomeLojaCurto(req.destino)}</td>
                       <td>{req.itens}</td>
                       
@@ -484,38 +518,38 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                           </tr>
                           
                           {colaboradorExpandido === colab.nome && (
-                            <tr style={{ backgroundColor: '#f9fafd' }}>
-                              <td colSpan="6" style={{ padding: '20px', borderBottom: '2px solid #bdc3c7' }}>
-                                <div style={{ border: '1px solid #dcdde1', borderRadius: '8px', padding: '15px', backgroundColor: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                                  <h4 style={{ margin: '0 0 15px 0', color: '#2c3e50', borderBottom: '1px solid #ecf0f1', paddingBottom: '8px' }}>
+                            <tr className="linha-expandida-extrato">
+                              <td colSpan="6" className="extrato-td-container">
+                                <div className="extrato-card">
+                                  <h4 className="extrato-titulo">
                                     🧾 Extrato de Pedidos — {colab.nome}
                                   </h4>
-                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
+                                  <table className="extrato-tabela">
                                     <thead>
-                                      <tr style={{ backgroundColor: '#f4f6f8', color: '#7f8c8d' }}>
-                                        <th style={{ padding: '10px' }}>Nº Req</th>
-                                        <th style={{ padding: '10px' }}>Tipo (Motivo)</th>
-                                        <th style={{ padding: '10px' }}>Tempo de Separação</th>
-                                        <th style={{ padding: '10px' }}>Itens Bipados</th>
-                                        <th style={{ padding: '10px' }}>UPM Real</th>
-                                        <th style={{ padding: '10px', color: '#e67e22' }}>Pontos Ganhos</th>
+                                      <tr className="extrato-thead-tr">
+                                        <th>Nº Req</th>
+                                        <th>Tipo (Motivo)</th>
+                                        <th>Tempo de Separação</th>
+                                        <th>Itens Bipados</th>
+                                        <th>UPM Real</th>
+                                        <th className="extrato-th-destaque">Pontos Ganhos</th>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {colab.historicoReqs.map(h => (
-                                        <tr key={h.id} style={{ borderBottom: '1px solid #ecf0f1' }}>
-                                          <td style={{ padding: '10px' }}><strong>{h.id}</strong></td>
-                                          <td style={{ padding: '10px' }}>
+                                        <tr key={h.id}>
+                                          <td><strong>{h.id}</strong></td>
+                                          <td>
                                             {h.isReposicaoInterna ? (
-                                              <span style={{ color: '#8e44ad', fontWeight: 'bold' }}>⭐ Reposição Interna (x2)</span>
+                                              <span className="badge-reposicao-interna">⭐ Reposição Interna (x2)</span>
                                             ) : (
                                               <span>{h.motivo}</span>
                                             )}
                                           </td>
-                                          <td style={{ padding: '10px' }}>{formatarTempo(h.tempoSegundos)}</td>
-                                          <td style={{ padding: '10px' }}>{h.itensFisicos} un</td>
-                                          <td style={{ padding: '10px' }}>{h.upm} un/min</td>
-                                          <td style={{ padding: '10px', fontWeight: 'bold', color: '#27ae60' }}>
+                                          <td>{formatarTempo(h.tempoSegundos)}</td>
+                                          <td>{h.itensFisicos} un</td>
+                                          <td>{h.upm} un/min</td>
+                                          <td className="extrato-pontos-positivos">
                                             +{h.pontos} pts
                                           </td>
                                         </tr>

@@ -1,3 +1,6 @@
+import RecebimentoProdutos from './pages/recebimento/RecebimentoProdutos';
+import PainelRecebimento from './pages/recebimento/PainelRecebimento';
+import DetalhesRecebimento from './pages/recebimento/DetalhesRecebimento';
 import Rodape from './components/rodape/Rodape';
 import { useState, useEffect, useCallback } from 'react';
 import './styles/global.css';
@@ -22,6 +25,7 @@ function App() {
   const [telaAtual, setTelaAtual] = useState('painel');
   const [abaPainelAtiva, setAbaPainelAtiva] = useState('interna');
   const [reqSelecionada, setReqSelecionada] = useState(null);
+  const [recebimentoSelecionado, setRecebimentoSelecionado] = useState(null); // NOVO ESTADO: Recebimento Clicado
   const [abaAdminAtiva, setAbaAdminAtiva] = useState('base-dados');
 
   const [produtosPreSelecionados, setProdutosPreSelecionados] = useState(null);
@@ -33,6 +37,7 @@ function App() {
 
   const [baseProdutos, setBaseProdutos] = useState([]);
   const [requisicoes, setRequisicoes] = useState([]);
+  const [recebimentos, setRecebimentos] = useState([]); 
   const [pedidosMarketplace, setPedidosMarketplace] = useState([]);
   const [recordesGlobais, setRecordesGlobais] = useState({});
   const [carregando, setCarregando] = useState(false);
@@ -63,6 +68,7 @@ function App() {
   const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false) => {
     if (!silencioso) setCarregando(true);
     try {
+      // 1. Busca Requisições
       const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false });
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
@@ -81,8 +87,15 @@ function App() {
         });
       }
 
+      // 2. Busca Recebimentos (Para o Ranking e Painel)
+      const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select('*').order('data_criacao', { ascending: false });
+      if (recMercadorias) {
+        setRecebimentos(recMercadorias);
+      }
+
       if (rapido) return;
 
+      // 3. Busca Recordes
       const { data: recData } = await supabase.from('recordes_globais').select('*');
       if (recData) {
         const objRecordes = {};
@@ -92,6 +105,7 @@ function App() {
         setRecordesGlobais(objRecordes);
       }
 
+      // 4. Busca Base de Produtos
       let todosOsProdutos = [];
       let buscouTodos = false;
       let indexAtual = 0;
@@ -128,14 +142,15 @@ function App() {
     const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
     
     const fetchPendentes = async () => {
-      if (isEncarregado && usuarioLogado?.nome_completo) {
+      if (isEncarregado && usuarioLogado) {
         try {
           const isAdmin = usuarioLogado.username === 'admin' || usuarioLogado.acesso_admin;
+          const nomeLider = usuarioLogado.nome_completo ? usuarioLogado.nome_completo.trim() : '';
 
           // --- BUSCA BIPS PENDENTES ---
           let queryBip = supabase.from('autorizacoes_bip').select('*').eq('status', 'pendente');
-          if (!isAdmin) {
-             queryBip = queryBip.ilike('encarregado_destino', `%${usuarioLogado.nome_completo}%`);
+          if (!isAdmin && nomeLider) {
+             queryBip = queryBip.ilike('encarregado_destino', `%${nomeLider}%`);
           }
           const { data: dataBip } = await queryBip;
           
@@ -149,8 +164,8 @@ function App() {
 
           // --- BUSCA PAUSAS PENDENTES ---
           let queryPausa = supabase.from('pausas_separacao').select('*').eq('status', 'pendente');
-          if (!isAdmin) {
-             queryPausa = queryPausa.ilike('encarregado_destino', `%${usuarioLogado.nome_completo}%`);
+          if (!isAdmin && nomeLider) {
+             queryPausa = queryPausa.ilike('encarregado_destino', `%${nomeLider}%`);
           }
           const { data: dataPausa } = await queryPausa;
           
@@ -161,7 +176,9 @@ function App() {
               return dataPausa;
             });
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error("Erro ao buscar notificações pendentes:", e);
+        }
       }
     };
 
@@ -365,15 +382,23 @@ function App() {
 
   if (!isLogado) return <Login aoLogar={handleLogar} />;
 
+  const isMaster = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
+  const canSeeAdminMenu = isMaster || usuarioLogado?.perm_atualizar_estoque || usuarioLogado?.perm_gerenciar_usuarios || usuarioLogado?.perm_gerenciar_novidades;
+
   return (
     <div className="layout-container">
       <Menu 
         aoClicarTransferencias={() => navegarPara('painel', 'interna')} 
         aoClicarMarketplace={() => navegarPara('painel', 'marketplace')} 
+        aoClicarPainelRecebimento={() => navegarPara('painel-recebimento')}
         aoClicarHistorico={() => navegarPara('historico')}
         aoClicarBaseDados={() => navegarPara('base-dados')} 
         aoClicarAdmin={(abaDestino = 'base-dados') => { setAbaAdminAtiva(abaDestino); navegarPara('admin'); }}
         aoClicarContatos={() => navegarPara('contatos')}
+        aoClicarDashboard={() => navegarPara('dashboard')}
+        aoClicarMetas={() => navegarPara('metas')}
+        aoClicarNovaRequisicao={() => { setProdutosPreSelecionados(null); setTelaAtual('nova'); }}
+        aoClicarNovoRecebimento={() => navegarPara('novo-recebimento')}
         usuarioLogado={usuarioLogado} 
         aoSair={handleSair} 
         telaAtual={telaAtual}
@@ -394,7 +419,19 @@ function App() {
             <div className="tela-loading"><h2>🔄 Conectando com a Nuvem...</h2><p>Sincronizando as requisições da Neta Dantas, aguarde.</p></div>
           ) : (
             <>
-              {telaAtual === 'painel' && <Painel abaExterna={abaPainelAtiva} aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} requisicoes={requisicoes.filter(r => r.status !== 'Em Edição' && r.status !== 'Cancelada')} pedidosMarketplace={pedidosMarketplace} aoAbrirDetalhes={abrirDetalhes} />}
+              {telaAtual === 'painel' && (
+                <Painel 
+                  usuarioLogado={usuarioLogado} 
+                  abaExterna={abaPainelAtiva} 
+                  aoClicarNovo={(produtos = null) => { setProdutosPreSelecionados(produtos); setTelaAtual('nova'); }} 
+                  aoClicarNovoPedido={() => setTelaAtual('inserir-marketplace')} 
+                  requisicoes={requisicoes.filter(r => r.status !== 'Em Edição' && r.status !== 'Cancelada')} 
+                  recebimentos={recebimentos}
+                  pedidosMarketplace={pedidosMarketplace} 
+                  aoAbrirDetalhes={abrirDetalhes} 
+                />
+              )}
+              
               {telaAtual === 'nova' && <NovaRequisicao aoVoltar={handleCancelarEdicao} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} aoCancelarReq={handleCancelarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} reqEmEdicao={reqEmEdicao} usuarioLogado={usuarioLogado} recordesGlobais={recordesGlobais} tipoReposicaoGlobal={tipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} />}
               
               {telaAtual === 'detalhes' && (
@@ -415,9 +452,81 @@ function App() {
               )}
               
               {telaAtual === 'inserir-marketplace' && <InserirPedido aoVoltar={() => setTelaAtual('painel')} baseProdutos={baseProdutos} aoSalvar={(n) => {setPedidosMarketplace([...n, ...pedidosMarketplace]); setTelaAtual('painel');}} />}
+              
               {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
+              
               {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => {setTelaAtual('painel'); setInicioCronometroGlobal(null); setTipoReposicaoGlobal('interna');}} produtos={baseProdutos} setProdutos={setBaseProdutos} itensPreRequisicao={itensPreRequisicao} aoAdicionarPreRequisicao={(p) => setItensPreRequisicao(v => v.some(i => String(i.codigo) === String(p.codigo)) ? v : [...v, p])} aoRemoverPreRequisicao={(c) => setItensPreRequisicao(v => v.filter(i => String(i.codigo) !== String(c)))} aoIrParaPreRequisicao={() => {setProdutosPreSelecionados(itensPreRequisicao); setItensPreRequisicao([]); setTelaAtual('nova');}} tipoReposicaoGlobal={tipoReposicaoGlobal} setTipoReposicaoGlobal={setTipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} setInicioCronometroGlobal={setInicioCronometroGlobal} />}
-              {telaAtual === 'admin' && (usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin) && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
+              
+              {/* ROTA: PAINEL DE RECEBIMENTOS */}
+              {telaAtual === 'painel-recebimento' && (
+                <PainelRecebimento 
+                  recebimentos={recebimentos} 
+                  requisicoes={requisicoes}
+                  aoClicarNovoRecebimento={() => setTelaAtual('novo-recebimento')} 
+                  aoAbrirDetalhesRecebimento={(rec) => { 
+                    setRecebimentoSelecionado(rec); 
+                    setTelaAtual('detalhes-recebimento'); 
+                  }}
+                  usuarioLogado={usuarioLogado} 
+                />
+              )}
+
+              {/* ROTA: NOVO RECEBIMENTO (FORMULÁRIO VAZIO) */}
+              {telaAtual === 'novo-recebimento' && (
+                <RecebimentoProdutos 
+                  aoVoltar={() => {
+                    setTelaAtual('painel-recebimento');
+                    carregarDadosDaNuvem(true);
+                  }} 
+                  usuarioLogado={usuarioLogado} 
+                />
+              )}
+
+              {/* ROTA: DETALHES E CONFERÊNCIA DE UM RECEBIMENTO EXISTENTE */}
+              {telaAtual === 'detalhes-recebimento' && recebimentoSelecionado && (
+                <DetalhesRecebimento 
+                  recebimento={recebimentoSelecionado}
+                  aoVoltar={() => {
+                     setTelaAtual('painel-recebimento');
+                     carregarDadosDaNuvem(true); 
+                  }} 
+                  usuarioLogado={usuarioLogado} 
+                />
+              )}
+              
+              {telaAtual === 'admin' && canSeeAdminMenu && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
+
+              {telaAtual === 'metas' && (
+                <div className="admin-container" style={{ marginTop: '20px' }}>
+                  <div className="admin-header">
+                    <h2>🎯 Metas e Desempenho</h2>
+                    <p>Módulo de Gestão de Indicadores e SLAs da Neta Dantas.</p>
+                  </div>
+                  <div className="card-novo-usuario" style={{ textAlign: 'center', padding: '60px 20px' }}>
+                    <span style={{ fontSize: '4rem', display: 'block', marginBottom: '20px' }}>🚧</span>
+                    <h3 style={{ justifyContent: 'center' }}>Módulo em Desenvolvimento</h3>
+                    <p style={{ color: '#7f8c8d', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6' }}>
+                      Em breve você poderá acompanhar aqui a velocidade da equipe (UPM), assertividade de separação e qualidade de entrega nas filiais.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {telaAtual === 'dashboard' && (
+                <div className="admin-container" style={{ marginTop: '20px' }}>
+                  <div className="admin-header">
+                    <h2>📊 Dashboard Gerencial</h2>
+                    <p>Visão geral e gráficos da operação logística.</p>
+                  </div>
+                  <div className="card-novo-usuario" style={{ textAlign: 'center', padding: '60px 20px' }}>
+                    <span style={{ fontSize: '4rem', display: 'block', marginBottom: '20px' }}>📈</span>
+                    <h3 style={{ justifyContent: 'center' }}>Em Breve</h3>
+                    <p style={{ color: '#7f8c8d', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6' }}>
+                      Os gráficos detalhados de volume de requisições, tempo médio de faturamento e produtividade por setor estarão disponíveis nesta tela.
+                    </p>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </main>

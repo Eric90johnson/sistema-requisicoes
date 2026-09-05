@@ -7,7 +7,6 @@ export default function AdminUsuarios() {
   const [carregando, setCarregando] = useState(false);
   const [processando, setProcessando] = useState(false);
 
-  // Estados do Formulário
   const [editandoId, setEditandoId] = useState(null);
   const [nome, setNome] = useState('');
   const [username, setUsername] = useState('');
@@ -15,7 +14,20 @@ export default function AdminUsuarios() {
   const [loja, setLoja] = useState('Matriz');
   const [hierarquia, setHierarquia] = useState('Subordinado');
   const [encarregadosSelecionados, setEncarregadosSelecionados] = useState([]); 
-  const [acessoAdmin, setAcessoAdmin] = useState(false); 
+  
+  // Permissões Granulares
+  const [permAcessoTotal, setPermAcessoTotal] = useState(false); 
+  const [permGerenciarUsuarios, setPermGerenciarUsuarios] = useState(false);
+  const [permAtualizarEstoque, setPermAtualizarEstoque] = useState(false);
+  const [permVerRelatorios, setPermVerRelatorios] = useState(false);
+  const [permGerenciarMetas, setPermGerenciarMetas] = useState(false);
+  const [permGerenciarNovidades, setPermGerenciarNovidades] = useState(false);
+  const [permBipLivre, setPermBipLivre] = useState(false);
+  const [permConsultaEstoque, setPermConsultaEstoque] = useState(false);
+  const [permVerRanking, setPermVerRanking] = useState(false);
+  
+  // NOVA PERMISSÃO: Dashboard
+  const [permDashboard, setPermDashboard] = useState(false);
 
   useEffect(() => {
     buscarUsuarios();
@@ -48,7 +60,17 @@ export default function AdminUsuarios() {
     setLoja('Matriz');
     setHierarquia('Subordinado');
     setEncarregadosSelecionados([]);
-    setAcessoAdmin(false);
+    
+    setPermAcessoTotal(false);
+    setPermGerenciarUsuarios(false);
+    setPermAtualizarEstoque(false);
+    setPermVerRelatorios(false);
+    setPermGerenciarMetas(false);
+    setPermGerenciarNovidades(false);
+    setPermBipLivre(false);
+    setPermConsultaEstoque(false);
+    setPermVerRanking(false);
+    setPermDashboard(false);
   };
 
   const iniciarEdicao = (user) => {
@@ -58,7 +80,17 @@ export default function AdminUsuarios() {
     setSenha(user.senha || '');
     setLoja(user.loja || 'Matriz');
     setHierarquia(user.hierarquia || 'Subordinado');
-    setAcessoAdmin(user.acesso_admin || false);
+    
+    setPermAcessoTotal(user.acesso_admin || false);
+    setPermGerenciarUsuarios(user.perm_gerenciar_usuarios || false);
+    setPermAtualizarEstoque(user.perm_atualizar_estoque || false);
+    setPermVerRelatorios(user.perm_ver_relatorios || false);
+    setPermGerenciarMetas(user.perm_gerenciar_metas || false);
+    setPermGerenciarNovidades(user.perm_gerenciar_novidades || false);
+    setPermBipLivre(user.perm_bip_livre || false);
+    setPermConsultaEstoque(user.perm_consulta_estoque || false);
+    setPermVerRanking(user.perm_ver_ranking || false);
+    setPermDashboard(user.perm_dashboard || false);
     
     if (user.encarregado_responsavel) {
       setEncarregadosSelecionados(user.encarregado_responsavel.split(', '));
@@ -90,8 +122,26 @@ export default function AdminUsuarios() {
         return;
       }
 
+      const dadosUsuario = {
+        nome_completo: nome,
+        username: username,
+        senha: senha,
+        loja: loja,
+        hierarquia: hierarquia,
+        encarregado_responsavel: responsavelFinal,
+        acesso_admin: permAcessoTotal, 
+        perm_gerenciar_usuarios: permGerenciarUsuarios,
+        perm_atualizar_estoque: permAtualizarEstoque,
+        perm_ver_relatorios: permVerRelatorios,
+        perm_gerenciar_metas: permGerenciarMetas,
+        perm_gerenciar_novidades: permGerenciarNovidades,
+        perm_bip_livre: permBipLivre,
+        perm_consulta_estoque: permConsultaEstoque,
+        perm_ver_ranking: permVerRanking,
+        perm_dashboard: permDashboard
+      };
+
       if (!editandoId) {
-        // --- MODO CRIAÇÃO ---
         const existe = usuarios.find(u => u.username.toLowerCase() === username.toLowerCase());
         if (existe) {
           alert("Este 'Usuário (Login)' já está em uso. Escolha outro.");
@@ -99,21 +149,11 @@ export default function AdminUsuarios() {
           return;
         }
 
-        // O .select() no final força o banco a devolver a linha confirmada
-        const { data, error } = await supabase.from('usuarios_sistema').insert([{
-          nome_completo: nome,
-          username: username,
-          senha: senha,
-          loja: loja,
-          hierarquia: hierarquia,
-          encarregado_responsavel: responsavelFinal,
-          acesso_admin: acessoAdmin
-        }]).select();
+        const { data, error } = await supabase.from('usuarios_sistema').insert([dadosUsuario]).select();
 
         if (error) throw error;
         
         alert("✅ Usuário criado com sucesso!");
-        // Atualiza a tela em tempo real com o dado devolvido pelo banco
         if (data && data.length > 0) {
           setUsuarios([...usuarios, data[0]]);
         } else {
@@ -121,29 +161,20 @@ export default function AdminUsuarios() {
         }
 
       } else {
-        // --- MODO EDIÇÃO ---
-        // O .select() no final força o banco a devolver a linha editada e evita a falha silenciosa
-        const { data, error } = await supabase.from('usuarios_sistema').update({
-          nome_completo: nome,
-          username: username,
-          senha: senha,
-          loja: loja,
-          hierarquia: hierarquia,
-          encarregado_responsavel: responsavelFinal,
-          acesso_admin: acessoAdmin
-        }).eq('id', editandoId).select();
+        const { data, error } = await supabase.from('usuarios_sistema')
+          .update(dadosUsuario)
+          .eq('id', editandoId)
+          .select();
 
         if (error) throw error;
 
-        // Se o banco não devolveu a linha, o Supabase bloqueou a edição silenciosamente
         if (!data || data.length === 0) {
-           alert("⚠️ O banco de dados falhou silenciosamente ao alterar o registro. Isso pode indicar uma restrição ativa no Supabase (RLS).");
+           alert("⚠️ O banco de dados falhou silenciosamente ao alterar o registro.");
            setProcessando(false);
            return;
         }
 
         alert("✅ Usuário atualizado com sucesso!");
-        // Atualiza a tabela na tela instantaneamente!
         setUsuarios(usuarios.map(u => u.id === editandoId ? data[0] : u));
       }
 
@@ -167,13 +198,8 @@ export default function AdminUsuarios() {
     if (!confirmacao) return;
 
     try {
-      const { error } = await supabase
-        .from('usuarios_sistema')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('usuarios_sistema').delete().eq('id', id);
       if (error) throw error;
-      // Atualiza o estado removendo o item instantaneamente
       setUsuarios(usuarios.filter(u => u.id !== id));
     } catch (erro) {
       console.error("Erro ao excluir:", erro);
@@ -181,46 +207,27 @@ export default function AdminUsuarios() {
     }
   };
 
+  const isMainAdmin = username === 'admin';
+
   return (
     <div className="admin-usuarios-container">
-      
-      {/* SEÇÃO 1: FORMULÁRIO DE CRIAÇÃO / EDIÇÃO */}
       <div className="card-novo-usuario">
         <h3><span>{editandoId ? '✏️' : '➕'}</span> {editandoId ? 'Editar Usuário' : 'Adicionar Novo Usuário'}</h3>
         <form className="form-usuarios" onSubmit={handleSalvarUsuario}>
           
           <div className="input-group-admin">
             <label>Nome Completo (ou Nome da Loja)</label>
-            <input 
-              type="text" 
-              placeholder="Ex: João da Silva" 
-              value={nome} 
-              onChange={(e) => setNome(e.target.value)} 
-              required 
-            />
+            <input type="text" placeholder="Ex: João da Silva" value={nome} onChange={(e) => setNome(e.target.value)} required />
           </div>
 
           <div className="input-group-admin">
             <label>Usuário (Usado para fazer Login)</label>
-            <input 
-              type="text" 
-              placeholder="Ex: joao.araturi" 
-              value={username} 
-              onChange={(e) => setUsername(e.target.value.replace(/\s+/g, '').toLowerCase())}
-              disabled={editandoId && username === 'admin'} 
-              required 
-            />
+            <input type="text" placeholder="Ex: joao.araturi" value={username} onChange={(e) => setUsername(e.target.value.replace(/\s+/g, '').toLowerCase())} disabled={editandoId && isMainAdmin} required />
           </div>
 
           <div className="input-group-admin">
             <label>Senha de Acesso</label>
-            <input 
-              type="text" 
-              placeholder="Digite uma senha" 
-              value={senha} 
-              onChange={(e) => setSenha(e.target.value)} 
-              required 
-            />
+            <input type="text" placeholder="Digite uma senha" value={senha} onChange={(e) => setSenha(e.target.value)} required />
           </div>
 
           <div className="input-group-admin">
@@ -242,7 +249,6 @@ export default function AdminUsuarios() {
             </select>
           </div>
 
-          {/* ÁREA DE MÚLTIPLOS ENCARREGADOS */}
           {hierarquia === 'Subordinado' && (
             <div className="input-group-admin">
               <label>Subordinado a quem? (Pode selecionar mais de um)</label>
@@ -266,18 +272,66 @@ export default function AdminUsuarios() {
             </div>
           )}
 
-          {/* CHECKBOX DE ACESSO ADMIN */}
-          <div className="input-group-admin" style={{ marginTop: '15px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', background: '#fcf3cf', padding: '12px', border: '1px solid #f1c40f', borderRadius: '6px', color: '#d35400', fontWeight: 'bold' }}>
-              <input
-                type="checkbox"
-                checked={username === 'admin' ? true : acessoAdmin}
-                onChange={(e) => setAcessoAdmin(e.target.checked)}
-                disabled={username === 'admin'} 
-                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-              />
-              🔑 Conceder privilégios de Administrador a este usuário
+          <div className="input-group-admin span-2-colunas" style={{ marginTop: '20px', background: '#fcf3cf', padding: '15px', border: '1px solid #f1c40f', borderRadius: '8px' }}>
+            <label style={{ fontWeight: 'bold', color: '#d35400', fontSize: '1.1rem', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🛡️ Permissões e Privilégios Extras
             </label>
+            
+            <div className="grid-permissoes">
+              <label className={`label-permissao ${permAcessoTotal || isMainAdmin ? 'permissao-master-ativa' : ''}`}>
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin} onChange={(e) => setPermAcessoTotal(e.target.checked)} disabled={isMainAdmin} />
+                Acesso Total (Master)
+              </label>
+
+              <label className="label-permissao">
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permGerenciarUsuarios} onChange={(e) => setPermGerenciarUsuarios(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Gerenciar Usuários
+              </label>
+
+              <label className="label-permissao">
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permAtualizarEstoque} onChange={(e) => setPermAtualizarEstoque(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Atualizar Estoque (Importar)
+              </label>
+              
+              <label className="label-permissao">
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permConsultaEstoque} onChange={(e) => setPermConsultaEstoque(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Acessar Consulta de Estoque
+              </label>
+
+              <label className="label-permissao">
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permVerRelatorios} onChange={(e) => setPermVerRelatorios(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Ver Relatórios (Histórico)
+              </label>
+
+              <label className="label-permissao">
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permDashboard} onChange={(e) => setPermDashboard(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Acessar Dashboard Gerencial
+              </label>
+
+              <label className="label-permissao">
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permGerenciarMetas} onChange={(e) => setPermGerenciarMetas(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Gerenciar Metas de Estoque
+              </label>
+
+              <label className="label-permissao">
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permGerenciarNovidades} onChange={(e) => setPermGerenciarNovidades(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Gerenciar Novidades (Popup)
+              </label>
+
+              <label className="label-permissao">
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permVerRanking} onChange={(e) => setPermVerRanking(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Acessar Ranking (Logística)
+              </label>
+
+              <label className="label-permissao" style={{ border: '1px solid #3498db' }}>
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permBipLivre} onChange={(e) => setPermBipLivre(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Liberar Bip Manual (Sem aprovação)
+              </label>
+            </div>
+            
+            <p style={{ fontSize: '0.8rem', color: '#e67e22', marginTop: '10px', fontStyle: 'italic' }}>
+              * Usuários com "Acesso Total" recebem todas as permissões automaticamente.
+            </p>
           </div>
 
           <div className="botoes-form-acoes">
@@ -293,7 +347,6 @@ export default function AdminUsuarios() {
         </form>
       </div>
 
-      {/* SEÇÃO 2: LISTAGEM DE USUÁRIOS */}
       <div className="lista-usuarios-section">
         <h3>Contas Ativas</h3>
         
@@ -316,7 +369,10 @@ export default function AdminUsuarios() {
                   <tr key={user.id}>
                     <td>
                       <strong>{user.nome_completo}</strong>
-                      {user.acesso_admin && <span style={{ marginLeft: '8px', background: '#f39c12', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold' }}>ADMIN</span>}
+                      {user.acesso_admin && <span style={{ marginLeft: '8px', background: '#f39c12', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold' }}>MASTER</span>}
+                      {!user.acesso_admin && (user.perm_gerenciar_usuarios || user.perm_atualizar_estoque || user.perm_ver_relatorios || user.perm_gerenciar_metas || user.perm_gerenciar_novidades || user.perm_bip_livre || user.perm_consulta_estoque || user.perm_ver_ranking || user.perm_dashboard) && (
+                        <span style={{ marginLeft: '8px', background: '#3498db', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold' }}>PERMISSÕES ESPECIAIS</span>
+                      )}
                       
                       {user.encarregado_responsavel && user.hierarquia === 'Subordinado' && (
                         <div style={{ fontSize: '0.8rem', color: '#7f8c8d', marginTop: '4px' }}>
@@ -336,20 +392,9 @@ export default function AdminUsuarios() {
                     </td>
                     <td>
                       <div className="acoes-tabela-container">
-                        <button 
-                          className="btn-editar-usuario"
-                          onClick={() => iniciarEdicao(user)}
-                        >
-                          ✏️ Editar
-                        </button>
-                        
+                        <button className="btn-editar-usuario" onClick={() => iniciarEdicao(user)}>✏️ Editar</button>
                         {user.username !== 'admin' ? (
-                          <button 
-                            className="btn-excluir-usuario"
-                            onClick={() => handleExcluirUsuario(user.id, user.username)}
-                          >
-                            🗑️ Excluir
-                          </button>
+                          <button className="btn-excluir-usuario" onClick={() => handleExcluirUsuario(user.id, user.username)}>🗑️ Excluir</button>
                         ) : (
                           <span className="texto-protegido">Protegido</span>
                         )}
@@ -357,17 +402,11 @@ export default function AdminUsuarios() {
                     </td>
                   </tr>
                 ))}
-                {usuarios.length === 0 && (
-                  <tr>
-                    <td colSpan="5" className="td-vazio-centro">Nenhum usuário encontrado.</td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
         )}
       </div>
-
     </div>
   );
 }
