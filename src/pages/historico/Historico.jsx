@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
+import { supabase } from '../../services/supabase';
 import '../../styles/pages/historico/historico.css';
 
 export default function Historico({ requisicoes, aoVoltar }) {
+  // Filtros de Pesquisa
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [filtroId, setFiltroId] = useState(''); 
@@ -13,6 +15,14 @@ export default function Historico({ requisicoes, aoVoltar }) {
 
   const [linhaExpandida, setLinhaExpandida] = useState(null);
   const [ordenacao, setOrdenacao] = useState({ coluna: 'data', direcao: 'desc' });
+
+  // NOVOS ESTADOS: Controle de Busca Direta no Banco
+  const [dadosHistorico, setDadosHistorico] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+  const [pesquisaRealizada, setPesquisaRealizada] = useState(false);
+
+  // Lista Fixa de Status para evitar dependência do cache limitado
+  const opcoesStatus = ['Pendente', 'Em Separação', 'Separado', 'Em Edição', 'Cancelada', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento', 'Concluída'];
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -33,65 +43,93 @@ export default function Historico({ requisicoes, aoVoltar }) {
     return new Date(`${ano}-${mes}-${dia}T00:00:00`);
   };
 
-  const temFiltroAtivo = dataInicio || dataFim || filtroId || filtroCodigo || filtroOrdem || filtroNotaFiscal || filtroStatus || filtroMarca;
+  // ==========================================
+  // FUNÇÃO DE BUSCA DIRETA NO SUPABASE
+  // ==========================================
+  const handlePesquisar = async () => {
+    if (!dataInicio && !dataFim && !filtroId && !filtroOrdem && !filtroNotaFiscal && !filtroCodigo && !filtroMarca && !filtroStatus) {
+      alert("Por favor, preencha pelo menos um campo de filtro para pesquisar.");
+      return;
+    }
 
-  const requisicoesFiltradas = temFiltroAtivo ? requisicoes.filter(req => {
-    let passaFiltro = true;
+    setBuscando(true);
+    
+    try {
+      // Prepara a consulta base
+      let query = supabase.from('requisicoes').select('*');
 
-    if (dataInicio || dataFim) {
-      const dataReq = converterData(req.data);
+      // Aplica filtros nativos no banco para economizar banda (Lazy Loading)
       if (dataInicio) {
-        const inicio = new Date(`${dataInicio}T00:00:00`);
-        if (dataReq < inicio) passaFiltro = false;
+        const inicioTs = new Date(`${dataInicio}T00:00:00`).getTime();
+        query = query.gte('timestamp_criacao', inicioTs);
       }
       if (dataFim) {
-        const fim = new Date(`${dataFim}T23:59:59`);
-        if (dataReq > fim) passaFiltro = false;
+        const fimTs = new Date(`${dataFim}T23:59:59`).getTime();
+        query = query.lte('timestamp_criacao', fimTs);
       }
-    }
-
-    if (filtroId && passaFiltro) {
-      if (!req.id.toString().includes(filtroId)) passaFiltro = false;
-    }
-
-    if (filtroCodigo && passaFiltro) {
-      const temProduto = req.listaItens && req.listaItens.some(item => 
-        item.cod.toUpperCase().includes(filtroCodigo.toUpperCase())
-      );
-      if (!temProduto) passaFiltro = false;
-    }
-
-    if (filtroMarca && passaFiltro) {
-      const temProdutoMarca = req.listaItens && req.listaItens.some(item => 
-        (item.marca || '').toUpperCase().includes(filtroMarca.toUpperCase()) || 
-        (item.descricao || '').toUpperCase().includes(filtroMarca.toUpperCase())
-      );
-      if (!temProdutoMarca) passaFiltro = false;
-    }
-
-    if (filtroOrdem && passaFiltro) {
-      if (!req.numeroRequisicaoExterna || !req.numeroRequisicaoExterna.includes(filtroOrdem)) {
-        passaFiltro = false;
+      if (filtroStatus) {
+        query = query.eq('status', filtroStatus);
       }
-    }
-
-    if (filtroNotaFiscal && passaFiltro) {
-      if (!req.notaFiscal || !req.notaFiscal.includes(filtroNotaFiscal)) {
-        passaFiltro = false;
+      if (filtroOrdem) {
+        query = query.ilike('numero_requisicao_externa', `%${filtroOrdem}%`);
       }
-    }
-
-    if (filtroStatus && passaFiltro) {
-      if (req.status !== filtroStatus) {
-        passaFiltro = false;
+      if (filtroNotaFiscal) {
+        query = query.ilike('nota_fiscal', `%${filtroNotaFiscal}%`);
       }
-    }
 
-    return passaFiltro;
-  }) : [];
+      // Limita em 2000 para proteção do navegador caso a busca seja muito ampla
+      query = query.limit(2000).order('timestamp_criacao', { ascending: false });
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Formata os dados retornados
+      const reqsFormatadas = data.map(r => ({
+        ...r,
+        timestampCriacao: r.timestamp_criacao,
+        listaItens: r.lista_itens,
+        metricasSeparacao: r.metricas_separacao,
+        numeroRequisicaoExterna: r.numero_requisicao_externa,
+        notaFiscal: r.nota_fiscal
+      }));
+
+      // Aplica os Filtros Complexos (dentro do JSON) localmente
+      const resultadosFinais = reqsFormatadas.filter(req => {
+        let passa = true;
+        
+        if (filtroId && !req.id.toString().includes(filtroId)) passa = false;
+        
+        if (filtroCodigo && passa) {
+          const temProduto = req.listaItens && req.listaItens.some(item => 
+            item.cod.toUpperCase().includes(filtroCodigo.toUpperCase())
+          );
+          if (!temProduto) passa = false;
+        }
+
+        if (filtroMarca && passa) {
+          const temProdutoMarca = req.listaItens && req.listaItens.some(item => 
+            (item.marca || '').toUpperCase().includes(filtroMarca.toUpperCase()) || 
+            (item.descricao || '').toUpperCase().includes(filtroMarca.toUpperCase())
+          );
+          if (!temProdutoMarca) passa = false;
+        }
+        
+        return passa;
+      });
+
+      setDadosHistorico(resultadosFinais);
+      setPesquisaRealizada(true);
+
+    } catch (err) {
+      console.error("Erro ao pesquisar histórico:", err);
+      alert("Ocorreu um erro ao buscar o histórico. Tente novamente.");
+    } finally {
+      setBuscando(false);
+    }
+  };
 
   const requisicoesOrdenadas = useMemo(() => {
-    return [...requisicoesFiltradas].sort((a, b) => {
+    return [...dadosHistorico].sort((a, b) => {
       let valA = a[ordenacao.coluna];
       let valB = b[ordenacao.coluna];
 
@@ -119,7 +157,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
       if (valA > valB) return ordenacao.direcao === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [requisicoesFiltradas, ordenacao]);
+  }, [dadosHistorico, ordenacao]);
 
   const limparFiltros = () => {
     setDataInicio('');
@@ -131,6 +169,8 @@ export default function Historico({ requisicoes, aoVoltar }) {
     setFiltroStatus('');
     setFiltroMarca(''); 
     setLinhaExpandida(null);
+    setDadosHistorico([]);
+    setPesquisaRealizada(false);
   };
 
   const formatarTempo = (segundos) => {
@@ -170,11 +210,9 @@ export default function Historico({ requisicoes, aoVoltar }) {
     return `${(seg / itens).toFixed(1)}s / un`;
   };
 
-  const opcoesStatus = [...new Set(requisicoes.map(r => r.status))].filter(Boolean);
-
   const exportarParaExcel = () => {
     if (requisicoesOrdenadas.length === 0) {
-      alert("Não há dados para exportar com os filtros atuais.");
+      alert("Não há dados para exportar.");
       return;
     }
 
@@ -262,7 +300,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
         </button>
       </div>
 
-      {/* LÓGICA DE UX APLICADA: Container externo modificado para empilhar duas linhas */}
       <div className="filtros-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         
         {/* LINHA 1: Seleções e Datas */}
@@ -286,7 +323,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
           </div>
         </div>
 
-        {/* LINHA 2: Textos Livres e Botão de Limpar */}
+        {/* LINHA 2: Textos Livres e Botões de Pesquisa */}
         <div className="filtros-linha" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', alignItems: 'end' }}>
           <div className="filtro-item">
             <label>Nº Requisição (ID)</label>
@@ -309,7 +346,19 @@ export default function Historico({ requisicoes, aoVoltar }) {
             <input type="text" className="input-filtro" placeholder="Buscar NF" value={filtroNotaFiscal} onChange={(e) => setFiltroNotaFiscal(e.target.value)} />
           </div>
           
-          <button className="btn-limpar" onClick={limparFiltros} style={{ width: '100%' }}>Limpar Tudo</button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="btn-limpar" onClick={limparFiltros} style={{ flex: 1 }} disabled={buscando}>
+              Limpar
+            </button>
+            <button 
+              className="btn-salvar-rec" 
+              onClick={handlePesquisar} 
+              disabled={buscando} 
+              style={{ flex: 1.5, backgroundColor: '#2980b9', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', padding: '10px' }}
+            >
+              {buscando ? '⏳ ...' : '🔍 Pesquisar'}
+            </button>
+          </div>
         </div>
 
       </div>
@@ -334,13 +383,13 @@ export default function Historico({ requisicoes, aoVoltar }) {
               </tr>
             </thead>
             <tbody>
-              {!temFiltroAtivo ? (
+              {!pesquisaRealizada ? (
                 <tr>
                   <td colSpan="12" style={{ textAlign: 'center', padding: '50px 20px', color: '#666' }}>
                     <span style={{ fontSize: '2rem', display: 'block', margin: '0 auto 10px' }}>🔍</span>
-                    <strong>Preencha um ou mais filtros acima para visualizar o relatório gerencial.</strong>
+                    <strong>Preencha um ou mais filtros acima e clique em "Pesquisar" para gerar o relatório.</strong>
                     <p style={{ fontSize: '0.9rem', color: '#999', marginTop: '5px' }}>
-                      Para manter o sistema rápido, as requisições só aparecem após a busca.
+                      As buscas são feitas diretamente na base de dados para garantir informações completas.
                     </p>
                   </td>
                 </tr>
@@ -438,7 +487,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
               ) : (
                 <tr>
                   <td colSpan="12" style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}>
-                    Nenhuma requisição encontrada com os filtros selecionados. Tente ajustar a busca.
+                    Nenhuma requisição encontrada com os filtros selecionados no banco de dados.
                   </td>
                 </tr>
               )}

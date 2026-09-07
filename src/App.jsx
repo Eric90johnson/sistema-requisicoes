@@ -25,7 +25,7 @@ function App() {
   const [telaAtual, setTelaAtual] = useState('painel');
   const [abaPainelAtiva, setAbaPainelAtiva] = useState('interna');
   const [reqSelecionada, setReqSelecionada] = useState(null);
-  const [recebimentoSelecionado, setRecebimentoSelecionado] = useState(null); // NOVO ESTADO: Recebimento Clicado
+  const [recebimentoSelecionado, setRecebimentoSelecionado] = useState(null); 
   const [abaAdminAtiva, setAbaAdminAtiva] = useState('base-dados');
 
   const [produtosPreSelecionados, setProdutosPreSelecionados] = useState(null);
@@ -42,7 +42,6 @@ function App() {
   const [recordesGlobais, setRecordesGlobais] = useState({});
   const [carregando, setCarregando] = useState(false);
 
-  // Estados de Notificações
   const [autorizacoesPendentes, setAutorizacoesPendentes] = useState([]);
   const [pausasPendentes, setPausasPendentes] = useState([]); 
 
@@ -68,8 +67,8 @@ function App() {
   const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      // 1. Busca Requisições
-      const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false });
+      // CORREÇÃO: Limite de 100 registros para evitar sobrecarga de rede
+      const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false }).limit(100);
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
           ...r,
@@ -87,15 +86,14 @@ function App() {
         });
       }
 
-      // 2. Busca Recebimentos (Para o Ranking e Painel)
-      const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select('*').order('data_criacao', { ascending: false });
+      // CORREÇÃO: Limite de 150 registros para recebimentos
+      const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select('*').order('data_criacao', { ascending: false }).limit(150);
       if (recMercadorias) {
         setRecebimentos(recMercadorias);
       }
 
       if (rapido) return;
 
-      // 3. Busca Recordes
       const { data: recData } = await supabase.from('recordes_globais').select('*');
       if (recData) {
         const objRecordes = {};
@@ -105,7 +103,6 @@ function App() {
         setRecordesGlobais(objRecordes);
       }
 
-      // 4. Busca Base de Produtos
       let todosOsProdutos = [];
       let buscouTodos = false;
       let indexAtual = 0;
@@ -147,7 +144,6 @@ function App() {
           const isAdmin = usuarioLogado.username === 'admin' || usuarioLogado.acesso_admin;
           const nomeLider = usuarioLogado.nome_completo ? usuarioLogado.nome_completo.trim() : '';
 
-          // --- BUSCA BIPS PENDENTES ---
           let queryBip = supabase.from('autorizacoes_bip').select('*').eq('status', 'pendente');
           if (!isAdmin && nomeLider) {
              queryBip = queryBip.ilike('encarregado_destino', `%${nomeLider}%`);
@@ -162,7 +158,6 @@ function App() {
             });
           }
 
-          // --- BUSCA PAUSAS PENDENTES ---
           let queryPausa = supabase.from('pausas_separacao').select('*').eq('status', 'pendente');
           if (!isAdmin && nomeLider) {
              queryPausa = queryPausa.ilike('encarregado_destino', `%${nomeLider}%`);
@@ -189,17 +184,22 @@ function App() {
 
     const loopSincronizacao = async () => {
       if (!isMounted) return;
-      try {
-        await carregarDadosDaNuvem(true, true);
-        await fetchPendentes();
-      } catch (e) {}
       
+      // CORREÇÃO: Só consulta o servidor se a aba do navegador estiver aberta e visível (Economia enorme de dados)
+      if (document.visibilityState === 'visible') {
+        try {
+          await carregarDadosDaNuvem(true, true);
+          await fetchPendentes();
+        } catch (e) {}
+      }
+      
+      // CORREÇÃO: Intervalo aumentado de 5s para 20s
       if (isMounted) {
-        timerId = setTimeout(loopSincronizacao, 5000);
+        timerId = setTimeout(loopSincronizacao, 20000);
       }
     };
 
-    timerId = setTimeout(loopSincronizacao, 5000);
+    timerId = setTimeout(loopSincronizacao, 20000);
 
     return () => {
       isMounted = false;
@@ -281,7 +281,7 @@ function App() {
     const { error } = await supabase.from('requisicoes').update({ status: 'Cancelada', historico: historicoAtualizado }).eq('id', id);
     if (!error) {
       setReqEmEdicao(null);
-      await carregarDadosDaNuvem(true); 
+      await carregarDadosDaNuvem(true, true); 
       setTelaAtual('painel'); 
     }
   };
@@ -295,7 +295,7 @@ function App() {
       }).eq('id', novaReq.id);
 
       if (!error) { 
-        setReqEmEdicao(null); await carregarDadosDaNuvem(true); setTelaAtual('painel'); 
+        setReqEmEdicao(null); await carregarDadosDaNuvem(true, true); setTelaAtual('painel'); 
       }
     } else {
       const { error } = await supabase.from('requisicoes').insert([{
@@ -308,7 +308,7 @@ function App() {
         if (novaReq.metricasSeparacao?.bateuRecorde) {
           await supabase.from('recordes_globais').upsert({ qtd_itens: novaReq.metricasSeparacao.totalItensFisicos, tempo_segundos: novaReq.metricasSeparacao.tempoTotalSegundos, responsavel: novaReq.metricasSeparacao.responsavel, data: new Date().toLocaleDateString() });
         }
-        await carregarDadosDaNuvem(true); 
+        await carregarDadosDaNuvem(true, true); 
         setTelaAtual('painel'); 
         setProdutosPreSelecionados(null); setInicioCronometroGlobal(null); setTipoReposicaoGlobal('interna'); 
       }
@@ -457,7 +457,6 @@ function App() {
               
               {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => {setTelaAtual('painel'); setInicioCronometroGlobal(null); setTipoReposicaoGlobal('interna');}} produtos={baseProdutos} setProdutos={setBaseProdutos} itensPreRequisicao={itensPreRequisicao} aoAdicionarPreRequisicao={(p) => setItensPreRequisicao(v => v.some(i => String(i.codigo) === String(p.codigo)) ? v : [...v, p])} aoRemoverPreRequisicao={(c) => setItensPreRequisicao(v => v.filter(i => String(i.codigo) !== String(c)))} aoIrParaPreRequisicao={() => {setProdutosPreSelecionados(itensPreRequisicao); setItensPreRequisicao([]); setTelaAtual('nova');}} tipoReposicaoGlobal={tipoReposicaoGlobal} setTipoReposicaoGlobal={setTipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} setInicioCronometroGlobal={setInicioCronometroGlobal} />}
               
-              {/* ROTA: PAINEL DE RECEBIMENTOS */}
               {telaAtual === 'painel-recebimento' && (
                 <PainelRecebimento 
                   recebimentos={recebimentos} 
@@ -471,24 +470,22 @@ function App() {
                 />
               )}
 
-              {/* ROTA: NOVO RECEBIMENTO (FORMULÁRIO VAZIO) */}
               {telaAtual === 'novo-recebimento' && (
                 <RecebimentoProdutos 
                   aoVoltar={() => {
                     setTelaAtual('painel-recebimento');
-                    carregarDadosDaNuvem(true);
+                    carregarDadosDaNuvem(true, true);
                   }} 
                   usuarioLogado={usuarioLogado} 
                 />
               )}
 
-              {/* ROTA: DETALHES E CONFERÊNCIA DE UM RECEBIMENTO EXISTENTE */}
               {telaAtual === 'detalhes-recebimento' && recebimentoSelecionado && (
                 <DetalhesRecebimento 
                   recebimento={recebimentoSelecionado}
                   aoVoltar={() => {
                      setTelaAtual('painel-recebimento');
-                     carregarDadosDaNuvem(true); 
+                     carregarDadosDaNuvem(true, true); 
                   }} 
                   usuarioLogado={usuarioLogado} 
                 />
