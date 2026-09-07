@@ -86,8 +86,9 @@ function App() {
         });
       }
 
-      // CORREÇÃO: Limite de 150 registros para recebimentos
-      const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select('*').order('data_criacao', { ascending: false }).limit(150);
+      // CORREÇÃO: Limite de 50 registros para recebimentos
+      const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select('*').order('data_criacao', { ascending: false }).limit(
+        50);
       if (recMercadorias) {
         setRecebimentos(recMercadorias);
       }
