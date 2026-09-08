@@ -2,39 +2,62 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../services/supabase';
 import '../../styles/pages/recebimento/recebimento.css';
 
-export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
-  const [lojaRecebedora, setLojaRecebedora] = useState('Matriz');
-  const [numeroRelatorio, setNumeroRelatorio] = useState('REC.X.001');
-  const [nomeFornecedor, setNomeFornecedor] = useState('');
-  const [marca, setMarca] = useState('');
-  const [numeroNF, setNumeroNF] = useState('');
-  const [volumes, setVolumes] = useState('');
-  const [numeroPedido, setNumeroPedido] = useState(''); 
-  const [responsavelRecebedor, setResponsavelRecebedor] = useState(''); 
-  const [observacoes, setObservacoes] = useState('');
+// Importando os módulos fatiados
+import CabecalhoRecebimento from './detalhes/CabecalhoRecebimento';
+import ObservacoesRecebimento from './detalhes/ObservacoesRecebimento';
+import EdicaoRecebimento from './detalhes/EdicaoRecebimento';
+import CronometroRecebimento from './detalhes/CronometroRecebimento';
+import TabelaProdutosRecebimento from './detalhes/TabelaProdutosRecebimento';
+import ImpressaoRecebimento from './detalhes/ImpressaoRecebimento';
 
-  const [itens, setItens] = useState([
-    { id: 1, codigoFornecedor: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '' }
-  ]);
+export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLogado }) {
+  // ==========================================
+  // 1. ESTADOS GERAIS E CABEÇALHO
+  // ==========================================
+  const [lojaRecebedora, setLojaRecebedora] = useState(recebimento?.loja_recebedora || 'Matriz');
+  const [numeroRelatorio, setNumeroRelatorio] = useState(recebimento?.numero_relatorio || 'REC.X.000');
+  const [nomeFornecedor, setNomeFornecedor] = useState(recebimento?.nome_fornecedor || '');
+  const [marca, setMarca] = useState(recebimento?.marca || '');
+  const [numeroNF, setNumeroNF] = useState(recebimento?.numero_nf || '');
+  const [volumes, setVolumes] = useState(recebimento?.volumes || '');
+  const [numeroPedido, setNumeroPedido] = useState(recebimento?.numero_pedido || '');
+  
+  const [responsavelRecebedor, setResponsavelRecebedor] = useState(recebimento?.responsavel_recebedor || usuarioLogado?.nome_completo || '');
+  
+  // NOVO ESTADO: O responsável por lançar no sistema
+  const [responsavelCadastro, setResponsavelCadastro] = useState(recebimento?.responsavel_cadastro || usuarioLogado?.nome_completo || '');
+  const [observacoes, setObservacoes] = useState(recebimento?.observacoes || '');
+
+  // Atualizando a estrutura base dos Itens com os novos campos de código de barras
+  const [itens, setItens] = useState(
+    recebimento?.itens && recebimento.itens.length > 0 
+      ? recebimento.itens 
+      : [{ id: Date.now(), codigoFornecedor: '', codigoBarras: '', codigoSistema: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '' }]
+  );
+
+  const [status, setStatus] = useState(recebimento?.status || 'Pendente');
+  const [inicioConferencia, setInicioConferencia] = useState(recebimento?.metricas_recebimento?.inicioConferencia || null);
+  const [tempoDecorrido, setTempoDecorrido] = useState(recebimento?.metricas_recebimento?.tempoTotalSegundos || 0);
+  const [metricasRecebimento, setMetricasRecebimento] = useState(recebimento?.metricas_recebimento || null);
 
   const [processando, setProcessando] = useState(false);
   const [popup, setPopup] = useState({ visivel: false, tipo: '', titulo: '', mensagem: '', onConfirm: null });
 
   // ==========================================
-  // ESTADOS E REFS DA CÂMERA (LEITOR REAL)
+  // 2. ESTADOS DE EDIÇÃO E OBSERVAÇÕES
+  // ==========================================
+  const [isEditing, setIsEditing] = useState(false);
+  const [modoNomeEdicao, setModoNomeEdicao] = useState(false);
+  const [nomeEditor, setNomeEditor] = useState('');
+  const [novaObservacao, setNovaObservacao] = useState('');
+
+  // ==========================================
+  // 3. ESTADOS DA CÂMERA E PAUSAS
   // ==========================================
   const [scannerAtivo, setScannerAtivo] = useState(null); 
   const videoRef = useRef(null);
   const mediaStreamRef = useRef(null);
-
-  const exibirPopup = (tipo, titulo, mensagem, onConfirm = null) => {
-    setPopup({ visivel: true, tipo, titulo, mensagem, onConfirm });
-  };
-
-  const [status, setStatus] = useState('Pendente'); 
-  const [inicioConferencia, setInicioConferencia] = useState(null);
-  const [tempoDecorrido, setTempoDecorrido] = useState(0);
-  const [metricasRecebimento, setMetricasRecebimento] = useState(null);
+  const foiLidoRef = useRef(false); 
 
   const [pausaPendente, setPausaPendente] = useState(false);
   const [pausaAtivaInicio, setPausaAtivaInicio] = useState(null);
@@ -42,43 +65,65 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
   const [tipoPausaAtiva, setTipoPausaAtiva] = useState(null);
   const [tempoPausadoTotal, setTempoPausadoTotal] = useState(0);
 
+  // ==========================================
+  // 4. MODO ESPECTADOR (LOCKING GLOBAL)
+  // ==========================================
+  const idConferente = metricasRecebimento?.id_conferente || recebimento?.metricas_recebimento?.id_conferente;
+  const meuId = usuarioLogado?.username || usuarioLogado?.nome_completo;
+  
+  const isViewer = status === 'Em Conferência' && idConferente && idConferente !== meuId;
+  const souOConferente = status === 'Em Conferência' && (!idConferente || idConferente === meuId);
+
+  const exibirPopup = (tipo, titulo, mensagem, onConfirm = null) => {
+    setPopup({ visivel: true, tipo, titulo, mensagem, onConfirm });
+  };
+
+  // ==========================================
+  // 5. SINCRONIZAÇÃO COMPLETA DAS PROPS
+  // ==========================================
   useEffect(() => {
-    let siglaLoja = 'X';
-    if (lojaRecebedora === 'Araturi') siglaLoja = 'A';
-    else if (lojaRecebedora === 'Conjunto Ceará') siglaLoja = 'C';
-    else if (lojaRecebedora === 'Messejana') siglaLoja = 'M';
-    else if (lojaRecebedora === 'Mulungu') siglaLoja = 'MU';
-    else if (lojaRecebedora === 'Matriz') siglaLoja = 'MT';
+    if (recebimento) {
+      setLojaRecebedora(recebimento.loja_recebedora || 'Matriz');
+      setNumeroRelatorio(recebimento.numero_relatorio || 'REC.X.000');
+      setNomeFornecedor(recebimento.nome_fornecedor || '');
+      setMarca(recebimento.marca || '');
+      setNumeroNF(recebimento.numero_nf || '');
+      setVolumes(recebimento.volumes || '');
+      setNumeroPedido(recebimento.numero_pedido || '');
+      setResponsavelRecebedor(recebimento.responsavel_recebedor || usuarioLogado?.nome_completo || '');
+      setResponsavelCadastro(recebimento.responsavel_cadastro || usuarioLogado?.nome_completo || '');
+      setObservacoes(recebimento.observacoes || '');
+      setStatus(recebimento.status || 'Pendente');
 
-    const buscarProximoNumero = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('recebimento_mercadorias')
-          .select('numero_relatorio')
-          .ilike('numero_relatorio', `REC.${siglaLoja}.%`)
-          .order('id', { ascending: false })
-          .limit(1);
-
-        let proximoSeq = 1;
-        if (!error && data && data.length > 0) {
-          const ultimoRel = data[0].numero_relatorio;
-          const partes = ultimoRel.split('.');
-          if (partes.length === 3) {
-            const seq = parseInt(partes[2], 10);
-            if (!isNaN(seq)) proximoSeq = seq + 1;
+      if (recebimento.metricas_recebimento) {
+        setMetricasRecebimento(recebimento.metricas_recebimento);
+        if (recebimento.metricas_recebimento.inicioConferencia) {
+          const tsInicio = Number(recebimento.metricas_recebimento.inicioConferencia);
+          setInicioConferencia(tsInicio);
+          
+          if (recebimento.status === 'Em Conferência') {
+            const diferenca = Date.now() - tsInicio - tempoPausadoTotal;
+            if (diferenca > 0) setTempoDecorrido(Math.floor(diferenca / 1000));
           }
         }
-        setNumeroRelatorio(`REC.${siglaLoja}.${String(proximoSeq).padStart(3, '0')}`);
-      } catch (e) {
-        setNumeroRelatorio(`REC.${siglaLoja}.001`);
+        // MODIFICADO: Inclui a nova etapa 'Aguardando Cadastro' para congelar o timer
+        if (recebimento.status === 'Concluída' || recebimento.status === 'Cancelada' || recebimento.status === 'Aguardando Cadastro') {
+          setTempoDecorrido(recebimento.metricas_recebimento.tempoTotalSegundos || 0);
+        }
       }
-    };
-    buscarProximoNumero();
-  }, [lojaRecebedora]);
 
+      if (isViewer || recebimento.status !== 'Em Conferência') {
+        if (recebimento.itens && recebimento.itens.length > 0) {
+          setItens(recebimento.itens);
+        }
+      }
+    }
+  }, [recebimento, isViewer, tempoPausadoTotal, usuarioLogado]);
+
+  // Motor do Relógio
   useEffect(() => {
     let intervalo;
-    if (status === 'Em Conferência' && !metricasRecebimento) {
+    if (status === 'Em Conferência' && !metricasRecebimento?.tempoTotalSegundos) {
       if (pausaAtivaInicio) {
         const diferenca = (Number(pausaAtivaInicio) - Number(inicioConferencia)) - tempoPausadoTotal;
         setTempoDecorrido(Math.max(0, Math.floor(diferenca / 1000)));
@@ -97,19 +142,11 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
     const fetchPausa = async () => {
       const { data } = await supabase.from('pausas_separacao')
         .select('*').eq('requisicao_id', numeroRelatorio).eq('solicitante_nome', usuarioLogado.nome_completo).order('timestamp_criacao', { ascending: false }).limit(1);
-      
       if (data && data.length > 0) {
         const p = data[0];
-        if (p.status === 'pendente') {
-          setPausaPendente(true);
-        } else if (p.status === 'aprovada' && !pausaAtivaInicio) {
-          setPausaPendente(false);
-          setPausaAtivaInicio(p.inicio_pausa);
-          setPausaAtivaId(p.id);
-          setTipoPausaAtiva(p.tipo_pausa);
-        } else if (p.status === 'recusada') {
-          setPausaPendente(false);
-        }
+        if (p.status === 'pendente') setPausaPendente(true);
+        else if (p.status === 'aprovada' && !pausaAtivaInicio) { setPausaPendente(false); setPausaAtivaInicio(p.inicio_pausa); setPausaAtivaId(p.id); setTipoPausaAtiva(p.tipo_pausa); } 
+        else if (p.status === 'recusada') setPausaPendente(false);
       }
     };
     fetchPausa();
@@ -124,18 +161,211 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
     return `${h}:${m}:${s}`;
   };
 
-  const handleIniciarConferencia = () => {
-    if (!responsavelRecebedor.trim()) {
-      exibirPopup('aviso', 'Atenção', "Digite o Nome do Responsável Recebedor antes de iniciar!");
-      return;
+  // ==========================================
+  // INICIAR CONFERÊNCIA
+  // ==========================================
+  const handleIniciarConferencia = async () => {
+    const nomeFinal = responsavelRecebedor.trim() || usuarioLogado?.nome_completo || 'Colaborador';
+    if (!nomeFinal) return exibirPopup('aviso', 'Atenção', "Digite o seu nome para iniciar a conferência das unidades!");
+
+    setProcessando(true);
+    try {
+      const tempoInicio = Date.now();
+      const metricasIniciais = { ...(recebimento.metricas_recebimento || {}), inicioConferencia: tempoInicio, id_conferente: meuId };
+      const { error } = await supabase.from('recebimento_mercadorias').update({ status: 'Em Conferência', responsavel_recebedor: nomeFinal, metricas_recebimento: metricasIniciais }).eq('id', recebimento.id);
+      if (error) throw error;
+
+      setStatus('Em Conferência');
+      setResponsavelRecebedor(nomeFinal);
+      setInicioConferencia(tempoInicio);
+      setMetricasRecebimento(metricasIniciais);
+    } catch (e) {
+      exibirPopup('erro', 'Falha de Conexão', 'Não foi possível iniciar a conferência globalmente:\n\n' + e.message);
+    } finally {
+      setProcessando(false);
     }
-    setStatus('Em Conferência');
-    setInicioConferencia(Date.now());
+  };
+
+  const handleRetomarConferencia = async () => {
+    const tempoPausadoAgora = Date.now() - Number(pausaAtivaInicio);
+    setTempoPausadoTotal(prev => prev + tempoPausadoAgora);
+    setPausaAtivaInicio(null); setTipoPausaAtiva(null);
+    if (pausaAtivaId) await supabase.from('pausas_separacao').update({ status: 'finalizada' }).eq('id', pausaAtivaId);
+    exibirPopup('sucesso', 'Conferência Retomada', 'O cronômetro voltou a correr.');
+  };
+
+  // ==========================================
+  // FUNÇÕES DE AUTO-SAVE DA TABELA
+  // ==========================================
+  const atualizarItensE_SalvarGlobal = (novoEstadoOuFuncao) => {
+    setItens(prev => {
+      const novaLista = typeof novoEstadoOuFuncao === 'function' ? novoEstadoOuFuncao(prev) : novoEstadoOuFuncao;
+      if (souOConferente) {
+        supabase.from('recebimento_mercadorias').update({ itens: novaLista }).eq('id', recebimento.id);
+      }
+      return novaLista;
+    });
+  };
+
+  const handleAtualizarItem = (id, campo, valor) => atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === id ? { ...item, [campo]: valor } : item));
+
+  const handleAdicionarItemVazio = () => atualizarItensE_SalvarGlobal(prev => [...prev, { id: Date.now(), codigoFornecedor: '', codigoBarras: '', codigoSistema: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '' }]);
+  
+  const handleDuplicarParaNovoLote = (itemOriginal) => {
+    const novoLote = { id: Date.now(), codigoFornecedor: itemOriginal.codigoFornecedor, codigoBarras: itemOriginal.codigoBarras, codigoSistema: itemOriginal.codigoSistema, descricaoFornecedor: itemOriginal.descricaoFornecedor, quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '' };
+    atualizarItensE_SalvarGlobal(prev => {
+      const index = prev.findIndex(i => i.id === itemOriginal.id);
+      const novaLista = [...prev];
+      novaLista.splice(index + 1, 0, novoLote);
+      return novaLista;
+    });
+  };
+
+  const handleRemoverItem = (id) => {
+    if (itens.length === 1) return exibirPopup('aviso', 'Mínimo de Itens', "O recebimento precisa ter pelo menos um item registrado.");
+    atualizarItensE_SalvarGlobal(prev => prev.filter(item => item.id !== id));
+  };
+
+  // ==========================================
+  // BUSCA INTELIGENTE DO PRODUTO (NOVA LÓGICA DO BANCO)
+  // ==========================================
+  const buscarProdutoPorCodigo = async (itemId, codigoBarras) => {
+    handleAtualizarItem(itemId, 'codigoBarras', codigoBarras);
+    if (!codigoBarras || codigoBarras.trim() === '') return;
+
+    try {
+      const { data, error } = await supabase
+        .from('base_produtos')
+        .select('codigo, descricao')
+        .eq('codigo_barra', codigoBarras.trim())
+        .single();
+
+      if (data) {
+        atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === itemId ? { 
+          ...item, 
+          codigoSistema: data.codigo, 
+          descricaoFornecedor: data.descricao 
+        } : item));
+      } else {
+        throw new Error('Não encontrado');
+      }
+    } catch (err) {
+      atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === itemId ? { 
+        ...item, 
+        codigoSistema: '-', 
+        descricaoFornecedor: 'NOVO CADASTRO' 
+      } : item));
+    }
+  };
+
+  // ==========================================
+  // MOTOR DA CÂMERA
+  // ==========================================
+  const fecharModalScanner = () => {
+    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(track => track.stop()); mediaStreamRef.current = null; }
+    setScannerAtivo(null);
+  };
+
+  const abrirModalScanner = async (item, tipo = 'contagem') => {
+    if (tipo === 'contagem' && (!item.quantidade || Number(item.quantidade) <= 0)) {
+      return exibirPopup('aviso', 'Atenção', 'Informe a quantidade na NF antes de iniciar a conferência.');
+    }
+    
+    foiLidoRef.current = false;
+    setScannerAtivo({ item, tipo });
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      mediaStreamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+      iniciarDeteccaoCodigo(stream, item, tipo);
+    } catch (err) {
+      exibirPopup('erro', 'Acesso à Câmera', 'Não foi possível abrir a câmera. Verifique permissões.');
+      setScannerAtivo(null);
+    }
+  };
+
+  const iniciarDeteccaoCodigo = (stream, itemAlvo, tipoScanner) => {
+    if (!('BarcodeDetector' in window)) return;
+    const barcodeDetector = new window.BarcodeDetector({ formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code', 'code_39'] });
+    
+    const verificarFrame = async () => {
+      if (!videoRef.current || !mediaStreamRef.current || foiLidoRef.current) return;
+      try {
+        const barcodes = await barcodeDetector.detect(videoRef.current);
+        if (barcodes.length > 0) {
+          foiLidoRef.current = true; 
+          const codigoLido = barcodes[0].rawValue;
+
+          if (tipoScanner === 'identificacao') {
+            buscarProdutoPorCodigo(itemAlvo.id, codigoLido);
+            fecharModalScanner();
+          } else {
+            incrementarBip(itemAlvo.id);
+            setTimeout(() => { foiLidoRef.current = false; }, 1000); 
+          }
+        }
+      } catch (e) {}
+      if (mediaStreamRef.current && !foiLidoRef.current) requestAnimationFrame(verificarFrame);
+    };
+    requestAnimationFrame(verificarFrame);
+  };
+
+  const incrementarBip = (itemId) => {
+    atualizarItensE_SalvarGlobal(prev => prev.map(item => {
+      if (item.id === itemId) {
+        const novaQtd = Number(item.quantidadeBipada) + 1;
+        if (novaQtd >= Number(item.quantidade)) setTimeout(() => fecharModalScanner(), 400);
+        return { ...item, quantidadeBipada: novaQtd };
+      }
+      return item;
+    }));
+  };
+
+  // ==========================================
+  // FUNÇÕES DE EDIÇÃO
+  // ==========================================
+  const handleAdicionarObservacao = async () => {
+    if (!novaObservacao.trim()) return;
+    setProcessando(true);
+    const autor = usuarioLogado?.nome_completo || 'Usuário';
+    const dataHora = new Date().toLocaleString('pt-BR');
+    const textoAdicional = `[${dataHora}] ${autor}: ${novaObservacao}`;
+    const observacaoAtualizada = observacoes ? `${observacoes}\n\n${textoAdicional}` : textoAdicional;
+    try {
+      await supabase.from('recebimento_mercadorias').update({ observacoes: observacaoAtualizada }).eq('id', recebimento.id);
+      setObservacoes(observacaoAtualizada); setNovaObservacao('');
+    } catch (e) { exibirPopup('erro', 'Erro', e.message); } finally { setProcessando(false); }
+  };
+
+  const confirmarModoEdicao = () => {
+    if (!nomeEditor.trim()) return exibirPopup('aviso', 'Atenção', 'Informe o seu nome para habilitar a edição.');
+    const msgEdicao = `[${new Date().toLocaleString('pt-BR')}] Sistema: Editado por ${nomeEditor.trim()}.`;
+    setObservacoes(prev => prev ? `${prev}\n\n${msgEdicao}` : msgEdicao);
+    setIsEditing(true); setModoNomeEdicao(false);
+  };
+
+  const salvarEdicao = async () => {
+    if (!nomeFornecedor.trim() || !numeroNF.trim() || !volumes) return exibirPopup('aviso', 'Campos Incompletos', "Preencha Fornecedor, NF e Volumes.");
+    setProcessando(true);
+    try {
+      await supabase.from('recebimento_mercadorias').update({ loja_recebedora: lojaRecebedora, nome_fornecedor: nomeFornecedor, marca: marca, numero_nf: numeroNF, volumes: Number(volumes), numero_pedido: numeroPedido || null, observacoes: observacoes, itens: itens }).eq('id', recebimento.id);
+      setIsEditing(false); exibirPopup('sucesso', 'Salvo', 'Atualizado com sucesso.');
+    } catch (e) { exibirPopup('erro', 'Erro', e.message); } finally { setProcessando(false); }
+  };
+
+  const cancelarRecebimento = async () => {
+    if (!window.confirm("TEM CERTEZA que deseja excluir esta carga?")) return;
+    setProcessando(true);
+    try {
+      await supabase.from('recebimento_mercadorias').update({ status: 'Cancelada', observacoes: observacoes }).eq('id', recebimento.id);
+      exibirPopup('sucesso', 'Carga Cancelada', 'Inativado com sucesso.', () => { if(aoVoltar) aoVoltar(); });
+    } catch (e) { exibirPopup('erro', 'Erro', e.message); } finally { setProcessando(false); }
   };
 
   const solicitarPausaAoLider = async (tipoPausa) => {
     if (!usuarioLogado?.encarregado_responsavel) {
-      exibirPopup('erro', 'Ação Negada', 'Você não tem um Encarregado vinculado ao seu perfil para aprovar a pausa.');
+      exibirPopup('erro', 'Ação Negada', 'Você não tem um Encarregado vinculado ao seu perfil.');
       return;
     }
     setPausaPendente(true);
@@ -150,245 +380,65 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
       setPausaPendente(false);
       exibirPopup('erro', 'Erro de Conexão', "Erro ao pedir pausa: " + error.message);
     } else {
-      exibirPopup('sucesso', 'Pausa Solicitada!', `Sua pausa para ${tipoPausa} foi enviada.\n\nAguarde a aprovação do encarregado para o cronômetro parar.`);
+      exibirPopup('sucesso', 'Pausa Solicitada!', `Sua pausa para ${tipoPausa} foi enviada.\n\nAguarde a aprovação do encarregado.`);
     }
   };
-
-  const handleRetomarConferencia = async () => {
-    const horaRetorno = Date.now();
-    const tempoPausadoAgora = horaRetorno - Number(pausaAtivaInicio);
-    setTempoPausadoTotal(prev => prev + tempoPausadoAgora);
-    setPausaAtivaInicio(null);
-    setTipoPausaAtiva(null);
-    if (pausaAtivaId) {
-      await supabase.from('pausas_separacao').update({ status: 'finalizada' }).eq('id', pausaAtivaId);
-    }
-    exibirPopup('sucesso', 'Conferência Retomada', 'Bem-vindo de volta!\nO cronômetro voltou a correr.');
-  };
-
-  const handleAdicionarItemVazio = () => setItens(prev => [...prev, { id: Date.now(), codigoFornecedor: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '' }]);
-  
-  const handleDuplicarParaNovoLote = (itemOriginal) => {
-    const novoLote = {
-      id: Date.now(),
-      codigoFornecedor: itemOriginal.codigoFornecedor,
-      descricaoFornecedor: itemOriginal.descricaoFornecedor,
-      quantidade: '', 
-      validade: '', 
-      quantidadeBipada: 0,
-      avarias: 0,
-      obsItem: ''
-    };
-    setItens(prev => {
-      const index = prev.findIndex(i => i.id === itemOriginal.id);
-      const novaLista = [...prev];
-      novaLista.splice(index + 1, 0, novoLote); 
-      return novaLista;
-    });
-  };
-
-  const handleRemoverItem = (id) => {
-    if (itens.length === 1) {
-      exibirPopup('aviso', 'Mínimo de Itens', "O recebimento precisa ter pelo menos um item registrado.");
-      return;
-    }
-    setItens(prev => prev.filter(item => item.id !== id));
-  };
-
-  const handleAtualizarItem = (id, campo, valor) => setItens(prev => prev.map(item => item.id === id ? { ...item, [campo]: valor } : item));
 
   // ==========================================
-  // LÓGICA DA CÂMERA / LEITOR DE CÓDIGO DE BARRAS
+  // ETAPA 1: FINALIZA A CONFERÊNCIA FÍSICA E MUDA P/ "AGUARDANDO CADASTRO"
   // ==========================================
-  const fecharModalScanner = () => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-    }
-    setScannerAtivo(null);
-  };
-
-  const abrirModalScanner = async (item) => {
-    if (!item.quantidade || Number(item.quantidade) <= 0) {
-      exibirPopup('aviso', 'Quantidade Ausente', 'Informe a quantidade na NF antes de iniciar a leitura.');
-      return;
-    }
-    setScannerAtivo(item);
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
-      mediaStreamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-      iniciarDeteccaoCodigo(stream, item);
-    } catch (err) {
-      console.error("Erro ao acessar a câmera:", err);
-      exibirPopup('erro', 'Acesso à Câmera', 'Não foi possível abrir a câmera. Verifique as permissões do navegador.');
-      setScannerAtivo(null);
-    }
-  };
-
-  const iniciarDeteccaoCodigo = (stream, itemAlvo) => {
-    if (!('BarcodeDetector' in window)) {
-      console.warn('BarcodeDetector nativo não suportado neste navegador.');
-      return;
-    }
-
-    const barcodeDetector = new window.BarcodeDetector({
-      formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code', 'code_39']
-    });
-
-    const verificarFrame = async () => {
-      if (!videoRef.current || !mediaStreamRef.current) return;
-      
-      try {
-        const barcodes = await barcodeDetector.detect(videoRef.current);
-        if (barcodes.length > 0) {
-          const codigoLido = barcodes[0].rawValue;
-          incrementarBipPorLeitura(itemAlvo.id, codigoLido);
-        }
-      } catch (e) {
-        // Ignora erros de frame individual
-      }
-
-      if (mediaStreamRef.current) {
-        requestAnimationFrame(verificarFrame);
-      }
-    };
-
-    requestAnimationFrame(verificarFrame);
-  };
-
-  const incrementarBipPorLeitura = (itemId, codigoLido) => {
-    setItens(prev => prev.map(item => {
-      if (item.id === itemId) {
-        // Opcional: validar se o código lido corresponde ao código do fornecedor cadastrado
-        const novaQtd = Number(item.quantidadeBipada) + 1;
-        if (novaQtd >= Number(item.quantidade)) {
-          setTimeout(() => fecharModalScanner(), 400); // Fecha automaticamente ao bater a meta
-        }
-        return { ...item, quantidadeBipada: novaQtd };
-      }
-      return item;
-    }));
-  };
-
-  const handleSalvarPendencia = async () => {
-    if (!nomeFornecedor.trim() || !marca.trim() || !numeroNF.trim() || !volumes) {
-      exibirPopup('aviso', 'Campos Incompletos', "Para registrar a carga pendente, preencha pelo menos:\n\n• Fornecedor\n• Marca\n• Número da NF\n• Volumes");
-      return;
-    }
-
-    setProcessando(true);
-
-    try {
-      const dadosPendentes = {
-        numero_relatorio: numeroRelatorio,
-        loja_recebedora: lojaRecebedora,
-        nome_fornecedor: nomeFornecedor,
-        marca: marca,
-        numero_nf: numeroNF,
-        volumes: Number(volumes),
-        numero_pedido: numeroPedido || null,
-        responsavel_recebedor: null, 
-        observacoes: observacoes || 'Carga recebida. Aguardando conferência física.',
-        itens: [], 
-        responsavel_sistema: usuarioLogado?.nome_completo || 'Sistema',
-        status: 'Pendente' 
-      };
-
-      const { error } = await supabase.from('recebimento_mercadorias').insert([dadosPendentes]);
-      if (error) throw error;
-      
-      exibirPopup(
-        'sucesso', 
-        'Carga Pendente Salva!', 
-        `A carga da NF ${numeroNF} foi registrada com sucesso.\n\nEla ficará visível no painel aguardando a conferência física detalhada.`, 
-        () => { if (aoVoltar) aoVoltar(); }
-      );
-
-    } catch (error) {
-      console.error("Erro ao salvar pendência:", error);
-      exibirPopup('erro', 'Falha ao Registrar', `Ocorreu um erro ao registrar a carga pendente no banco de dados:\n\n${error.message}`);
-    } finally {
-      setProcessando(false);
-    }
-  };
-
-  const handleSalvarRecebimento = async (e) => {
+  const handleSalvarRecebimentoFinal = async (e) => {
     e.preventDefault();
+    if (isViewer) return; 
 
-    if (!nomeFornecedor.trim() || !marca.trim() || !numeroNF.trim() || !volumes.trim() || !responsavelRecebedor.trim()) {
-      exibirPopup('aviso', 'Dados do Cabeçalho', "Por favor, preencha todos os campos obrigatórios do cabeçalho da nota.");
-      return;
+    if (!responsavelRecebedor.trim()) return exibirPopup('aviso', 'Responsável', "Digite o nome de quem conferiu os produtos.");
+    if (itens.some(i => !i.descricaoFornecedor.trim() || !i.quantidade || !i.validade.trim())) {
+      return exibirPopup('aviso', 'Dados dos Produtos', "Todos os produtos precisam ter Descrição, Validade (Mês/Ano) e Quantidade NF.");
     }
-
-    if (itens.some(i => !i.codigoFornecedor.trim() || !i.descricaoFornecedor.trim() || !i.quantidade || !i.validade.trim())) {
-      exibirPopup('aviso', 'Dados dos Produtos', "Todos os produtos precisam ter Código, Descrição, Validade (Mês/Ano) e Quantidade NF.");
-      return;
-    }
-
     setProcessando(true);
-
     try {
       const totalItens = itens.reduce((acc, item) => acc + Number(item.quantidade), 0);
       const upm = tempoDecorrido > 0 ? (totalItens / tempoDecorrido) * 60 : 0;
-      const upmFormatado = Number(upm.toFixed(1));
-      const pontosCalculados = Math.round(totalItens * upmFormatado * 1.5);
+      const pts = Math.round(totalItens * Number(upm.toFixed(1)) * 1.5);
+      const metricasFinais = { inicioConferencia: inicioConferencia, id_conferente: meuId, tempoTotalSegundos: tempoDecorrido, totalItensFisicos: totalItens, upm: Number(upm.toFixed(1)), pontosGanhos: pts, responsavel: responsavelRecebedor, finalizadoEm: new Date().toISOString() };
+      const itensComLote = itens.map((item, index) => ({ ...item, loteInterno: item.loteInterno || `LT-${numeroRelatorio}-${String(index + 1).padStart(2, '0')}` }));
 
-      const metricasFinais = {
-        tempoTotalSegundos: tempoDecorrido,
-        totalItensFisicos: totalItens,
-        upm: upmFormatado,
-        pontosGanhos: pontosCalculados,
-        responsavel: responsavelRecebedor,
-        finalizadoEm: new Date().toISOString()
-      };
-
-      const itensComLote = itens.map((item, index) => {
-        const indexFormatado = String(index + 1).padStart(2, '0');
-        return {
-          ...item,
-          loteInterno: `LT-${numeroRelatorio}-${indexFormatado}`
-        };
-      });
-
-      const dadosRecebimento = {
-        numero_relatorio: numeroRelatorio,
-        loja_recebedora: lojaRecebedora,
-        nome_fornecedor: nomeFornecedor,
-        marca: marca,
-        numero_nf: numeroNF,
-        volumes: Number(volumes),
-        numero_pedido: numeroPedido || null,
-        responsavel_recebedor: responsavelRecebedor,
-        observacoes: observacoes,
+      // MUDANÇA: O Status vira "Aguardando Cadastro"
+      await supabase.from('recebimento_mercadorias').update({ 
+        responsavel_recebedor: responsavelRecebedor, 
+        observacoes: observacoes, 
         itens: itensComLote, 
-        responsavel_sistema: usuarioLogado?.nome_completo || 'Sistema',
-        metricas_recebimento: metricasFinais,
-        status: 'Concluída' 
-      };
-
-      const { error } = await supabase.from('recebimento_mercadorias').insert([dadosRecebimento]);
-      if (error) throw error;
+        metricas_recebimento: metricasFinais, 
+        status: 'Aguardando Cadastro' 
+      }).eq('id', recebimento.id);
       
-      setMetricasRecebimento(metricasFinais);
+      setStatus('Aguardando Cadastro');
+      exibirPopup('sucesso', 'Conferência Física Finalizada! 📦', `Os produtos do relatório ${numeroRelatorio} foram conferidos com sucesso.\n\nAgora a nota aguarda ser lançada no sistema da loja.`);
+    } catch (error) { 
+      exibirPopup('erro', 'Falha ao Finalizar', error.message); 
+    } finally { 
+      setProcessando(false); 
+    }
+  };
+
+  // ==========================================
+  // ETAPA FINAL: ASSINATURA DE QUEM FEZ O CADASTRO E CONCLUSÃO DEFINITIVA
+  // ==========================================
+  const handleConcluirCadastro = async () => {
+    if (!responsavelCadastro.trim()) {
+      return exibirPopup('aviso', 'Responsável do Cadastro', 'Informe o nome de quem lançou a nota no sistema da loja.');
+    }
+    setProcessando(true);
+    try {
+      await supabase.from('recebimento_mercadorias').update({
+        status: 'Concluída',
+        responsavel_cadastro: responsavelCadastro.trim()
+      }).eq('id', recebimento.id);
+
       setStatus('Concluída');
-
-      exibirPopup(
-        'sucesso', 
-        'Recebimento Finalizado! 🏆', 
-        `Relatório ${numeroRelatorio} salvo com sucesso.\n\nLotes registrados com FEFO habilitado.\n\n⚡ Velocidade: ${upmFormatado} UPM\n🎯 Pontos: +${pontosCalculados} pts (x1.5)`,
-        () => { if (aoVoltar) aoVoltar(); }
-      );
-
+      exibirPopup('sucesso', 'Recebimento 100% Concluído! 🏆', `A nota foi conferida e cadastrada no sistema com sucesso.`, () => { if (aoVoltar) aoVoltar(); });
     } catch (error) {
-      console.error("Erro ao salvar recebimento:", error);
-      exibirPopup('erro', 'Falha ao Finalizar', `Ocorreu um erro ao salvar o recebimento concluído no banco de dados:\n\n${error.message}`);
+      exibirPopup('erro', 'Erro', error.message);
     } finally {
       setProcessando(false);
     }
@@ -397,256 +447,160 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
   return (
     <div className="recebimento-container" style={{ position: 'relative' }}>
       
-      {/* MODAL CUSTOMIZADO (POPUP) */}
-      {popup.visivel && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '420px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
-            <div style={{ fontSize: '3.5rem', marginBottom: '10px' }}>
-              {popup.tipo === 'sucesso' ? '✅' : popup.tipo === 'aviso' ? '⚠️' : '❌'}
+      {/* POPUP E SCANNER DA TELA (INVISÍVEIS NA IMPRESSÃO) */}
+      <div className="no-print">
+        {popup.visivel && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999999 }}>
+            <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '420px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
+              <div style={{ fontSize: '3.5rem', marginBottom: '10px' }}>{popup.tipo === 'sucesso' ? '✅' : popup.tipo === 'aviso' ? '⚠️' : '❌'}</div>
+              <h3 style={{ color: '#2c3e50', fontSize: '1.4rem', marginBottom: '12px' }}>{popup.titulo}</h3>
+              <p style={{ color: '#7f8c8d', fontSize: '1rem', lineHeight: '1.5', marginBottom: '25px', whiteSpace: 'pre-wrap' }}>{popup.mensagem}</p>
+              <button onClick={() => { setPopup({ ...popup, visivel: false }); if (popup.onConfirm) popup.onConfirm(); }} style={{ backgroundColor: popup.tipo === 'sucesso' ? '#27ae60' : popup.tipo === 'aviso' ? '#f39c12' : '#e74c3c', color: 'white', border: 'none', padding: '12px 0', width: '100%', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer' }}>Entendi</button>
             </div>
-            <h3 style={{ color: '#2c3e50', fontSize: '1.4rem', marginBottom: '12px' }}>{popup.titulo}</h3>
-            <p style={{ color: '#7f8c8d', fontSize: '1rem', lineHeight: '1.5', marginBottom: '25px', whiteSpace: 'pre-wrap' }}>
-              {popup.mensagem}
-            </p>
-            <button 
-              onClick={() => {
-                setPopup({ ...popup, visivel: false });
-                if (popup.onConfirm) popup.onConfirm();
-              }}
-              style={{ 
-                backgroundColor: popup.tipo === 'sucesso' ? '#27ae60' : popup.tipo === 'aviso' ? '#f39c12' : '#e74c3c', 
-                color: 'white', border: 'none', padding: '12px 0', width: '100%', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer' 
-              }}
-            >
-              Entendi
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE CÂMERA (LEITOR REAL DE CÓDIGO DE BARRAS) */}
-      {scannerAtivo && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '15px' }}>
-          <div style={{ width: '100%', maxWidth: '450px', backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', textAlign: 'center', position: 'relative' }}>
-            <div style={{ padding: '15px', backgroundColor: '#2c3e50', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem' }}>📷 Leitor de Câmera (Bip)</h3>
-              <button onClick={fecharModalScanner} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.4rem', cursor: 'pointer' }}>✖</button>
-            </div>
-            
-            <div style={{ padding: '15px' }}>
-              <p style={{ margin: '0 0 10px 0', color: '#34495e', fontWeight: 'bold' }}>{scannerAtivo.descricaoFornecedor}</p>
-              
-              {/* Elemento de vídeo onde a câmera é transmitida */}
-              <div style={{ position: 'relative', width: '100%', height: '260px', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
-                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-                <div style={{ position: 'absolute', top: '50%', left: '10%', right: '10%', height: '2px', backgroundColor: '#e74c3c', boxShadow: '0 0 8px #e74c3c' }}></div>
-              </div>
-
-              <div style={{ marginTop: '15px', fontSize: '1.1rem', color: '#2c3e50' }}>
-                Conferidos: <strong style={{ color: '#27ae60' }}>{itens.find(i => i.id === scannerAtivo.id)?.quantidadeBipada}</strong> / {scannerAtivo.quantidade} un
-              </div>
-
-              <button 
-                type="button" 
-                onClick={() => incrementarBipPorLeitura(scannerAtivo.id, 'MANUAL')} 
-                style={{ marginTop: '15px', backgroundColor: '#3498db', color: 'white', border: 'none', padding: '12px', width: '100%', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                + Registrar 1 Unidade Manualmente
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      <div className="recebimento-header no-print">
-        <div>
-          <h2>📦 Registro de Recebimento de Mercadorias</h2>
-          <p>Conferência física, controle FEFO e entrada de notas fiscais.</p>
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button type="button" className="btn-imprimir-topo" onClick={() => window.print()}>
-            🖨️ Imprimir
-          </button>
-          <button className="btn-voltar-recebimento" onClick={aoVoltar}>
-            ← Voltar
-          </button>
-        </div>
-      </div>
-
-      <form className="recebimento-form" onSubmit={handleSalvarRecebimento}>
-        
-        <div className="recebimento-card">
-          <div className="card-titulo-flex">
-            <h3>📑 Dados da Nota Fiscal / Carga</h3>
-            <span className="badge-relatorio-id">Nº Relatório: <strong>{numeroRelatorio}</strong></span>
-          </div>
-
-          <div className="form-grid-4">
-            <div className="input-group">
-              <label>Loja Recebedora *</label>
-              <select value={lojaRecebedora} onChange={(e) => setLojaRecebedora(e.target.value)} disabled={status !== 'Pendente'}>
-                <option value="Matriz">Matriz</option>
-                <option value="Araturi">Araturi</option>
-                <option value="Conjunto Ceará">Conjunto Ceará</option>
-                <option value="Messejana">Messejana</option>
-                <option value="Mulungu">Mulungu</option>
-              </select>
-            </div>
-            <div className="input-group">
-              <label>Nome do Fornecedor *</label>
-              <input type="text" placeholder="Ex: Distribuidora X" value={nomeFornecedor} onChange={(e) => setNomeFornecedor(e.target.value)} required disabled={status !== 'Pendente'} />
-            </div>
-            <div className="input-group">
-              <label>Marca *</label>
-              <input type="text" placeholder="Ex: Marca Y" value={marca} onChange={(e) => setMarca(e.target.value)} required disabled={status !== 'Pendente'} />
-            </div>
-            <div className="input-group">
-              <label>Número da NF *</label>
-              <input type="text" placeholder="Ex: 00045892" value={numeroNF} onChange={(e) => setNumeroNF(e.target.value)} required disabled={status !== 'Pendente'} />
-            </div>
-            <div className="input-group">
-              <label>Qtd. de Caixas / Volumes *</label>
-              <input type="number" placeholder="Ex: 12" value={volumes} onChange={(e) => setVolumes(e.target.value)} required disabled={status !== 'Pendente'} />
-            </div>
-            <div className="input-group">
-              <label>Número do Pedido (Opcional)</label>
-              <input type="text" placeholder="Ex: PED-9988" value={numeroPedido} onChange={(e) => setNumeroPedido(e.target.value)} disabled={status !== 'Pendente'} />
-            </div>
-          </div>
-        </div>
-
-        {status === 'Pendente' && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-5px', marginBottom: '20px' }} className="no-print">
-            <button 
-              type="button" 
-              onClick={handleSalvarPendencia} 
-              disabled={processando} 
-              style={{ background: '#f39c12', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
-            >
-              {processando ? '⏳ Salvando...' : '📥 Salvar Carga Pendente (Conferência de Volumes)'}
-            </button>
           </div>
         )}
 
-        <div className="recebimento-card">
-          <div className="card-titulo-flex">
-            <h3>🛒 Produtos da Nota / Conferência de Lote</h3>
-            {status === 'Em Conferência' && !pausaAtivaInicio && (
-              <div style={{ display: 'flex', gap: '10px' }} className="no-print">
-                <button type="button" onClick={() => solicitarPausaAoLider('Pausa para Almoço')} disabled={pausaPendente} style={{ padding: '8px 12px', backgroundColor: pausaPendente ? '#ecf0f1' : '#f1c40f', color: pausaPendente ? '#bdc3c7' : '#856404', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: pausaPendente ? 'not-allowed' : 'pointer' }}>
-                  🍔 {pausaPendente ? 'Aguardando...' : 'Pausa Almoço'}
-                </button>
-                <button type="button" onClick={() => solicitarPausaAoLider('Fim de Expediente')} disabled={pausaPendente} style={{ padding: '8px 12px', backgroundColor: pausaPendente ? '#ecf0f1' : '#34495e', color: pausaPendente ? '#bdc3c7' : 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: pausaPendente ? 'not-allowed' : 'pointer' }}>
-                  🌙 {pausaPendente ? 'Aguardando...' : 'Fim de Expediente'}
-                </button>
+        {scannerAtivo && !isViewer && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 999999, padding: '15px' }}>
+            <div style={{ width: '100%', maxWidth: '450px', backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', textAlign: 'center', position: 'relative' }}>
+              <div style={{ padding: '15px', backgroundColor: '#2c3e50', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>📷 {scannerAtivo.tipo === 'identificacao' ? 'Bipar Cód. Barras' : 'Bip de Contagem'}</h3>
+                <button onClick={fecharModalScanner} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.4rem', cursor: 'pointer' }}>✖</button>
               </div>
-            )}
-          </div>
-
-          <div className="input-group" style={{ marginBottom: '20px' }}>
-            <label>Nome do Responsável Recebedor *</label>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <input type="text" placeholder="Ex: Nome do estoquista" value={responsavelRecebedor} onChange={(e) => setResponsavelRecebedor(e.target.value)} disabled={status !== 'Pendente'} style={{ flex: 1 }} />
-              {status === 'Pendente' && (
-                <button type="button" onClick={handleIniciarConferencia} style={{ background: '#27ae60', color: 'white', border: 'none', padding: '0 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-                  ▶️ Iniciar Conferência
-                </button>
-              )}
-            </div>
-          </div>
-
-          {status !== 'Pendente' && (
-            <div style={{ backgroundColor: '#2c3e50', color: 'white', padding: '15px', borderRadius: '8px', textAlign: 'center', marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.8 }}>
-                {status === 'Concluída' ? '⏱️ Tempo Final' : (pausaAtivaInicio ? '⏸️ Tempo Congelado (Pausa)' : '⏱️ Tempo em Andamento')}
-              </div>
-              <div style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: '10px 0' }}>
-                {formatarTempo(tempoDecorrido)}
-              </div>
-              {metricasRecebimento && (
-                <div style={{ color: '#2ecc71', fontWeight: 'bold', fontSize: '1.1rem' }}>
-                  ⚡ {metricasRecebimento.upm} UPM | 🏆 +{metricasRecebimento.pontosGanhos} pts (x1.5)
+              <div style={{ padding: '15px' }}>
+                {scannerAtivo.tipo === 'contagem' && <p style={{ margin: '0 0 10px 0', color: '#34495e', fontWeight: 'bold' }}>{scannerAtivo.item.descricaoFornecedor}</p>}
+                <div style={{ position: 'relative', width: '100%', height: '260px', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
+                  <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                  <div style={{ position: 'absolute', top: '50%', left: '10%', right: '10%', height: '2px', backgroundColor: '#e74c3c', boxShadow: '0 0 8px #e74c3c' }}></div>
                 </div>
-              )}
-            </div>
-          )}
-
-          {pausaAtivaInicio && (
-            <div style={{ textAlign: 'center', padding: '30px', backgroundColor: '#fff3cd', border: '3px dashed #f39c12', borderRadius: '8px', marginBottom: '20px' }}>
-              <h2 style={{ color: '#d35400', marginBottom: '10px' }}>⏸️ RECEBIMENTO CONGELADO</h2>
-              <p style={{ color: '#856404', marginBottom: '20px' }}>Motivo da Pausa: <strong>{tipoPausaAtiva}</strong></p>
-              <button type="button" onClick={handleRetomarConferencia} style={{ backgroundColor: '#27ae60', color: 'white', padding: '15px 30px', fontSize: '1.1rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-                ▶️ ESTOU DE VOLTA! (Retomar Conferência)
-              </button>
-            </div>
-          )}
-
-          {status !== 'Pendente' && !pausaAtivaInicio && (
-            <div className="tabela-recebimento-wrapper">
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-                <button type="button" className="btn-adicionar-linha no-print" onClick={handleAdicionarItemVazio}>+ Novo Produto Vazio</button>
+                
+                {scannerAtivo.tipo === 'contagem' ? (
+                  <>
+                    <div style={{ marginTop: '15px', fontSize: '1.1rem', color: '#2c3e50' }}>Conferidos: <strong style={{ color: '#27ae60' }}>{itens.find(i => i.id === scannerAtivo.item.id)?.quantidadeBipada}</strong> / {scannerAtivo.item.quantidade} un</div>
+                    <button type="button" onClick={() => incrementarBip(scannerAtivo.item.id)} style={{ marginTop: '15px', backgroundColor: '#3498db', color: 'white', border: 'none', padding: '12px', width: '100%', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>+ Registrar 1 Unidade Manual</button>
+                  </>
+                ) : (
+                  <div style={{ marginTop: '15px', fontSize: '1.1rem', color: '#2c3e50', fontWeight: 'bold' }}>Centralize o código de barras do produto na linha vermelha.</div>
+                )}
               </div>
-              <table className="tabela-recebimento">
-                <thead>
-                  <tr>
-                    <th>Cód. Fornecedor *</th>
-                    <th>Descrição do Produto *</th>
-                    <th>Validade (Mês/Ano) *</th>
-                    <th>Qtd Lote *</th>
-                    <th>Conferido (Bip)</th>
-                    <th>Avarias</th>
-                    <th className="no-print">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {itens.map((item) => (
-                    <tr key={item.id}>
-                      <td><input type="text" placeholder="Cód." value={item.codigoFornecedor} onChange={(e) => handleAtualizarItem(item.id, 'codigoFornecedor', e.target.value)} required disabled={status === 'Concluída'} /></td>
-                      <td><input type="text" placeholder="Descrição" value={item.descricaoFornecedor} onChange={(e) => handleAtualizarItem(item.id, 'descricaoFornecedor', e.target.value)} required disabled={status === 'Concluída'} /></td>
-                      <td><input type="month" value={item.validade} onChange={(e) => handleAtualizarItem(item.id, 'validade', e.target.value)} required disabled={status === 'Concluída'} style={{ minWidth: '120px' }} /></td>
-                      <td><input type="number" placeholder="0" style={{ width: '80px' }} value={item.quantidade} onChange={(e) => handleAtualizarItem(item.id, 'quantidade', e.target.value)} required disabled={status === 'Concluída'} /></td>
-                      <td>
-                        <div className="bip-conferencia-grupo">
-                          <span className="contador-bip" style={{ color: Number(item.quantidadeBipada) >= Number(item.quantidade) ? '#27ae60' : '#e74c3c' }}>
-                            {item.quantidadeBipada} un
-                          </span>
-                          {status !== 'Concluída' && Number(item.quantidadeBipada) < Number(item.quantidade) && (
-                            <button type="button" className="btn-bip-rapido no-print" onClick={() => abrirModalScanner(item)}>📷 Bip</button>
-                          )}
-                        </div>
-                      </td>
-                      <td><input type="number" placeholder="0" style={{ width: '80px', borderColor: item.avarias > 0 ? '#e74c3c' : '#bdc3c7' }} value={item.avarias} onChange={(e) => handleAtualizarItem(item.id, 'avarias', e.target.value)} disabled={status === 'Concluída'} /></td>
-                      <td className="no-print" style={{ display: 'flex', gap: '5px' }}>
-                        {status !== 'Concluída' && (
-                          <>
-                            <button type="button" onClick={() => handleDuplicarParaNovoLote(item)} title="Criar outro lote para este produto" style={{ background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '5px' }}>➕ Lote</button>
-                            <button type="button" onClick={() => handleRemoverItem(item.id)} title="Remover" style={{ background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '5px' }}>🗑️</button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
-          )}
-        </div>
-
-        <div className="recebimento-card">
-          <h3>💬 Observações Gerais / Condição da Carga *</h3>
-          <div className="input-group" style={{ marginTop: '10px' }}>
-            <textarea rows="3" placeholder="Ex: Carga recebida com lacre rompido..." value={observacoes} onChange={(e) => setObservacoes(e.target.value)} disabled={status === 'Concluída'}></textarea>
+          </div>
+        )}
+        
+        <div className="recebimento-header no-print" style={{ backgroundColor: 'transparent', boxShadow: 'none', padding: '0 0 20px 0', alignItems: 'center', borderBottom: '2px solid #ecf0f1', borderRadius: '0' }}>
+          <div><h2 style={{ fontSize: '1.6rem', color: '#2c3e50', margin: 0 }}>Detalhes do Recebimento {numeroRelatorio}</h2></div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button type="button" className="btn-imprimir-topo" onClick={() => window.print()} style={{ backgroundColor: '#34495e', color: 'white', border: 'none', padding: '10px 18px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>🖨️ Imprimir Romaneio</button>
+            <button className="btn-voltar-recebimento" onClick={aoVoltar} style={{ backgroundColor: 'transparent', color: '#8e44ad', border: '1px solid #8e44ad', padding: '10px 18px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>← Voltar ao Painel</button>
           </div>
         </div>
+      </div>
 
-        {status === 'Em Conferência' && !pausaAtivaInicio && (
+      <form className="recebimento-form" onSubmit={handleSalvarRecebimentoFinal}>
+        
+        <CabecalhoRecebimento 
+          isEditing={isEditing} lojaRecebedora={lojaRecebedora} setLojaRecebedora={setLojaRecebedora}
+          nomeFornecedor={nomeFornecedor} setNomeFornecedor={setNomeFornecedor} marca={marca}
+          setMarca={setMarca} numeroNF={numeroNF} setNumeroNF={setNumeroNF} volumes={volumes}
+          setVolumes={setVolumes} numeroPedido={numeroPedido} setNumeroPedido={setNumeroPedido}
+          status={status}
+        />
+
+        <ObservacoesRecebimento 
+          observacoes={observacoes} status={status} isEditing={isEditing}
+          novaObservacao={novaObservacao} setNovaObservacao={setNovaObservacao}
+          handleAdicionarObservacao={handleAdicionarObservacao} processando={processando}
+        />
+
+        <EdicaoRecebimento 
+          status={status} isEditing={isEditing} modoNomeEdicao={modoNomeEdicao} 
+          setModoNomeEdicao={setModoNomeEdicao} nomeEditor={nomeEditor} 
+          setNomeEditor={setNomeEditor} confirmarModoEdicao={confirmarModoEdicao}
+          responsavelRecebedor={responsavelRecebedor} setResponsavelRecebedor={setResponsavelRecebedor}
+          processando={processando} handleIniciarConferencia={handleIniciarConferencia}
+        />
+
+        {/* MÓDULO EXCLUSIVO PARA: "AGUARDANDO CADASTRO" */}
+        {status === 'Aguardando Cadastro' && !isEditing && (
+          <div style={{ backgroundColor: '#ebf5fb', borderLeft: '4px solid #3498db', borderRadius: '0 8px 8px 0', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px' }} className="no-print">
+            <h4 style={{ color: '#2980b9', margin: '0 0 10px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              💻 Etapa 1: Cadastro da NF no Sistema
+            </h4>
+            <p style={{ color: '#34495e', margin: '0 0 15px 0', fontSize: '0.95rem' }}>
+              A conferência física foi finalizada por <strong>{responsavelRecebedor}</strong>. Informe quem realizou o lançamento da Nota Fiscal no sistema da loja para encerrar o processo.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxWidth: '600px' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#7f8c8d' }}>Resp. Cadastro da NF</label>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input
+                  type="text"
+                  placeholder="Ex: Maria"
+                  value={responsavelCadastro}
+                  onChange={(e) => setResponsavelCadastro(e.target.value)}
+                  style={{ flex: 1, padding: '10px 12px', border: '1px solid #dcdde1', borderRadius: '6px', outline: 'none', fontSize: '1rem', backgroundColor: '#fdfdfd' }}
+                  disabled={processando}
+                />
+                <button type="button" onClick={handleConcluirCadastro} disabled={processando} style={{ background: '#3498db', color: 'white', border: 'none', padding: '0 25px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem' }}>
+                  {processando ? '⏳ Aguarde...' : 'Confirmar Cadastro ✔️'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(status !== 'Pendente' || isEditing) && (
+          <>
+            <CronometroRecebimento 
+              status={status} isViewer={isViewer} responsavelRecebedor={responsavelRecebedor}
+              pausaAtivaInicio={pausaAtivaInicio} tempoDecorrido={tempoDecorrido}
+              metricasRecebimento={metricasRecebimento} tipoPausaAtiva={tipoPausaAtiva}
+              handleRetomarConferencia={handleRetomarConferencia} formatarTempo={formatarTempo}
+            />
+
+            <TabelaProdutosRecebimento 
+              itens={itens} status={status} isEditing={isEditing} isViewer={isViewer}
+              responsavelRecebedor={responsavelRecebedor} pausaAtivaInicio={pausaAtivaInicio}
+              pausaPendente={pausaPendente} solicitarPausaAoLider={solicitarPausaAoLider}
+              handleAtualizarItem={handleAtualizarItem} handleAdicionarItemVazio={handleAdicionarItemVazio}
+              handleDuplicarParaNovoLote={handleDuplicarParaNovoLote} handleRemoverItem={handleRemoverItem}
+              abrirModalScanner={abrirModalScanner} buscarProdutoPorCodigo={buscarProdutoPorCodigo}
+            />
+          </>
+        )}
+
+        {isEditing && !isViewer && (
           <div className="recebimento-footer-acoes no-print">
-            <button type="button" className="btn-cancelar-rec" onClick={aoVoltar}>Cancelar</button>
-            <button type="submit" className="btn-salvar-rec" disabled={processando}>{processando ? '⏳ Processando...' : '💾 Finalizar e Salvar Lotes'}</button>
+            <button type="button" onClick={cancelarRecebimento} style={{ backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>🚫 Excluir / Cancelar Carga</button>
+            <button type="button" onClick={() => setIsEditing(false)} className="btn-cancelar-rec">Cancelar Edição</button>
+            <button type="button" onClick={salvarEdicao} className="btn-salvar-rec" disabled={processando}>{processando ? '⏳...' : '💾 Salvar Alterações'}</button>
+          </div>
+        )}
+
+        {status === 'Em Conferência' && !pausaAtivaInicio && !isViewer && (
+          <div className="recebimento-footer-acoes no-print">
+            <button type="button" className="btn-cancelar-rec" onClick={aoVoltar}>Voltar</button>
+            {/* O texto do botão foi ajustado para refletir a nova etapa */}
+            <button type="submit" className="btn-salvar-rec" disabled={processando}>{processando ? '⏳ Processando...' : '📦 Finalizar Conferência Física'}</button>
           </div>
         )}
 
       </form>
+
+      {/* COMPONENTE DE IMPRESSÃO */}
+      <ImpressaoRecebimento 
+        numeroRelatorio={numeroRelatorio}
+        lojaRecebedora={lojaRecebedora}
+        nomeFornecedor={nomeFornecedor}
+        marca={marca}
+        numeroNF={numeroNF}
+        volumes={volumes}
+        numeroPedido={numeroPedido}
+        responsavelRecebedor={responsavelRecebedor}
+        observacoes={observacoes}
+        itens={itens}
+      />
+
     </div>
   );
 }

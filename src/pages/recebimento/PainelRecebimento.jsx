@@ -62,10 +62,12 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
     });
   }, [recebimentosAtivos]);
 
+  // ADICIONADA A COR DO NOVO STATUS AQUI
   const getStatusClass = (status) => {
     switch (status) {
       case 'Pendente': return 'status-pendente';
       case 'Em Conferência': return 'status-separacao';
+      case 'Aguardando Cadastro': return 'status-faturado'; // Utiliza a classe azul
       case 'Concluída': return 'status-recebido';
       default: return 'status-pendente';
     }
@@ -97,7 +99,7 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
         
         <div className="contador-requisicoes">
           <span className="numero-destaque">{recebimentosAtivos.length}</span> 
-          <span>cargas/NF pendentes de conferência</span>
+          <span>cargas pendentes de conferência/cadastro</span>
         </div>
 
         <button className="btn-nova-req btn-novo-pedido" onClick={aoClicarNovoRecebimento}>
@@ -110,13 +112,13 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
           <thead>
             <tr>
               <th>ID Relatório</th>
-              <th>NF</th> {/* <-- NF MOVIDA PARA CÁ */}
+              <th>NF</th>
               <th>Status</th>
               <th>Data Registro</th>
               <th>Loja Destino</th>
               <th>Fornecedor / Marca</th>
               <th>Volumes</th>
-              <th>Resp. Recebedor</th>
+              <th>Responsável(is)</th>
             </tr>
           </thead>
           <tbody>
@@ -147,14 +149,19 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
                   </td>
                   <td>{rec.volumes} cx</td>
                   <td className="td-historico-texto">
-                    {rec.responsavel_recebedor || <span style={{ color: '#e74c3c' }}>Aguardando...</span>}
+                    {/* ADICIONADA A MENSAGEM DO NOVO RESPONSÁVEL */}
+                    {rec.status === 'Aguardando Cadastro' ? (
+                       <span style={{ color: '#2980b9', fontWeight: 'bold' }}>⏳ Falta Lançar Sist.</span>
+                    ) : (
+                       rec.responsavel_recebedor || <span style={{ color: '#e74c3c' }}>Aguardando...</span>
+                    )}
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
                 <td colSpan="8" className="td-vazio-tabela">
-                  Nenhuma carga pendente de recebimento no momento. Pátio limpo!
+                  Nenhuma carga pendente no momento. Pátio limpo!
                 </td>
               </tr>
             )}

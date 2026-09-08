@@ -20,9 +20,6 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
   const [processando, setProcessando] = useState(false);
   const [popup, setPopup] = useState({ visivel: false, tipo: '', titulo: '', mensagem: '', onConfirm: null });
 
-  // ==========================================
-  // ESTADO DO MODAL DE BIP (LEITOR DE CÓDIGO)
-  // ==========================================
   const [scannerAtivo, setScannerAtivo] = useState(null); 
   const inputBipRef = useRef(null); 
 
@@ -165,9 +162,6 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
     exibirPopup('sucesso', 'Conferência Retomada', 'Bem-vindo de volta!\nO cronômetro voltou a correr.');
   };
 
-  // ==========================================
-  // FUNÇÕES DE TABELA E LOTES
-  // ==========================================
   const handleAdicionarItemVazio = () => setItens(prev => [...prev, { id: Date.now(), codigoFornecedor: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '' }]);
   
   const handleDuplicarParaNovoLote = (itemOriginal) => {
@@ -196,9 +190,6 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
 
   const handleAtualizarItem = (id, campo, valor) => setItens(prev => prev.map(item => item.id === id ? { ...item, [campo]: valor } : item));
 
-  // ==========================================
-  // LÓGICA DE BIPAGEM / SCANNER
-  // ==========================================
   const abrirModalScanner = (item) => {
     if (!item.quantidade || Number(item.quantidade) <= 0) {
       exibirPopup('aviso', 'Quantidade Ausente', 'Informe a quantidade na NF antes de iniciar a bipagem.');
@@ -213,7 +204,7 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
       if (item.id === scannerAtivo.id) {
         const novaQtd = Number(item.quantidadeBipada) + 1;
         if (novaQtd >= Number(item.quantidade)) {
-          setTimeout(() => setScannerAtivo(null), 300); // Fecha automaticamente
+          setTimeout(() => setScannerAtivo(null), 300); 
         }
         return { ...item, quantidadeBipada: novaQtd };
       }
@@ -311,13 +302,15 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
         </div>
       )}
       
-      <div className="recebimento-header no-print">
+      {/* CABEÇALHO LIMPO SEM BORDAS */}
+      <div className="recebimento-header no-print" style={{ backgroundColor: 'transparent', boxShadow: 'none', padding: '0 0 20px 0', alignItems: 'center' }}>
         <div>
-          <h2>📦 Registro de Recebimento de Mercadorias</h2>
-          <p>Conferência física, controle FEFO e entrada de notas fiscais.</p>
+          <h2 style={{ fontSize: '1.6rem', color: '#2c3e50', margin: 0 }}>Registro de Nova Carga</h2>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button type="button" className="btn-voltar-recebimento" onClick={aoVoltar}>← Voltar</button>
+          <button className="btn-voltar-recebimento" onClick={aoVoltar} style={{ backgroundColor: 'transparent', color: '#8e44ad', border: '1px solid #8e44ad', padding: '10px 18px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+            ← Voltar
+          </button>
         </div>
       </div>
 
@@ -325,7 +318,8 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
         <div className="recebimento-card">
           <div className="card-titulo-flex">
             <h3>📑 Dados da Nota Fiscal / Carga</h3>
-            <span className="badge-relatorio-id">Nº Relatório: <strong>{numeroRelatorio}</strong></span>
+            {/* CORREÇÃO DO BADGE AMARELO: Agora é um texto elegante e limpo */}
+            <span style={{ fontSize: '1.2rem', color: '#2c3e50' }}>Nº Relatório: <strong>{numeroRelatorio}</strong></span>
           </div>
 
           <div className="form-grid-4">

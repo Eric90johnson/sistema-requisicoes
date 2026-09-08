@@ -67,7 +67,7 @@ function App() {
   const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      // CORREÇÃO: Limite de 100 registros para evitar sobrecarga de rede
+      // Limite de 100 registros para transferências
       const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false }).limit(100);
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
@@ -86,11 +86,16 @@ function App() {
         });
       }
 
-      // CORREÇÃO: Limite de 50 registros para recebimentos
-      const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select('*').order('data_criacao', { ascending: false }).limit(
-        50);
+      // Limite de 50 registros para recebimentos
+      const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select('*').order('data_criacao', { ascending: false }).limit(50);
       if (recMercadorias) {
         setRecebimentos(recMercadorias);
+
+        // Mantém os dados da carga selecionada sempre sincronizados em segundo plano
+        setRecebimentoSelecionado(prev => {
+          if (!prev) return null;
+          return recMercadorias.find(r => r.id === prev.id) || prev;
+        });
       }
 
       if (rapido) return;
@@ -186,7 +191,7 @@ function App() {
     const loopSincronizacao = async () => {
       if (!isMounted) return;
       
-      // CORREÇÃO: Só consulta o servidor se a aba do navegador estiver aberta e visível (Economia enorme de dados)
+      // Executa apenas com a aba ativa
       if (document.visibilityState === 'visible') {
         try {
           await carregarDadosDaNuvem(true, true);
@@ -194,7 +199,6 @@ function App() {
         } catch (e) {}
       }
       
-      // CORREÇÃO: Intervalo aumentado de 5s para 20s
       if (isMounted) {
         timerId = setTimeout(loopSincronizacao, 20000);
       }
@@ -458,6 +462,7 @@ function App() {
               
               {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => {setTelaAtual('painel'); setInicioCronometroGlobal(null); setTipoReposicaoGlobal('interna');}} produtos={baseProdutos} setProdutos={setBaseProdutos} itensPreRequisicao={itensPreRequisicao} aoAdicionarPreRequisicao={(p) => setItensPreRequisicao(v => v.some(i => String(i.codigo) === String(p.codigo)) ? v : [...v, p])} aoRemoverPreRequisicao={(c) => setItensPreRequisicao(v => v.filter(i => String(i.codigo) !== String(c)))} aoIrParaPreRequisicao={() => {setProdutosPreSelecionados(itensPreRequisicao); setItensPreRequisicao([]); setTelaAtual('nova');}} tipoReposicaoGlobal={tipoReposicaoGlobal} setTipoReposicaoGlobal={setTipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} setInicioCronometroGlobal={setInicioCronometroGlobal} />}
               
+              {/* ROTA: PAINEL DE RECEBIMENTOS */}
               {telaAtual === 'painel-recebimento' && (
                 <PainelRecebimento 
                   recebimentos={recebimentos} 
@@ -471,6 +476,7 @@ function App() {
                 />
               )}
 
+              {/* ROTA: NOVO RECEBIMENTO */}
               {telaAtual === 'novo-recebimento' && (
                 <RecebimentoProdutos 
                   aoVoltar={() => {
@@ -481,8 +487,10 @@ function App() {
                 />
               )}
 
+              {/* ROTA: DETALHES E CONFERÊNCIA COM KEY ÚNICA */}
               {telaAtual === 'detalhes-recebimento' && recebimentoSelecionado && (
                 <DetalhesRecebimento 
+                  key={recebimentoSelecionado.id}
                   recebimento={recebimentoSelecionado}
                   aoVoltar={() => {
                      setTelaAtual('painel-recebimento');
