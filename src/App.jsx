@@ -67,7 +67,6 @@ function App() {
   const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      // Limite de 100 registros para transferências
       const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false }).limit(100);
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
@@ -76,7 +75,8 @@ function App() {
           listaItens: r.lista_itens,
           metricasSeparacao: r.metricas_separacao,
           numeroRequisicaoExterna: r.numero_requisicao_externa,
-          notaFiscal: r.nota_fiscal
+          notaFiscal: r.nota_fiscal,
+          oculto: r.oculto // Traz a nova coluna do banco
         }));
         setRequisicoes(reqsFormatadas);
 
@@ -86,12 +86,10 @@ function App() {
         });
       }
 
-      // Limite de 50 registros para recebimentos
       const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select('*').order('data_criacao', { ascending: false }).limit(50);
       if (recMercadorias) {
         setRecebimentos(recMercadorias);
 
-        // Mantém os dados da carga selecionada sempre sincronizados em segundo plano
         setRecebimentoSelecionado(prev => {
           if (!prev) return null;
           return recMercadorias.find(r => r.id === prev.id) || prev;
@@ -191,7 +189,6 @@ function App() {
     const loopSincronizacao = async () => {
       if (!isMounted) return;
       
-      // Executa apenas com a aba ativa
       if (document.visibilityState === 'visible') {
         try {
           await carregarDadosDaNuvem(true, true);
@@ -382,6 +379,19 @@ function App() {
     return novasMetricas;
   };
 
+  // ADICIONADO: Função para o Admin alternar a visibilidade de uma requisição
+  const handleAlternarVisibilidade = async (id, novoEstadoOculto) => {
+    const reqAtualizada = { ...requisicoes.find(r => r.id === id), oculto: novoEstadoOculto };
+    setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
+    
+    if (reqSelecionada?.id === id) setReqSelecionada(reqAtualizada);
+
+    const { error } = await supabase.from('requisicoes').update({ oculto: novoEstadoOculto }).eq('id', id);
+    if (error) {
+      console.error("Erro ao alterar visibilidade:", error);
+    }
+  };
+
   const abrirDetalhes = (req) => { setReqSelecionada(req); setTelaAtual('detalhes'); };
   const navegarPara = (novaTela, aba = 'interna') => { setTelaAtual(novaTela); if (novaTela === 'painel') setAbaPainelAtiva(aba); setMenuMobileAberto(false); };
 
@@ -433,7 +443,8 @@ function App() {
                   requisicoes={requisicoes.filter(r => r.status !== 'Em Edição' && r.status !== 'Cancelada')} 
                   recebimentos={recebimentos}
                   pedidosMarketplace={pedidosMarketplace} 
-                  aoAbrirDetalhes={abrirDetalhes} 
+                  aoAbrirDetalhes={abrirDetalhes}
+                  aoAlternarVisibilidade={handleAlternarVisibilidade} /* ADICIONADO AQUI */
                 />
               )}
               
@@ -462,7 +473,6 @@ function App() {
               
               {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => {setTelaAtual('painel'); setInicioCronometroGlobal(null); setTipoReposicaoGlobal('interna');}} produtos={baseProdutos} setProdutos={setBaseProdutos} itensPreRequisicao={itensPreRequisicao} aoAdicionarPreRequisicao={(p) => setItensPreRequisicao(v => v.some(i => String(i.codigo) === String(p.codigo)) ? v : [...v, p])} aoRemoverPreRequisicao={(c) => setItensPreRequisicao(v => v.filter(i => String(i.codigo) !== String(c)))} aoIrParaPreRequisicao={() => {setProdutosPreSelecionados(itensPreRequisicao); setItensPreRequisicao([]); setTelaAtual('nova');}} tipoReposicaoGlobal={tipoReposicaoGlobal} setTipoReposicaoGlobal={setTipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} setInicioCronometroGlobal={setInicioCronometroGlobal} />}
               
-              {/* ROTA: PAINEL DE RECEBIMENTOS */}
               {telaAtual === 'painel-recebimento' && (
                 <PainelRecebimento 
                   recebimentos={recebimentos} 
@@ -476,7 +486,6 @@ function App() {
                 />
               )}
 
-              {/* ROTA: NOVO RECEBIMENTO */}
               {telaAtual === 'novo-recebimento' && (
                 <RecebimentoProdutos 
                   aoVoltar={() => {
@@ -487,7 +496,6 @@ function App() {
                 />
               )}
 
-              {/* ROTA: DETALHES E CONFERÊNCIA COM KEY ÚNICA */}
               {telaAtual === 'detalhes-recebimento' && recebimentoSelecionado && (
                 <DetalhesRecebimento 
                   key={recebimentoSelecionado.id}

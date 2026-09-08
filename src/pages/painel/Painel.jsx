@@ -6,7 +6,7 @@ import PainelMarketplace from '../marketplace/painel/PainelMarketplace';
 import { supabase } from '../../services/supabase';
 import { calcularRanking } from './utils/calculadoraRanking';
 
-export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, recebimentos = [], pedidosMarketplace = [], aoAbrirDetalhes, abaExterna = 'interna', usuarioLogado }) {
+export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, recebimentos = [], pedidosMarketplace = [], aoAbrirDetalhes, aoAlternarVisibilidade, abaExterna = 'interna', usuarioLogado }) {
   
   const [abaAtiva, setAbaAtiva] = useState(abaExterna); 
 
@@ -31,7 +31,8 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   const [idsDestacados, setIdsDestacados] = useState([]);
   const reqsAnterioresRef = useRef(requisicoes);
 
-  const canViewRanking = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin || usuarioLogado?.perm_ver_ranking;
+  const isMaster = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
+  const canViewRanking = isMaster || usuarioLogado?.perm_ver_ranking;
 
   const handleAbrirRanking = () => {
     if (canViewRanking) {
@@ -127,7 +128,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const ordemProcesso = ['Em Separação', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento'];
   
-  const requisicoesAtivas = requisicoes.filter(req => req.status !== 'Concluída' && req.status !== 'Cancelada');
+  const requisicoesAtivas = requisicoes.filter(req => {
+    if (req.status === 'Concluída' || req.status === 'Cancelada') return false;
+    if (!isMaster && req.oculto) return false;
+    return true;
+  });
 
   const getNomeLojaCurto = (nomeLoja) => {
     if (!nomeLoja) return '-';
@@ -150,7 +155,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     if (filtros.destino) filtradas = filtradas.filter(req => getNomeLojaCurto(req.destino) === filtros.destino);
     if (filtros.data) filtradas = filtradas.filter(req => req.data === filtros.data);
     
-    // Filtra por Origem (Loja Atendente)
     if (filtros.origem) filtradas = filtradas.filter(req => (req.origem || 'Matriz') === filtros.origem);
 
     colunasDinamicas.forEach(coluna => {
@@ -340,7 +344,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
             </button>
             
             <div className="contador-requisicoes">
-              <span className="numero-destaque">{requisicoesAtivas.length}</span> 
+              <span className="numero-destaque">{requisicoesAtivas.filter(r => !r.oculto).length}</span> 
               <span>requisições pendentes de conclusão</span>
             </div>
 
@@ -379,9 +383,35 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                     <tr 
                       key={req.id} 
                       onClick={() => aoAbrirDetalhes(req)} 
+                      style={{ opacity: req.oculto ? 0.5 : 1 }}
                       className={`linha-tabela-hover linha-tabela-clicavel ${getLinhaPrioridadeClass(req)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
                     >
                       <td className="td-motivo-bold" title={req.motivo || ''}>
+                        {isMaster && (
+                          <button
+                            type="button"
+                            className="no-print"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (aoAlternarVisibilidade) aoAlternarVisibilidade(req.id, !req.oculto);
+                            }}
+                            title={req.oculto ? "Exibir no painel para todos" : "Ocultar do painel"}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: '8px', verticalAlign: 'middle', padding: '0' }}
+                          >
+                            {req.oculto ? (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#95a5a6' }}>
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                                <line x1="1" y1="1" x2="23" y2="23"></line>
+                              </svg>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#34495e' }}>
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                              </svg>
+                            )}
+                          </button>
+                        )}
+
                         {req.motivo 
                           ? (req.motivo.length > 25 ? `${req.motivo.substring(0, 25)}...` : req.motivo) 
                           : '-'} 
