@@ -6,11 +6,10 @@ export default function TabelaProdutosRecebimento({
   handleAtualizarItem, handleAdicionarItemVazio,
   handleDuplicarParaNovoLote, handleRemoverItem, abrirModalScanner,
   buscarProdutoPorCodigo, pedidosBip, codigoManual, setCodigoManual,
-  solicitarBipManual, isEncarregado
+  solicitarBipManual, isEncarregado, exibirPopup // 🚀 ADICIONADO AQUI
 }) {
 
   // TRAVA FÍSICA: Bloqueia a edição de quantidades, códigos e lotes.
-  // Fica travado na Conclusão, Cancelamento, Cadastro E na nova etapa de Precificação!
   const estaTravado = status === 'Concluída' || status === 'Cancelada' || status === 'Aguardando Cadastro' || status === 'Aguardando Precificação' || (status === 'Pendente' && !isEditing) || isViewer;
 
   // TRAVA DE PREÇOS: Fica liberada durante a etapa de "Aguardando Precificação".
@@ -74,7 +73,6 @@ export default function TabelaProdutosRecebimento({
                 <th>Qtd Lote *</th>
                 <th>Conferido (Bip)</th>
                 <th>Avarias</th>
-                {/* 🚀 NOVAS COLUNAS DE PRECIFICAÇÃO */}
                 <th style={{ color: '#27ae60' }}>Custo (R$)</th>
                 <th style={{ color: '#2980b9' }}>Venda (R$)</th>
                 {!estaTravado && <th className="no-print">Ações</th>}
@@ -126,7 +124,7 @@ export default function TabelaProdutosRecebimento({
                       </div>
                     </td>
 
-                    {/* CÓDIGO DO SISTEMA (AUTO-PREENCHIDO) */}
+                    {/* CÓDIGO DO SISTEMA */}
                     <td>
                       <input 
                         type="text" 
@@ -137,7 +135,7 @@ export default function TabelaProdutosRecebimento({
                       />
                     </td>
 
-                    {/* DESCRIÇÃO DO PRODUTO (AUTO-PREENCHIDO OU NOVO CADASTRO) */}
+                    {/* DESCRIÇÃO DO PRODUTO */}
                     <td>
                       <input 
                         type="text" 
@@ -176,7 +174,7 @@ export default function TabelaProdutosRecebimento({
                       />
                     </td>
 
-                    {/* CONFERIDO (BIP DE CONTAGEM E DIGITAÇÃO MANUAL COM CHAVE DE AUTORIZAÇÃO) */}
+                    {/* CONFERIDO */}
                     <td>
                       <div className="bip-conferencia-grupo" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <span className="contador-bip" style={{ color: Number(item.quantidadeBipada) >= Number(item.quantidade) ? '#27ae60' : '#e74c3c' }}>
@@ -204,12 +202,22 @@ export default function TabelaProdutosRecebimento({
                                   onChange={(e) => setCodigoManual({...codigoManual, [chaveItem]: e.target.value})} 
                                   style={{ padding: '4px', fontSize: '0.85rem', flex: 1, border: '1px solid #27ae60', borderRadius: '4px' }}
                                 />
+                                {/* 🚀 TRAVA DO BOTÃO OK MANUAL */}
                                 <button 
                                   type="button" 
                                   onClick={() => {
                                     const val = codigoManual[chaveItem];
                                     if (val && val.trim()) {
-                                      handleAtualizarItem(item.id, 'quantidadeBipada', Number(item.quantidadeBipada) + 1);
+                                      const meta = Number(item.quantidade);
+                                      const qtdAtual = Number(item.quantidadeBipada);
+                                      
+                                      if (meta > 0 && qtdAtual >= meta) {
+                                        if (exibirPopup) exibirPopup('aviso', 'Limite Atingido!', `Atenção: Você já conferiu todas as ${meta} unidades deste produto.`);
+                                        setCodigoManual({...codigoManual, [chaveItem]: ''});
+                                        return;
+                                      }
+
+                                      handleAtualizarItem(item.id, 'quantidadeBipada', qtdAtual + 1);
                                       setCodigoManual({...codigoManual, [chaveItem]: ''});
                                     }
                                   }}
@@ -219,26 +227,27 @@ export default function TabelaProdutosRecebimento({
                                 </button>
                               </div>
                             ) : statusBip === 'pendente' ? (
-                              <span style={{ fontSize: '0.75rem', color: '#d35400', fontWeight: 'bold' }}>⏳ Aguardando Líder...</span>
+                              <span style={{ fontSize: '0.75rem', color: '#d35400', fontWeight: 'bold' }}>⏳ Aguardando...</span>
                             ) : statusBip === 'recusado' ? (
                               <button 
                                 type="button" 
                                 onClick={() => solicitarBipManual(item)}
                                 style={{ background: '#c0392b', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
                               >
-                                ❌ Recusado (Pedir de novo)
+                                ❌ Recusado (Pedir)
                               </button>
                             ) : (
                               <button 
                                 type="button" 
                                 onClick={() => solicitarBipManual(item)}
                                 style={{ background: '#8e44ad', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
-                                title="Solicitar autorização ao encarregado para bipar/digitar manualmente"
+                                title="Solicitar autorização ao encarregado"
                               >
                                 🔑 Pedir Bip Manual
                               </button>
                             )}
 
+                            {/* 🚀 TRAVA DO LÁPIS MANUAL */}
                             <button 
                               type="button" 
                               className="btn-bip-rapido no-print" 
@@ -247,7 +256,13 @@ export default function TabelaProdutosRecebimento({
                                 const novaQtd = window.prompt(`Digite a quantidade conferida manualmente para:\n${item.descricaoFornecedor || 'Este Produto'}`, item.quantidadeBipada);
                                 if (novaQtd !== null && novaQtd.trim() !== '') {
                                   const num = parseInt(novaQtd, 10);
+                                  const meta = Number(item.quantidade);
+
                                   if (!isNaN(num) && num >= 0) {
+                                    if (meta > 0 && num > meta) {
+                                      if (exibirPopup) exibirPopup('aviso', 'Limite Atingido!', `Você informou ${num} unidades, mas a nota indica apenas ${meta}. Não é possível registrar além da quantidade da NF.`);
+                                      return;
+                                    }
                                     handleAtualizarItem(item.id, 'quantidadeBipada', num);
                                   } else {
                                     alert('Por favor, digite um número válido e maior que zero.');
@@ -275,7 +290,7 @@ export default function TabelaProdutosRecebimento({
                       />
                     </td>
 
-                    {/* 🚀 PREÇO DE CUSTO */}
+                    {/* CUSTO */}
                     <td>
                       <input 
                         type="number"
@@ -288,7 +303,7 @@ export default function TabelaProdutosRecebimento({
                       />
                     </td>
 
-                    {/* 🚀 PREÇO DE VENDA */}
+                    {/* VENDA */}
                     <td>
                       <input 
                         type="number"
@@ -304,7 +319,7 @@ export default function TabelaProdutosRecebimento({
                     {/* AÇÕES DE LOTE E REMOVER */}
                     {!estaTravado && (
                       <td className="no-print" style={{ display: 'flex', gap: '5px' }}>
-                        <button type="button" onClick={() => handleDuplicarParaNovoLote(item)} title="Quebrar em outro Lote de Validade" style={{ background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '5px' }}>➕ Lote</button>
+                        <button type="button" onClick={() => handleDuplicarParaNovoLote(item)} title="Quebrar em Lote" style={{ background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '5px' }}>➕ Lote</button>
                         <button type="button" onClick={() => handleRemoverItem(item.id)} title="Remover" style={{ background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '5px' }}>🗑️</button>
                       </td>
                     )}

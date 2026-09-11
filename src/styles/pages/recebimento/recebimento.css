@@ -4,7 +4,7 @@
   flex-direction: column;
   gap: 20px;
   width: 100%;
-  max-width: 1200px;
+  max-width: 100%; /* 🚀 MUDANÇA AQUI: de 1200px para 100% */
   margin: 0 auto;
   padding-bottom: 40px;
 }

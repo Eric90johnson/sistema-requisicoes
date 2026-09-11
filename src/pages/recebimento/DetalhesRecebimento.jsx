@@ -277,7 +277,7 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   };
 
   // ==========================================
-  // FUNÇÕES DE AUTO-SAVE DA TABELA
+  // FUNÇÕES DE AUTO-SAVE DA TABELA E MANIPULAÇÃO
   // ==========================================
   const atualizarItensE_SalvarGlobal = (novoEstadoOuFuncao) => {
     setItens(prev => {
@@ -291,10 +291,14 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
 
   const handleAtualizarItem = (id, campo, valor) => atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === id ? { ...item, [campo]: valor } : item));
 
-  const handleAdicionarItemVazio = () => atualizarItensE_SalvarGlobal(prev => [...prev, { id: Date.now(), codigoFornecedor: '', codigoBarras: '', codigoSistema: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '' }]);
+  // 🚀 ADICIONA NO TOPO: Os novos itens agora são inseridos no início da tabela
+  const handleAdicionarItemVazio = () => atualizarItensE_SalvarGlobal(prev => [
+    { id: Date.now(), codigoFornecedor: '', codigoBarras: '', codigoSistema: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '', precoCusto: '', precoVenda: '' },
+    ...prev
+  ]);
   
   const handleDuplicarParaNovoLote = (itemOriginal) => {
-    const novoLote = { id: Date.now(), codigoFornecedor: itemOriginal.codigoFornecedor, codigoBarras: itemOriginal.codigoBarras, codigoSistema: itemOriginal.codigoSistema, descricaoFornecedor: itemOriginal.descricaoFornecedor, quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '' };
+    const novoLote = { id: Date.now(), codigoFornecedor: itemOriginal.codigoFornecedor, codigoBarras: itemOriginal.codigoBarras, codigoSistema: itemOriginal.codigoSistema, descricaoFornecedor: itemOriginal.descricaoFornecedor, quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '', precoCusto: itemOriginal.precoCusto, precoVenda: itemOriginal.precoVenda };
     atualizarItensE_SalvarGlobal(prev => {
       const index = prev.findIndex(i => i.id === itemOriginal.id);
       const novaLista = [...prev];
@@ -387,9 +391,8 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
             ultimoBipTexto.current = decodedText;
             ultimoBipTempo.current = agora;
 
-            tocarBipSucesso();
-
             if (scannerAtivo.tipo === 'identificacao') {
+              tocarBipSucesso();
               buscarProdutoPorCodigo(scannerAtivo.item.id, decodedText);
               fecharModalScanner();
             } else {
@@ -418,22 +421,42 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
     };
   }, [scannerAtivo, isViewer]);
 
+  // 🚀 LIMITE DE BIP: Verifica a meta antes de registrar a unidade dentro do state
   const incrementarBip = (itemId) => {
-    atualizarItensE_SalvarGlobal(prev => prev.map(item => {
-      if (item.id === itemId) {
-        const novaQtd = Number(item.quantidadeBipada) + 1;
-        const meta = Number(item.quantidade);
-        if (novaQtd >= meta) {
-          setTimeout(() => fecharModalScanner(), 400);
-        }
-        return { ...item, quantidadeBipada: novaQtd };
+    atualizarItensE_SalvarGlobal(prev => {
+      const itemAtual = prev.find(i => i.id === itemId);
+      if (!itemAtual) return prev;
+
+      const meta = Number(itemAtual.quantidade);
+      
+      // Se já atingiu a meta, dispara o bloqueio e não salva
+      if (meta > 0 && Number(itemAtual.quantidadeBipada) >= meta) {
+        setTimeout(() => {
+          tocarBipErro();
+          exibirPopup('aviso', 'Limite Atingido!', `Atenção: Você já conferiu todas as ${meta} unidades deste produto.`);
+          fecharModalScanner();
+        }, 0);
+        return prev; 
       }
-      return item;
-    }));
+
+      // Se passou pela trava, toca sucesso e incrementa normalmente
+      setTimeout(() => tocarBipSucesso(), 0);
+
+      return prev.map(item => {
+        if (item.id === itemId) {
+          const novaQtd = Number(item.quantidadeBipada) + 1;
+          if (novaQtd >= meta && meta > 0) {
+            setTimeout(() => fecharModalScanner(), 400);
+          }
+          return { ...item, quantidadeBipada: novaQtd };
+        }
+        return item;
+      });
+    });
   };
 
   // ==========================================
-  // FUNÇÕES DE EDIÇÃO
+  // FUNÇÕES DE EDIÇÃO E BANCO
   // ==========================================
   const handleAdicionarObservacao = async () => {
     if (!novaObservacao.trim()) return;
@@ -471,6 +494,19 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
       await supabase.from('recebimento_mercadorias').update({ status: 'Cancelada', observacoes: observacoes }).eq('id', recebimento.id);
       exibirPopup('sucesso', 'Carga Cancelada', 'Inativado com sucesso.', () => { if(aoVoltar) aoVoltar(); });
     } catch (e) { exibirPopup('erro', 'Erro', e.message); } finally { setProcessando(false); }
+  };
+
+  // 🚀 SALVAR PROGRESSO FÍSICO NO BANCO
+  const handleSalvarProgressoFisico = async () => {
+    setProcessando(true);
+    try {
+      await supabase.from('recebimento_mercadorias').update({ itens: itens }).eq('id', recebimento.id);
+      exibirPopup('sucesso', 'Progresso Salvo', 'A contagem dos produtos foi gravada com segurança no banco de dados. Você pode continuar a conferência sem medo de perder os dados.');
+    } catch (error) {
+      exibirPopup('erro', 'Erro ao Salvar', error.message);
+    } finally {
+      setProcessando(false);
+    }
   };
 
   const solicitarPausaAoLider = async (tipoPausa) => {
@@ -536,7 +572,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   const handleAprovarPrecificacao = async () => {
     setProcessando(true);
     try {
-      // Salva os valores de custo e venda no banco em lote e avança o status
       await supabase.from('recebimento_mercadorias').update({
         status: 'Aguardando Cadastro',
         itens: itens
@@ -648,7 +683,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
           processando={processando} handleIniciarConferencia={handleIniciarConferencia}
         />
 
-        {/* 🚀 MÓDULO EXCLUSIVO PARA: "AGUARDANDO PRECIFICAÇÃO" (APENAS AVISO, BOTÃO MOVIDO PARA O RODAPÉ) */}
         {status === 'Aguardando Precificação' && !isEditing && (
           <div style={{ backgroundColor: '#fcf3cf', borderLeft: '4px solid #f1c40f', borderRadius: '0 8px 8px 0', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px' }} className="no-print">
             <h4 style={{ color: '#d35400', margin: '0 0 10px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -660,7 +694,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
           </div>
         )}
 
-        {/* MÓDULO EXCLUSIVO PARA: "AGUARDANDO CADASTRO" */}
         {status === 'Aguardando Cadastro' && !isEditing && (
           <div style={{ backgroundColor: '#ebf5fb', borderLeft: '4px solid #3498db', borderRadius: '0 8px 8px 0', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px' }} className="no-print">
             <h4 style={{ color: '#2980b9', margin: '0 0 10px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -707,11 +740,11 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
               abrirModalScanner={abrirModalScanner} buscarProdutoPorCodigo={buscarProdutoPorCodigo}
               pedidosBip={pedidosBip} codigoManual={codigoManual} setCodigoManual={setCodigoManual}
               solicitarBipManual={solicitarBipManual} isEncarregado={isEncarregado}
+              exibirPopup={exibirPopup} 
             />
           </>
         )}
 
-        {/* 🚀 RODAPÉ E BOTÕES DE AÇÃO PRINCIPAIS */}
         {isEditing && !isViewer && (
           <div className="recebimento-footer-acoes no-print">
             <button type="button" onClick={cancelarRecebimento} style={{ backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>🚫 Excluir / Cancelar Carga</button>
@@ -720,14 +753,17 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
           </div>
         )}
 
+        {/* 🚀 RODAPÉ E BOTÕES DA CONFERÊNCIA COM O NOVO BOTÃO DE SALVAR PROGRESSO */}
         {status === 'Em Conferência' && !pausaAtivaInicio && !isViewer && (
           <div className="recebimento-footer-acoes no-print">
             <button type="button" className="btn-cancelar-rec" onClick={aoVoltar}>Voltar</button>
+            <button type="button" onClick={handleSalvarProgressoFisico} className="btn-salvar-rec" disabled={processando} style={{ backgroundColor: '#f39c12' }}>
+              {processando ? '⏳ Salvando...' : '💾 Salvar Progresso Físico'}
+            </button>
             <button type="submit" className="btn-salvar-rec" disabled={processando}>{processando ? '⏳ Processando...' : '📦 Finalizar Conferência Física'}</button>
           </div>
         )}
 
-        {/* 🚀 NOVO BOTÃO DE PRECIFICAÇÃO MOVIDO PARA O RODAPÉ */}
         {status === 'Aguardando Precificação' && !isEditing && !isViewer && (
           <div className="recebimento-footer-acoes no-print">
             <button type="button" className="btn-cancelar-rec" onClick={aoVoltar}>Voltar</button>
