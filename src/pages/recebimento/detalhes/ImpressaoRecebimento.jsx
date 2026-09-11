@@ -27,12 +27,12 @@ export default function ImpressaoRecebimento({
           
           @page { margin: 15mm; }
           
-          .imp-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+          .imp-header { text-align: center; margin-bottom: 10px; }
           .imp-title { font-size: 1.5rem; font-weight: bold; margin: 0; text-transform: uppercase; }
           .imp-sub { margin: 5px 0 0 0; font-size: 1rem; }
           
-          .imp-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 25px; }
-          .imp-box { border: 1px solid #000; padding: 8px; border-radius: 4px; font-size: 0.9rem; }
+          /* NOVA LINHA DE INFORMAÇÕES CENTRALIZADA E SEM CAIXAS */
+          .imp-info-linha { text-align: center; font-size: 0.95rem; margin-bottom: 25px; border-bottom: 2px solid #000; padding-bottom: 15px; line-height: 1.6; }
           
           .imp-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
           .imp-table th, .imp-table td { border: 1px solid #000; padding: 6px; text-align: left; font-size: 0.85rem; }
@@ -51,27 +51,30 @@ export default function ImpressaoRecebimento({
         <p className="imp-sub">Relatório: <strong>{numeroRelatorio}</strong> | Emissão: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}</p>
       </div>
 
-      <div className="imp-grid">
-        <div className="imp-box"><strong>Fornecedor:</strong><br/>{nomeFornecedor || '-'}</div>
-        <div className="imp-box"><strong>Nota Fiscal:</strong><br/>{numeroNF || '-'}</div>
-        <div className="imp-box"><strong>Marca:</strong><br/>{marca || '-'}</div>
-        <div className="imp-box"><strong>Volumes:</strong><br/>{volumes ? `${volumes} cx` : '-'}</div>
-        <div className="imp-box"><strong>Loja Destino:</strong><br/>{lojaRecebedora}</div>
-        <div className="imp-box"><strong>Nº Pedido:</strong><br/>{numeroPedido || '-'}</div>
+      {/* INFORMAÇÕES GERAIS DA CARGA EM LINHA ÚNICA */}
+      <div className="imp-info-linha">
+        <strong>Fornecedor:</strong> {nomeFornecedor || '-'} &nbsp;&nbsp;|&nbsp;&nbsp; 
+        <strong>Marca:</strong> {marca || '-'} &nbsp;&nbsp;|&nbsp;&nbsp; 
+        <strong>Nota Fiscal:</strong> {numeroNF || '-'} &nbsp;&nbsp;|&nbsp;&nbsp; 
+        <strong>Volumes:</strong> {volumes ? `${volumes} cx` : '-'} &nbsp;&nbsp;|&nbsp;&nbsp; 
+        <strong>Loja Destino:</strong> {lojaRecebedora} &nbsp;&nbsp;|&nbsp;&nbsp; 
+        <strong>Nº Pedido:</strong> {numeroPedido || '-'}
       </div>
 
-      {/* TABELA DE PRODUTOS NA SEQUÊNCIA EXATA SOLICITADA */}
-      <h3 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Conferência de Produtos</h3>
+      {/* TABELA DE PRODUTOS COM CUSTO E VENDA */}
+      <h3 style={{ fontSize: '1.1rem', marginBottom: '10px' }}>Conferência de Produtos e Precificação</h3>
       <table className="imp-table">
         <thead>
           <tr>
-            <th>Cód. Fornecedor</th>
-            <th>Cód. Sistema</th>
+            <th>Cód. Forn.</th>
+            <th>Cód. Sist.</th>
             <th>Descrição do Produto</th>
             <th>Cód. Barras</th>
-            <th>Validade (M/A)</th>
-            <th style={{ width: '80px', textAlign: 'center' }}>Qtd Lote</th>
-            <th style={{ width: '80px', textAlign: 'center' }}>Avarias</th>
+            <th>Validade</th>
+            <th style={{ width: '40px', textAlign: 'center' }}>Qtd</th>
+            <th style={{ width: '50px', textAlign: 'center' }}>Avarias</th>
+            <th style={{ width: '70px', textAlign: 'center' }}>Custo</th>
+            <th style={{ width: '70px', textAlign: 'center' }}>Venda</th>
           </tr>
         </thead>
         <tbody>
@@ -84,6 +87,8 @@ export default function ImpressaoRecebimento({
               <td>{item.validade || '-'}</td>
               <td style={{ textAlign: 'center' }}>{item.quantidade || '0'}</td>
               <td style={{ textAlign: 'center' }}>{item.avarias || '0'}</td>
+              <td style={{ textAlign: 'center' }}>{item.precoCusto ? `R$ ${item.precoCusto}` : '-'}</td>
+              <td style={{ textAlign: 'center' }}>{item.precoVenda ? `R$ ${item.precoVenda}` : '-'}</td>
             </tr>
           ))}
         </tbody>

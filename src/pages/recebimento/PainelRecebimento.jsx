@@ -62,11 +62,12 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
     });
   }, [recebimentosAtivos]);
 
-  // ADICIONADA A COR DO NOVO STATUS AQUI
+  // 🚀 ADICIONADA A COR DO NOVO STATUS AQUI
   const getStatusClass = (status) => {
     switch (status) {
       case 'Pendente': return 'status-pendente';
       case 'Em Conferência': return 'status-separacao';
+      case 'Aguardando Precificação': return 'status-separado'; // Usa um tom amarelado/laranja
       case 'Aguardando Cadastro': return 'status-faturado'; // Utiliza a classe azul
       case 'Concluída': return 'status-recebido';
       default: return 'status-pendente';
@@ -149,8 +150,10 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
                   </td>
                   <td>{rec.volumes} cx</td>
                   <td className="td-historico-texto">
-                    {/* ADICIONADA A MENSAGEM DO NOVO RESPONSÁVEL */}
-                    {rec.status === 'Aguardando Cadastro' ? (
+                    {/* 🚀 ADICIONADA A MENSAGEM VISUAL PARA A DONA DA LOJA E PARA QUEM LANÇA */}
+                    {rec.status === 'Aguardando Precificação' ? (
+                       <span style={{ color: '#d35400', fontWeight: 'bold' }}>💲 Falta Precificar</span>
+                    ) : rec.status === 'Aguardando Cadastro' ? (
                        <span style={{ color: '#2980b9', fontWeight: 'bold' }}>⏳ Falta Lançar Sist.</span>
                     ) : (
                        rec.responsavel_recebedor || <span style={{ color: '#e74c3c' }}>Aguardando...</span>

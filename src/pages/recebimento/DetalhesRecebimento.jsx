@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { supabase } from '../../services/supabase';
 import '../../styles/pages/recebimento/recebimento.css';
 
@@ -24,11 +25,9 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   
   const [responsavelRecebedor, setResponsavelRecebedor] = useState(recebimento?.responsavel_recebedor || usuarioLogado?.nome_completo || '');
   
-  // NOVO ESTADO: O responsável por lançar no sistema
   const [responsavelCadastro, setResponsavelCadastro] = useState(recebimento?.responsavel_cadastro || usuarioLogado?.nome_completo || '');
   const [observacoes, setObservacoes] = useState(recebimento?.observacoes || '');
 
-  // Atualizando a estrutura base dos Itens com os novos campos de código de barras
   const [itens, setItens] = useState(
     recebimento?.itens && recebimento.itens.length > 0 
       ? recebimento.itens 
@@ -52,18 +51,23 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   const [novaObservacao, setNovaObservacao] = useState('');
 
   // ==========================================
-  // 3. ESTADOS DA CÂMERA E PAUSAS
+  // 3. ESTADOS DA CÂMERA, PAUSAS E BIP MANUAL
   // ==========================================
   const [scannerAtivo, setScannerAtivo] = useState(null); 
-  const videoRef = useRef(null);
-  const mediaStreamRef = useRef(null);
-  const foiLidoRef = useRef(false); 
+  const html5QrCodeRef = useRef(null);
+  const ultimoBipTempo = useRef(0);
+  const ultimoBipTexto = useRef("");
 
   const [pausaPendente, setPausaPendente] = useState(false);
   const [pausaAtivaInicio, setPausaAtivaInicio] = useState(null);
   const [pausaAtivaId, setPausaAtivaId] = useState(null);
   const [tipoPausaAtiva, setTipoPausaAtiva] = useState(null);
   const [tempoPausadoTotal, setTempoPausadoTotal] = useState(0);
+
+  const isEncarregado = usuarioLogado?.hierarquia === 'Encarregado' || usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
+  const [pedidosBip, setPedidosBip] = useState({});
+  const [codigoManual, setCodigoManual] = useState({});
+  const pedidosBipAntigoRef = useRef({});
 
   // ==========================================
   // 4. MODO ESPECTADOR (LOCKING GLOBAL)
@@ -76,6 +80,24 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
 
   const exibirPopup = (tipo, titulo, mensagem, onConfirm = null) => {
     setPopup({ visivel: true, tipo, titulo, mensagem, onConfirm });
+  };
+
+  const tocarBipSucesso = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+      osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1); 
+    } catch(e) {}
+  };
+
+  const tocarBipErro = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, ctx.currentTime); 
+      osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.5); 
+    } catch(e) {}
   };
 
   // ==========================================
@@ -106,8 +128,7 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
             if (diferenca > 0) setTempoDecorrido(Math.floor(diferenca / 1000));
           }
         }
-        // MODIFICADO: Inclui a nova etapa 'Aguardando Cadastro' para congelar o timer
-        if (recebimento.status === 'Concluída' || recebimento.status === 'Cancelada' || recebimento.status === 'Aguardando Cadastro') {
+        if (recebimento.status === 'Concluída' || recebimento.status === 'Cancelada' || recebimento.status === 'Aguardando Cadastro' || recebimento.status === 'Aguardando Precificação') {
           setTempoDecorrido(recebimento.metricas_recebimento.tempoTotalSegundos || 0);
         }
       }
@@ -154,11 +175,72 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
     return () => clearInterval(intId);
   }, [numeroRelatorio, usuarioLogado, status, pausaAtivaInicio]);
 
+  useEffect(() => {
+    setPedidosBip({});
+    setCodigoManual({});
+    pedidosBipAntigoRef.current = {};
+
+    if (!usuarioLogado || isEncarregado) return;
+
+    const fetchAuths = async () => {
+      const { data, error } = await supabase.from('autorizacoes_bip')
+        .select('*').eq('requisicao_id', numeroRelatorio).eq('solicitante_nome', usuarioLogado.nome_completo).order('timestamp_criacao', { ascending: true });
+        
+      if (!error && data) {
+        const mapNovo = {};
+        data.forEach(d => {
+          mapNovo[d.produto_codigo] = d.status;
+          const statusAntigo = pedidosBipAntigoRef.current[d.produto_codigo];
+          if (statusAntigo && statusAntigo !== d.status) {
+            if (d.status === 'aprovado') {
+              tocarBipSucesso();
+              exibirPopup('sucesso', 'Bip Manual Liberado!', `O encarregado liberou a digitação manual para o produto:\n\n${d.produto_descricao}`);
+            } else if (d.status === 'recusado') {
+              tocarBipErro();
+              exibirPopup('erro', 'Liberação Recusada', `Atenção, o encarregado recusou a liberação para:\n\n${d.produto_descricao}`);
+            }
+          }
+        });
+        pedidosBipAntigoRef.current = mapNovo;
+        setPedidosBip(mapNovo);
+      }
+    };
+
+    fetchAuths();
+    const intervaloAuth = setInterval(fetchAuths, 5000);
+    return () => clearInterval(intervaloAuth);
+  }, [numeroRelatorio, usuarioLogado, isEncarregado]);
+
   const formatarTempo = (segundos) => {
     const h = Math.floor(segundos / 3600).toString().padStart(2, '0');
     const m = Math.floor((segundos % 3600) / 60).toString().padStart(2, '0');
     const s = (segundos % 60).toString().padStart(2, '0');
     return `${h}:${m}:${s}`;
+  };
+
+  const solicitarBipManual = async (item) => {
+    if (!usuarioLogado?.encarregado_responsavel) {
+      exibirPopup('erro', 'Sem Encarregado', 'Você não tem um Encarregado vinculado ao seu perfil.\nPeça ao administrador para atualizar o seu perfil primeiro.');
+      return;
+    }
+    const chaveItem = String(item.id);
+    setPedidosBip(prev => ({ ...prev, [chaveItem]: 'pendente' }));
+    
+    const { error } = await supabase.from('autorizacoes_bip').insert([{
+      requisicao_id: numeroRelatorio, 
+      produto_codigo: chaveItem, 
+      produto_descricao: item.descricaoFornecedor || 'Produto sem descrição',
+      solicitante_nome: usuarioLogado.nome_completo, 
+      encarregado_destino: usuarioLogado.encarregado_responsavel,
+      status: 'pendente', 
+      timestamp_criacao: Date.now()
+    }]).select();
+
+    if (error) {
+       exibirPopup('erro', 'Erro ao Solicitar', `Ocorreu um erro no banco de dados.\n\nDetalhe técnico: ${error.message}`);
+    } else {
+      exibirPopup('info', 'Solicitação Enviada', 'Pedido de autorização enviado ao encarregado. Aguarde a aprovação.');
+    }
   };
 
   // ==========================================
@@ -227,7 +309,7 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   };
 
   // ==========================================
-  // BUSCA INTELIGENTE DO PRODUTO (NOVA LÓGICA DO BANCO)
+  // BUSCA INTELIGENTE DO PRODUTO
   // ==========================================
   const buscarProdutoPorCodigo = async (itemId, codigoBarras) => {
     handleAtualizarItem(itemId, 'codigoBarras', codigoBarras);
@@ -258,64 +340,92 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
     }
   };
 
-  // ==========================================
-  // MOTOR DA CÂMERA
-  // ==========================================
   const fecharModalScanner = () => {
-    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(track => track.stop()); mediaStreamRef.current = null; }
-    setScannerAtivo(null);
+    if (html5QrCodeRef.current) {
+      html5QrCodeRef.current.stop().then(() => {
+        html5QrCodeRef.current.clear();
+        html5QrCodeRef.current = null;
+        setScannerAtivo(null);
+      }).catch(err => {
+        html5QrCodeRef.current = null;
+        setScannerAtivo(null);
+      });
+    } else {
+      setScannerAtivo(null);
+    }
   };
 
   const abrirModalScanner = async (item, tipo = 'contagem') => {
     if (tipo === 'contagem' && (!item.quantidade || Number(item.quantidade) <= 0)) {
       return exibirPopup('aviso', 'Atenção', 'Informe a quantidade na NF antes de iniciar a conferência.');
     }
-    
-    foiLidoRef.current = false;
     setScannerAtivo({ item, tipo });
-    
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      mediaStreamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
-      iniciarDeteccaoCodigo(stream, item, tipo);
-    } catch (err) {
-      exibirPopup('erro', 'Acesso à Câmera', 'Não foi possível abrir a câmera. Verifique permissões.');
-      setScannerAtivo(null);
+  };
+
+  useEffect(() => {
+    let isComponentMounted = true;
+
+    if (scannerAtivo !== null && !isViewer) {
+      setTimeout(() => {
+        if (!isComponentMounted) return;
+        const scanner = new Html5Qrcode('leitor-camera-modal', {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.CODE_39
+          ]
+        });
+        html5QrCodeRef.current = scanner;
+        const configCamera = { fps: 10, qrbox: { width: 250, height: 100 } };
+
+        scanner.start({ facingMode: "environment" }, configCamera,
+          (decodedText) => {
+            const agora = Date.now();
+            if (decodedText === ultimoBipTexto.current && (agora - ultimoBipTempo.current < 1500)) return;
+            ultimoBipTexto.current = decodedText;
+            ultimoBipTempo.current = agora;
+
+            tocarBipSucesso();
+
+            if (scannerAtivo.tipo === 'identificacao') {
+              buscarProdutoPorCodigo(scannerAtivo.item.id, decodedText);
+              fecharModalScanner();
+            } else {
+              incrementarBip(scannerAtivo.item.id);
+            }
+          },
+          (err) => { }
+        ).catch(err => {
+          console.error("Erro ao iniciar câmera:", err);
+          exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões.');
+          setScannerAtivo(null);
+        });
+      }, 150);
     }
-  };
 
-  const iniciarDeteccaoCodigo = (stream, itemAlvo, tipoScanner) => {
-    if (!('BarcodeDetector' in window)) return;
-    const barcodeDetector = new window.BarcodeDetector({ formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code', 'code_39'] });
-    
-    const verificarFrame = async () => {
-      if (!videoRef.current || !mediaStreamRef.current || foiLidoRef.current) return;
-      try {
-        const barcodes = await barcodeDetector.detect(videoRef.current);
-        if (barcodes.length > 0) {
-          foiLidoRef.current = true; 
-          const codigoLido = barcodes[0].rawValue;
-
-          if (tipoScanner === 'identificacao') {
-            buscarProdutoPorCodigo(itemAlvo.id, codigoLido);
-            fecharModalScanner();
-          } else {
-            incrementarBip(itemAlvo.id);
-            setTimeout(() => { foiLidoRef.current = false; }, 1000); 
-          }
-        }
-      } catch (e) {}
-      if (mediaStreamRef.current && !foiLidoRef.current) requestAnimationFrame(verificarFrame);
+    return () => {
+      isComponentMounted = false;
+      if (html5QrCodeRef.current) {
+        html5QrCodeRef.current.stop().then(() => {
+          html5QrCodeRef.current.clear();
+          html5QrCodeRef.current = null;
+        }).catch(err => {
+          html5QrCodeRef.current = null;
+        });
+      }
     };
-    requestAnimationFrame(verificarFrame);
-  };
+  }, [scannerAtivo, isViewer]);
 
   const incrementarBip = (itemId) => {
     atualizarItensE_SalvarGlobal(prev => prev.map(item => {
       if (item.id === itemId) {
         const novaQtd = Number(item.quantidadeBipada) + 1;
-        if (novaQtd >= Number(item.quantidade)) setTimeout(() => fecharModalScanner(), 400);
+        const meta = Number(item.quantidade);
+        if (novaQtd >= meta) {
+          setTimeout(() => fecharModalScanner(), 400);
+        }
         return { ...item, quantidadeBipada: novaQtd };
       }
       return item;
@@ -385,7 +495,7 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   };
 
   // ==========================================
-  // ETAPA 1: FINALIZA A CONFERÊNCIA FÍSICA E MUDA P/ "AGUARDANDO CADASTRO"
+  // ETAPA 1: FINALIZA A CONFERÊNCIA FÍSICA E MUDA P/ "AGUARDANDO PRECIFICAÇÃO"
   // ==========================================
   const handleSalvarRecebimentoFinal = async (e) => {
     e.preventDefault();
@@ -403,17 +513,16 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
       const metricasFinais = { inicioConferencia: inicioConferencia, id_conferente: meuId, tempoTotalSegundos: tempoDecorrido, totalItensFisicos: totalItens, upm: Number(upm.toFixed(1)), pontosGanhos: pts, responsavel: responsavelRecebedor, finalizadoEm: new Date().toISOString() };
       const itensComLote = itens.map((item, index) => ({ ...item, loteInterno: item.loteInterno || `LT-${numeroRelatorio}-${String(index + 1).padStart(2, '0')}` }));
 
-      // MUDANÇA: O Status vira "Aguardando Cadastro"
       await supabase.from('recebimento_mercadorias').update({ 
         responsavel_recebedor: responsavelRecebedor, 
         observacoes: observacoes, 
         itens: itensComLote, 
         metricas_recebimento: metricasFinais, 
-        status: 'Aguardando Cadastro' 
+        status: 'Aguardando Precificação' 
       }).eq('id', recebimento.id);
       
-      setStatus('Aguardando Cadastro');
-      exibirPopup('sucesso', 'Conferência Física Finalizada! 📦', `Os produtos do relatório ${numeroRelatorio} foram conferidos com sucesso.\n\nAgora a nota aguarda ser lançada no sistema da loja.`);
+      setStatus('Aguardando Precificação');
+      exibirPopup('sucesso', 'Conferência Física Finalizada! 📦', `Os produtos do relatório ${numeroRelatorio} foram conferidos fisicamente.\n\nAgora a nota aguarda a precificação da gerência na próxima etapa.`);
     } catch (error) { 
       exibirPopup('erro', 'Falha ao Finalizar', error.message); 
     } finally { 
@@ -422,7 +531,28 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   };
 
   // ==========================================
-  // ETAPA FINAL: ASSINATURA DE QUEM FEZ O CADASTRO E CONCLUSÃO DEFINITIVA
+  // ETAPA 2: APROVAR PRECIFICAÇÃO E MUDAR P/ "AGUARDANDO CADASTRO"
+  // ==========================================
+  const handleAprovarPrecificacao = async () => {
+    setProcessando(true);
+    try {
+      // Salva os valores de custo e venda no banco em lote e avança o status
+      await supabase.from('recebimento_mercadorias').update({
+        status: 'Aguardando Cadastro',
+        itens: itens
+      }).eq('id', recebimento.id);
+
+      setStatus('Aguardando Cadastro');
+      exibirPopup('sucesso', 'Precificação Concluída! 💲', `Os preços foram registrados com sucesso.\n\nAgora a nota aguarda o lançamento final no sistema da loja.`);
+    } catch (error) {
+      exibirPopup('erro', 'Erro', error.message);
+    } finally {
+      setProcessando(false);
+    }
+  };
+
+  // ==========================================
+  // ETAPA 3: ASSINATURA DE QUEM FEZ O CADASTRO E CONCLUSÃO DEFINITIVA
   // ==========================================
   const handleConcluirCadastro = async () => {
     if (!responsavelCadastro.trim()) {
@@ -469,10 +599,8 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
               </div>
               <div style={{ padding: '15px' }}>
                 {scannerAtivo.tipo === 'contagem' && <p style={{ margin: '0 0 10px 0', color: '#34495e', fontWeight: 'bold' }}>{scannerAtivo.item.descricaoFornecedor}</p>}
-                <div style={{ position: 'relative', width: '100%', height: '260px', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
-                  <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-                  <div style={{ position: 'absolute', top: '50%', left: '10%', right: '10%', height: '2px', backgroundColor: '#e74c3c', boxShadow: '0 0 8px #e74c3c' }}></div>
-                </div>
+                
+                <div id="leitor-camera-modal" style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000', minHeight: '220px' }}></div>
                 
                 {scannerAtivo.tipo === 'contagem' ? (
                   <>
@@ -480,7 +608,7 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
                     <button type="button" onClick={() => incrementarBip(scannerAtivo.item.id)} style={{ marginTop: '15px', backgroundColor: '#3498db', color: 'white', border: 'none', padding: '12px', width: '100%', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>+ Registrar 1 Unidade Manual</button>
                   </>
                 ) : (
-                  <div style={{ marginTop: '15px', fontSize: '1.1rem', color: '#2c3e50', fontWeight: 'bold' }}>Centralize o código de barras do produto na linha vermelha.</div>
+                  <div style={{ marginTop: '15px', fontSize: '1.1rem', color: '#2c3e50', fontWeight: 'bold' }}>Aponte para o código de barras (traços).</div>
                 )}
               </div>
             </div>
@@ -520,14 +648,26 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
           processando={processando} handleIniciarConferencia={handleIniciarConferencia}
         />
 
+        {/* 🚀 MÓDULO EXCLUSIVO PARA: "AGUARDANDO PRECIFICAÇÃO" (APENAS AVISO, BOTÃO MOVIDO PARA O RODAPÉ) */}
+        {status === 'Aguardando Precificação' && !isEditing && (
+          <div style={{ backgroundColor: '#fcf3cf', borderLeft: '4px solid #f1c40f', borderRadius: '0 8px 8px 0', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px' }} className="no-print">
+            <h4 style={{ color: '#d35400', margin: '0 0 10px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              💲 Etapa Intermediária: Precificação (Opcional)
+            </h4>
+            <p style={{ color: '#34495e', margin: 0, fontSize: '0.95rem' }}>
+              A conferência física foi finalizada por <strong>{responsavelRecebedor}</strong>. Preencha os preços de Custo e Venda diretamente na tabela abaixo (opcional) e confirme para liberar a nota para cadastro.
+            </p>
+          </div>
+        )}
+
         {/* MÓDULO EXCLUSIVO PARA: "AGUARDANDO CADASTRO" */}
         {status === 'Aguardando Cadastro' && !isEditing && (
           <div style={{ backgroundColor: '#ebf5fb', borderLeft: '4px solid #3498db', borderRadius: '0 8px 8px 0', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px' }} className="no-print">
             <h4 style={{ color: '#2980b9', margin: '0 0 10px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              💻 Etapa 1: Cadastro da NF no Sistema
+              💻 Última Etapa: Cadastro da NF no Sistema
             </h4>
             <p style={{ color: '#34495e', margin: '0 0 15px 0', fontSize: '0.95rem' }}>
-              A conferência física foi finalizada por <strong>{responsavelRecebedor}</strong>. Informe quem realizou o lançamento da Nota Fiscal no sistema da loja para encerrar o processo.
+              A precificação foi concluída. Informe quem realizou o lançamento da Nota Fiscal no sistema da loja para encerrar o processo.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxWidth: '600px' }}>
@@ -565,10 +705,13 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
               handleAtualizarItem={handleAtualizarItem} handleAdicionarItemVazio={handleAdicionarItemVazio}
               handleDuplicarParaNovoLote={handleDuplicarParaNovoLote} handleRemoverItem={handleRemoverItem}
               abrirModalScanner={abrirModalScanner} buscarProdutoPorCodigo={buscarProdutoPorCodigo}
+              pedidosBip={pedidosBip} codigoManual={codigoManual} setCodigoManual={setCodigoManual}
+              solicitarBipManual={solicitarBipManual} isEncarregado={isEncarregado}
             />
           </>
         )}
 
+        {/* 🚀 RODAPÉ E BOTÕES DE AÇÃO PRINCIPAIS */}
         {isEditing && !isViewer && (
           <div className="recebimento-footer-acoes no-print">
             <button type="button" onClick={cancelarRecebimento} style={{ backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>🚫 Excluir / Cancelar Carga</button>
@@ -580,14 +723,22 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
         {status === 'Em Conferência' && !pausaAtivaInicio && !isViewer && (
           <div className="recebimento-footer-acoes no-print">
             <button type="button" className="btn-cancelar-rec" onClick={aoVoltar}>Voltar</button>
-            {/* O texto do botão foi ajustado para refletir a nova etapa */}
             <button type="submit" className="btn-salvar-rec" disabled={processando}>{processando ? '⏳ Processando...' : '📦 Finalizar Conferência Física'}</button>
+          </div>
+        )}
+
+        {/* 🚀 NOVO BOTÃO DE PRECIFICAÇÃO MOVIDO PARA O RODAPÉ */}
+        {status === 'Aguardando Precificação' && !isEditing && !isViewer && (
+          <div className="recebimento-footer-acoes no-print">
+            <button type="button" className="btn-cancelar-rec" onClick={aoVoltar}>Voltar</button>
+            <button type="button" onClick={handleAprovarPrecificacao} className="btn-salvar-rec" disabled={processando} style={{ backgroundColor: '#f39c12' }}>
+              {processando ? '⏳ Salvando...' : 'Liberar para Cadastro ✔️'}
+            </button>
           </div>
         )}
 
       </form>
 
-      {/* COMPONENTE DE IMPRESSÃO */}
       <ImpressaoRecebimento 
         numeroRelatorio={numeroRelatorio}
         lojaRecebedora={lojaRecebedora}

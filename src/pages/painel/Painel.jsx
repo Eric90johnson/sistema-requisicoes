@@ -33,6 +33,8 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const isMaster = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
   const canViewRanking = isMaster || usuarioLogado?.perm_ver_ranking;
+  
+  const canHideRequest = isMaster || usuarioLogado?.perm_ocultar_requisicao;
 
   const handleAbrirRanking = () => {
     if (canViewRanking) {
@@ -130,7 +132,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   
   const requisicoesAtivas = requisicoes.filter(req => {
     if (req.status === 'Concluída' || req.status === 'Cancelada') return false;
-    if (!isMaster && req.oculto) return false;
+    if (!canHideRequest && req.oculto) return false;
     return true;
   });
 
@@ -164,20 +166,39 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     });
 
     return filtradas.sort((a, b) => {
+      // 1. Destaques visuais
       const aDestacado = idsDestacados.includes(a.id);
       const bDestacado = idsDestacados.includes(b.id);
       if (aDestacado && !bDestacado) return -1; 
       if (!aDestacado && bDestacado) return 1;  
 
+      // 2. Transporte/Recebimento pro final de tudo (Permanece azul embaixo)
       const aBaixaPrioridade = a.status === 'Transporte' || a.status === 'Recebimento';
       const bBaixaPrioridade = b.status === 'Transporte' || b.status === 'Recebimento';
       if (aBaixaPrioridade && !bBaixaPrioridade) return 1;
       if (!aBaixaPrioridade && bBaixaPrioridade) return -1;
 
+      // 3. Regra de Prioridade Mestre (1, 2, 3)
       const prioA = a.prioridade || 3; 
       const prioB = b.prioridade || 3;
       if (prioA !== prioB) return prioA - prioB; 
       
+      // 🚀 NOVA REGRA ADICIONADA: Organização por Status dentro da mesma prioridade
+      const getPesoStatus = (st) => {
+        if (st === 'Pendente') return 1;
+        if (st === 'Em Separação') return 2;
+        if (st === 'Separado') return 3;
+        if (st === 'Saída de produtos') return 4;
+        if (st === 'Faturamento') return 5;
+        return 99; 
+      };
+
+      const pesoStatusA = getPesoStatus(a.status);
+      const pesoStatusB = getPesoStatus(b.status);
+
+      if (pesoStatusA !== pesoStatusB) return pesoStatusA - pesoStatusB;
+
+      // 5. Se empatar em Prioridade e Status, vale a data de envio (Cronológico)
       const tempoA = a.timestampCriacao || 0;
       const tempoB = b.timestampCriacao || 0;
       return tempoA - tempoB; 
@@ -387,7 +408,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                       className={`linha-tabela-hover linha-tabela-clicavel ${getLinhaPrioridadeClass(req)} ${idsDestacados.includes(req.id) ? 'piscar-linha-nova' : ''}`}
                     >
                       <td className="td-motivo-bold" title={req.motivo || ''}>
-                        {isMaster && (
+                        {canHideRequest && (
                           <button
                             type="button"
                             className="no-print"

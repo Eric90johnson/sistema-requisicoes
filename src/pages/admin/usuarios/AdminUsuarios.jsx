@@ -25,9 +25,10 @@ export default function AdminUsuarios() {
   const [permBipLivre, setPermBipLivre] = useState(false);
   const [permConsultaEstoque, setPermConsultaEstoque] = useState(false);
   const [permVerRanking, setPermVerRanking] = useState(false);
-  
-  // NOVA PERMISSÃO: Dashboard
   const [permDashboard, setPermDashboard] = useState(false);
+  
+  // 🚀 NOVA PERMISSÃO: Ocultar Requisições (Olhinho)
+  const [permOcultarRequisicao, setPermOcultarRequisicao] = useState(false);
 
   useEffect(() => {
     buscarUsuarios();
@@ -71,6 +72,7 @@ export default function AdminUsuarios() {
     setPermConsultaEstoque(false);
     setPermVerRanking(false);
     setPermDashboard(false);
+    setPermOcultarRequisicao(false); // Reseta a nova permissão
   };
 
   const iniciarEdicao = (user) => {
@@ -91,6 +93,7 @@ export default function AdminUsuarios() {
     setPermConsultaEstoque(user.perm_consulta_estoque || false);
     setPermVerRanking(user.perm_ver_ranking || false);
     setPermDashboard(user.perm_dashboard || false);
+    setPermOcultarRequisicao(user.perm_ocultar_requisicao || false); // Carrega a nova permissão
     
     if (user.encarregado_responsavel) {
       setEncarregadosSelecionados(user.encarregado_responsavel.split(', '));
@@ -138,7 +141,8 @@ export default function AdminUsuarios() {
         perm_bip_livre: permBipLivre,
         perm_consulta_estoque: permConsultaEstoque,
         perm_ver_ranking: permVerRanking,
-        perm_dashboard: permDashboard
+        perm_dashboard: permDashboard,
+        perm_ocultar_requisicao: permOcultarRequisicao // Salva a nova permissão
       };
 
       if (!editandoId) {
@@ -327,6 +331,12 @@ export default function AdminUsuarios() {
                 <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permBipLivre} onChange={(e) => setPermBipLivre(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
                 Liberar Bip Manual (Sem aprovação)
               </label>
+
+              {/* 🚀 NOVA CAIXINHA DE PERMISSÃO */}
+              <label className="label-permissao" style={{ border: '1px solid #9b59b6' }}>
+                <input type="checkbox" checked={permAcessoTotal || isMainAdmin ? true : permOcultarRequisicao} onChange={(e) => setPermOcultarRequisicao(e.target.checked)} disabled={permAcessoTotal || isMainAdmin} />
+                Ocultar/Exibir Requisições (Olhinho)
+              </label>
             </div>
             
             <p style={{ fontSize: '0.8rem', color: '#e67e22', marginTop: '10px', fontStyle: 'italic' }}>
@@ -370,7 +380,7 @@ export default function AdminUsuarios() {
                     <td>
                       <strong>{user.nome_completo}</strong>
                       {user.acesso_admin && <span style={{ marginLeft: '8px', background: '#f39c12', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold' }}>MASTER</span>}
-                      {!user.acesso_admin && (user.perm_gerenciar_usuarios || user.perm_atualizar_estoque || user.perm_ver_relatorios || user.perm_gerenciar_metas || user.perm_gerenciar_novidades || user.perm_bip_livre || user.perm_consulta_estoque || user.perm_ver_ranking || user.perm_dashboard) && (
+                      {!user.acesso_admin && (user.perm_gerenciar_usuarios || user.perm_atualizar_estoque || user.perm_ver_relatorios || user.perm_gerenciar_metas || user.perm_gerenciar_novidades || user.perm_bip_livre || user.perm_consulta_estoque || user.perm_ver_ranking || user.perm_dashboard || user.perm_ocultar_requisicao) && (
                         <span style={{ marginLeft: '8px', background: '#3498db', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold' }}>PERMISSÕES ESPECIAIS</span>
                       )}
                       
