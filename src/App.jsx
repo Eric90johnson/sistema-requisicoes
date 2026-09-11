@@ -2,7 +2,7 @@ import RecebimentoProdutos from './pages/recebimento/RecebimentoProdutos';
 import PainelRecebimento from './pages/recebimento/PainelRecebimento';
 import DetalhesRecebimento from './pages/recebimento/DetalhesRecebimento';
 import Rodape from './components/rodape/Rodape';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import './styles/global.css';
 import Painel from './pages/painel/Painel';
 import NovaRequisicao from './pages/painel/nova-requisicao/NovaRequisicao';
@@ -47,6 +47,9 @@ function App() {
 
   const [menuMobileAberto, setMenuMobileAberto] = useState(false);
 
+  // 🚀 ADICIONADO: Referência silenciosa do último movimento do usuário
+  const tempoOciosoRef = useRef(Date.now());
+
   const handleLogar = (dadosUsuario) => {
     localStorage.setItem('netadantas_logado', 'true');
     if (dadosUsuario) {
@@ -54,6 +57,7 @@ function App() {
       setUsuarioLogado(dadosUsuario);
     }
     setIsLogado(true);
+    tempoOciosoRef.current = Date.now(); // Zera o relógio ao logar
   };
 
   const handleSair = async () => {
@@ -64,35 +68,75 @@ function App() {
     await supabase.auth.signOut();
   };
 
+  // 🚀 ADICIONADO: Motor de Inatividade (Desloga após 10 minutos)
+  useEffect(() => {
+    if (!isLogado) return;
+
+    const resetarTempo = () => {
+      tempoOciosoRef.current = Date.now();
+    };
+
+    // Monitora as ações principais (mouse, teclado, toques na tela)
+    window.addEventListener('mousemove', resetarTempo);
+    window.addEventListener('keydown', resetarTempo);
+    window.addEventListener('click', resetarTempo);
+    window.addEventListener('touchstart', resetarTempo);
+
+    // Checa a inatividade a cada 10 segundos para não pesar o sistema
+    const intervaloInatividade = setInterval(() => {
+      const agora = Date.now();
+      const tempoInativo = agora - tempoOciosoRef.current;
+      
+      // 10 minutos = 600.000 milissegundos
+      if (tempoInativo >= 600000) {
+        localStorage.setItem('sessao_expirada', 'true'); // Passa o aviso silencioso para a tela de Login
+        handleSair();
+      }
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('mousemove', resetarTempo);
+      window.removeEventListener('keydown', resetarTempo);
+      window.removeEventListener('click', resetarTempo);
+      window.removeEventListener('touchstart', resetarTempo);
+      clearInterval(intervaloInatividade);
+    };
+  }, [isLogado]);
+
   const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      const { data: reqData } = await supabase.from('requisicoes').select('*').order('timestamp_criacao', { ascending: false }).limit(100);
+      const colunasRequisicoes = 'id, data, timestamp_criacao, origem, destino, solicitante, motivo, prioridade, itens, status, historico, metricas_separacao, numero_requisicao_externa, nota_fiscal, oculto';
+      const { data: reqData } = await supabase.from('requisicoes').select(colunasRequisicoes).order('timestamp_criacao', { ascending: false }).limit(100);
+      
       if (reqData) {
         const reqsFormatadas = reqData.map(r => ({
           ...r,
           timestampCriacao: r.timestamp_criacao,
-          listaItens: r.lista_itens,
           metricasSeparacao: r.metricas_separacao,
           numeroRequisicaoExterna: r.numero_requisicao_externa,
           notaFiscal: r.nota_fiscal,
-          oculto: r.oculto // Traz a nova coluna do banco
+          oculto: r.oculto
         }));
         setRequisicoes(reqsFormatadas);
 
         setReqSelecionada(prev => {
           if (!prev) return null;
-          return reqsFormatadas.find(r => r.id === prev.id) || prev;
+          const atualizada = reqsFormatadas.find(r => r.id === prev.id);
+          return atualizada ? { ...atualizada, listaItens: prev.listaItens } : prev;
         });
       }
 
-      const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select('*').order('data_criacao', { ascending: false }).limit(50);
+      const colunasRecebimentos = 'id, data_criacao, loja_recebedora, numero_relatorio, nome_fornecedor, marca, numero_nf, volumes, numero_pedido, responsavel_recebedor, responsavel_cadastro, observacoes, status, metricas_recebimento';
+      const { data: recMercadorias } = await supabase.from('recebimento_mercadorias').select(colunasRecebimentos).order('data_criacao', { ascending: false }).limit(50);
+      
       if (recMercadorias) {
         setRecebimentos(recMercadorias);
 
         setRecebimentoSelecionado(prev => {
           if (!prev) return null;
-          return recMercadorias.find(r => r.id === prev.id) || prev;
+          const atualizada = recMercadorias.find(r => r.id === prev.id);
+          return atualizada ? { ...atualizada, itens: prev.itens } : prev;
         });
       }
 
@@ -257,7 +301,8 @@ function App() {
 
   const handleIniciarEdicao = async (id, nomeEditor) => {
     const req = requisicoes.find(r => r.id === id);
-    const reqEditando = { ...req, editorTemporario: nomeEditor };
+    const lista = reqSelecionada?.id === id ? reqSelecionada.listaItens : [];
+    const reqEditando = { ...req, editorTemporario: nomeEditor, listaItens: lista };
     await supabase.from('requisicoes').update({ status: 'Em Edição' }).eq('id', id);
     setReqEmEdicao(reqEditando);
     setTelaAtual('nova');
@@ -359,7 +404,8 @@ function App() {
 
   const handleFinalizarSeparacao = async (id, tempoSegundos, responsavelSeparacao) => {
     const req = requisicoes.find(r => r.id === id);
-    const totalItensFisicos = req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0);
+    const itensDaReq = reqSelecionada?.id === id ? reqSelecionada.listaItens : [];
+    const totalItensFisicos = itensDaReq.reduce((acc, item) => acc + Number(item.quantidade), 0);
     const novasMetricas = { tempoTotalSegundos: tempoSegundos, totalItensFisicos: totalItensFisicos, bateuRecorde: false, responsavel: responsavelSeparacao, finalizadoEm: new Date().toISOString() };
     
     const chaveRecorde = `qtd_${totalItensFisicos}`;
@@ -379,7 +425,6 @@ function App() {
     return novasMetricas;
   };
 
-  // ADICIONADO: Função para o Admin alternar a visibilidade de uma requisição
   const handleAlternarVisibilidade = async (id, novoEstadoOculto) => {
     const reqAtualizada = { ...requisicoes.find(r => r.id === id), oculto: novoEstadoOculto };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
@@ -392,7 +437,19 @@ function App() {
     }
   };
 
-  const abrirDetalhes = (req) => { setReqSelecionada(req); setTelaAtual('detalhes'); };
+  const abrirDetalhes = async (req) => { 
+    setCarregando(true);
+    try {
+      const { data } = await supabase.from('requisicoes').select('lista_itens').eq('id', req.id).single();
+      setReqSelecionada({ ...req, listaItens: data?.lista_itens || [] });
+      setTelaAtual('detalhes');
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
   const navegarPara = (novaTela, aba = 'interna') => { setTelaAtual(novaTela); if (novaTela === 'painel') setAbaPainelAtiva(aba); setMenuMobileAberto(false); };
 
   if (!isLogado) return <Login aoLogar={handleLogar} />;
@@ -419,6 +476,7 @@ function App() {
         telaAtual={telaAtual}
         menuMobileAberto={menuMobileAberto}
         setMenuMobileAberto={setMenuMobileAberto}
+        tempoOciosoRef={tempoOciosoRef} /* 🚀 ADICIONADO: Envia a referência do tempo para o Menu */
       />
 
       <div className="conteudo-principal-wrapper">
@@ -444,7 +502,7 @@ function App() {
                   recebimentos={recebimentos}
                   pedidosMarketplace={pedidosMarketplace} 
                   aoAbrirDetalhes={abrirDetalhes}
-                  aoAlternarVisibilidade={handleAlternarVisibilidade} /* ADICIONADO AQUI */
+                  aoAlternarVisibilidade={handleAlternarVisibilidade}
                 />
               )}
               
@@ -478,9 +536,18 @@ function App() {
                   recebimentos={recebimentos} 
                   requisicoes={requisicoes}
                   aoClicarNovoRecebimento={() => setTelaAtual('novo-recebimento')} 
-                  aoAbrirDetalhesRecebimento={(rec) => { 
-                    setRecebimentoSelecionado(rec); 
-                    setTelaAtual('detalhes-recebimento'); 
+                  
+                  aoAbrirDetalhesRecebimento={async (rec) => { 
+                    setCarregando(true);
+                    try {
+                      const { data } = await supabase.from('recebimento_mercadorias').select('itens').eq('id', rec.id).single();
+                      setRecebimentoSelecionado({ ...rec, itens: data?.itens || [] });
+                      setTelaAtual('detalhes-recebimento'); 
+                    } catch(e) {
+                      console.error(e);
+                    } finally {
+                      setCarregando(false);
+                    }
                   }}
                   usuarioLogado={usuarioLogado} 
                 />

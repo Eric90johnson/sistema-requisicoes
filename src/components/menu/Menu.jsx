@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import '../../styles/components/menu/menu.css';
 import logo from '../../assets/logo.jpeg';
 
@@ -45,13 +45,15 @@ const IconLogout = () => (
 
 export default function Menu({ 
   aoClicarTransferencias, aoClicarMarketplace, aoClicarPainelRecebimento, aoClicarHistorico, aoClicarBaseDados, aoClicarAdmin, aoClicarContatos, aoClicarDashboard, aoClicarMetas, aoClicarNovaRequisicao, aoClicarNovoRecebimento,
-  usuarioLogado, aoSair, telaAtual, menuMobileAberto, setMenuMobileAberto 
+  usuarioLogado, aoSair, telaAtual, menuMobileAberto, setMenuMobileAberto, tempoOciosoRef 
 }) { 
   const [colapsado, setColapsado] = useState(true);
   const [mostrarModalAcessoNegado, setMostrarModalAcessoNegado] = useState(false);
 
   const [painelMobileAberto, setPainelMobileAberto] = useState(false);
   const [adminMobileAberto, setAdminMobileAberto] = useState(false);
+
+  const [tempoRestante, setTempoRestante] = useState(600); // 10 min = 600 segundos
 
   const isMaster = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
   const canViewHistory = isMaster || usuarioLogado?.perm_ver_relatorios;
@@ -63,6 +65,25 @@ export default function Menu({
   const canViewDashboard = isMaster || usuarioLogado?.perm_dashboard;
   
   const canSeeAdminMenu = isMaster || canUpdateStock || canManageUsers || canManageNovidades;
+
+  useEffect(() => {
+    if (!tempoOciosoRef) return;
+
+    const intervalo = setInterval(() => {
+      const tempoInativo = Date.now() - tempoOciosoRef.current;
+      const restanteEmSegundos = Math.max(0, 600000 - tempoInativo); 
+      
+      setTempoRestante(Math.ceil(restanteEmSegundos / 1000));
+    }, 1000);
+
+    return () => clearInterval(intervalo);
+  }, [tempoOciosoRef]);
+
+  const formatarTempoMenu = (segundos) => {
+    const m = Math.floor(segundos / 60).toString().padStart(2, '0');
+    const s = (segundos % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   const handleNavegacao = (acao) => {
     if (acao) acao();
@@ -124,6 +145,15 @@ export default function Menu({
 
   return (
     <>
+      <style>
+        {`
+          @keyframes pulsarAlerta {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.03); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+        `}
+      </style>
       <div 
         className={`sidebar-overlay ${menuMobileAberto ? 'ativo' : ''}`} 
         onClick={() => setMenuMobileAberto(false)}
@@ -159,7 +189,6 @@ export default function Menu({
             <ul>
               <li className="menu-header-texto"><span>SISTEMA</span></li>
               
-              {/* NÍVEL 1: PAINEL PRINCIPAL (Transferência, Marketplace, Recebimento) */}
               <li className={`menu-item sub-menu-parent ${painelMobileAberto ? 'mobile-expandido' : ''}`}>
                 <a href="#" onClick={handlePainelClick}>
                   <span className="menu-icon"><IconHome /></span>
@@ -187,7 +216,6 @@ export default function Menu({
                       </a>
                     </li>
 
-                    {/* NOVO SUBMENU: PAINEL DE RECEBIMENTO */}
                     <li className={`menu-item sub-nivel-2 ${telaAtual === 'painel-recebimento' ? 'ativo-link' : ''}`}>
                       <a href="#" onClick={(e) => { 
                         e.preventDefault(); 
@@ -200,7 +228,6 @@ export default function Menu({
                 </div>
               </li>
 
-              {/* NOVA REQUISIÇÃO */}
               <li className={`menu-item ${telaAtual === 'nova' ? 'ativo' : ''}`}>
                 <a href="#" onClick={(e) => { e.preventDefault(); handleNavegacao(aoClicarNovaRequisicao); }}>
                   <span className="menu-icon"><IconPlusCircle /></span>
@@ -208,7 +235,6 @@ export default function Menu({
                 </a>
               </li>
 
-              {/* NOVO RECEBIMENTO */}
               <li className={`menu-item ${telaAtual === 'novo-recebimento' ? 'ativo' : ''}`}>
                 <a href="#" onClick={(e) => { 
                   e.preventDefault(); 
@@ -220,7 +246,6 @@ export default function Menu({
                 </a>
               </li>
 
-              {/* HISTÓRICO */}
               <li className={`menu-item ${telaAtual === 'historico' ? 'ativo' : ''}`}>
                 <a href="#" onClick={(e) => { 
                   e.preventDefault(); 
@@ -236,7 +261,6 @@ export default function Menu({
                 </a>
               </li>
 
-              {/* CONSULTA DE ESTOQUE */}
               <li className={`menu-item ${telaAtual === 'base-dados' ? 'ativo' : ''}`}>
                 <a href="#" onClick={(e) => { 
                   e.preventDefault(); 
@@ -261,7 +285,6 @@ export default function Menu({
 
               <li className="menu-header-texto mt-2"><span>GESTÃO</span></li>
               
-              {/* Dashboard */}
               <li className={`menu-item ${telaAtual === 'dashboard' ? 'ativo' : ''}`}>
                 <a href="#" onClick={(e) => { 
                   e.preventDefault(); 
@@ -337,6 +360,18 @@ export default function Menu({
           <div className="footer-usuario-info">
             <span>Logado como:</span>
             <strong>{usuarioLogado?.nome_completo || 'Usuário'}</strong>
+            
+            {tempoOciosoRef && (
+              <div style={{ 
+                marginTop: '10px', 
+                fontSize: '0.75rem', 
+                color: tempoRestante < 60 ? '#e74c3c' : '#a491ba',
+                animation: tempoRestante < 60 ? 'pulsarAlerta 1s infinite' : 'none',
+                fontWeight: tempoRestante < 60 ? 'bold' : 'normal'
+              }}>
+                Sessão expira em: <strong>{formatarTempoMenu(tempoRestante)}</strong>
+              </div>
+            )}
           </div>
         </div>
       </aside>
