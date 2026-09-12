@@ -124,6 +124,12 @@ export default function AdminBaseDados({ setProdutos, lojaAtiva }) {
 
         if (lojaAtiva === 'ARATURI') {
           setProdutos(produtosFormatadosFrontend);
+          // Mantém o cache local do catálogo (usado no App.jsx) em dia após um upload manual,
+          // para que outras telas não fiquem servindo dados desatualizados até o cache expirar.
+          try {
+            localStorage.setItem('netadantas_cache_base_produtos', JSON.stringify(produtosFormatadosFrontend));
+            localStorage.setItem('netadantas_cache_base_produtos_ts', String(Date.now()));
+          } catch (e) {}
         }
         
         setPopup({ visivel: true, quantidade: novosProdutos.length, novidades: deltaProdutos.length });

@@ -30,14 +30,19 @@ export default function DetalhesRequisicao({
   
   const fecharPopupCustom = () => setPopupCustom({ ...popupCustom, visivel: false });
 
-  const isGamificada = req.metricasSeparacao && req.listaItens.every(i => i.bipContagem === undefined);
-  const todosBipadosStatus = isGamificada || (req.listaItens && req.listaItens.length > 0 && req.listaItens.every(item => {
+  // TRAVA DE SEGURANÇA: Garante que req.listaItens é um array antes de usar o .every()
+  const isGamificada = req.metricasSeparacao && Array.isArray(req.listaItens) && req.listaItens.length > 0 && req.listaItens.every(i => i.bipContagem === undefined);
+  
+  const todosBipadosStatus = isGamificada || (Array.isArray(req.listaItens) && req.listaItens.length > 0 && req.listaItens.every(item => {
     const meta = item.quantidadeEditada !== undefined ? Number(item.quantidadeEditada) : Number(item.quantidade);
     return (item.bipContagem || 0) >= meta;
   }));
 
   const dispararDesafioDeProdutividade = () => {
-    const totalItensFisicos = req.listaItens.reduce((acc, item) => {
+    // TRAVA DE SEGURANÇA: Previne o erro .reduce() of undefined
+    const listaItensSegura = Array.isArray(req.listaItens) ? req.listaItens : [];
+    
+    const totalItensFisicos = listaItensSegura.reduce((acc, item) => {
       const meta = item.quantidadeEditada !== undefined ? Number(item.quantidadeEditada) : Number(item.quantidade);
       return acc + meta;
     }, 0);
@@ -60,17 +65,15 @@ export default function DetalhesRequisicao({
     let intervalo;
     if (req.status === 'Em Separação' && !req.metricasSeparacao) {
       const horaInicioBanco = req.historico?.inicio_separacao;
-      const tempoPausadoTotal = req.historico?.tempo_pausado_total || 0; // Quantos milissegundos já ficaram pausados
-      const pausaAtivaInicio = req.historico?.pausa_ativa_inicio; // Se existe, significa que está pausado AGORA
+      const tempoPausadoTotal = req.historico?.tempo_pausado_total || 0;
+      const pausaAtivaInicio = req.historico?.pausa_ativa_inicio;
 
       if (horaInicioBanco) {
         if (pausaAtivaInicio) {
-          // Relógio congelado! Conta até a hora em que a pausa foi aceita.
           setCronometroRodando(false);
           const diferenca = (Number(pausaAtivaInicio) - Number(horaInicioBanco)) - tempoPausadoTotal;
           setTempoDecorrido(Math.max(0, Math.floor(diferenca / 1000)));
         } else {
-          // Relógio rodando! Tira do tempo atual o tanto de tempo que já ficou pausado no passado.
           setCronometroRodando(true);
           intervalo = setInterval(() => {
             const diferenca = (Date.now() - Number(horaInicioBanco)) - tempoPausadoTotal;
@@ -274,7 +277,7 @@ export default function DetalhesRequisicao({
           </div>
         )}
 
-        {/* INJEÇÃO DAS NOVAS FUNÇÕES */}
+        {/* 🚀 AQUI: Enviando a baseProdutos para o componente de separação */}
         <SeparacaoReq 
           req={req} 
           usuarioLogado={usuarioLogado} 
@@ -284,6 +287,7 @@ export default function DetalhesRequisicao({
           exibirPopup={exibirPopup} 
           fecharPopupCustom={fecharPopupCustom} 
           aoAtualizarHistorico={aoAtualizarHistorico}
+          baseProdutos={baseProdutos} 
         />
       </div>
 

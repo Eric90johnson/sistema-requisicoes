@@ -31,7 +31,7 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   const [itens, setItens] = useState(
     recebimento?.itens && recebimento.itens.length > 0 
       ? recebimento.itens 
-      : [{ id: Date.now(), codigoFornecedor: '', codigoBarras: '', codigoSistema: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '' }]
+      : [{ id: Date.now(), codigoFornecedor: '', codigoBarras: '', codigoSistema: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '', precoCusto: '', precoVenda: '' }]
   );
 
   const [status, setStatus] = useState(recebimento?.status || 'Pendente');
@@ -133,7 +133,10 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
         }
       }
 
-      if (isViewer || recebimento.status !== 'Em Conferência') {
+      // 🚀 CORREÇÃO DO BUG DE APAGAR PREÇOS: 
+      // Agora o sistema SÓ subscreve a tabela do banco se NÃO estiver na etapa de precificação,
+      // garantindo que o que você digita não seja apagado pelo recarregamento do painel.
+      if (isViewer || (recebimento.status !== 'Em Conferência' && recebimento.status !== 'Aguardando Precificação')) {
         if (recebimento.itens && recebimento.itens.length > 0) {
           setItens(recebimento.itens);
         }
@@ -282,7 +285,9 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   const atualizarItensE_SalvarGlobal = (novoEstadoOuFuncao) => {
     setItens(prev => {
       const novaLista = typeof novoEstadoOuFuncao === 'function' ? novoEstadoOuFuncao(prev) : novoEstadoOuFuncao;
-      if (souOConferente) {
+      
+      // 🚀 AGORA ELE SALVA AUTOMATICAMENTE OS PREÇOS NA ETAPA DE PRECIFICAÇÃO
+      if (souOConferente || status === 'Aguardando Precificação') {
         supabase.from('recebimento_mercadorias').update({ itens: novaLista }).eq('id', recebimento.id);
       }
       return novaLista;
@@ -291,7 +296,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
 
   const handleAtualizarItem = (id, campo, valor) => atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === id ? { ...item, [campo]: valor } : item));
 
-  // 🚀 ADICIONA NO TOPO: Os novos itens agora são inseridos no início da tabela
   const handleAdicionarItemVazio = () => atualizarItensE_SalvarGlobal(prev => [
     { id: Date.now(), codigoFornecedor: '', codigoBarras: '', codigoSistema: '', descricaoFornecedor: '', quantidade: '', validade: '', quantidadeBipada: 0, avarias: 0, obsItem: '', precoCusto: '', precoVenda: '' },
     ...prev
@@ -421,7 +425,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
     };
   }, [scannerAtivo, isViewer]);
 
-  // 🚀 LIMITE DE BIP: Verifica a meta antes de registrar a unidade dentro do state
   const incrementarBip = (itemId) => {
     atualizarItensE_SalvarGlobal(prev => {
       const itemAtual = prev.find(i => i.id === itemId);
@@ -429,7 +432,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
 
       const meta = Number(itemAtual.quantidade);
       
-      // Se já atingiu a meta, dispara o bloqueio e não salva
       if (meta > 0 && Number(itemAtual.quantidadeBipada) >= meta) {
         setTimeout(() => {
           tocarBipErro();
@@ -439,7 +441,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
         return prev; 
       }
 
-      // Se passou pela trava, toca sucesso e incrementa normalmente
       setTimeout(() => tocarBipSucesso(), 0);
 
       return prev.map(item => {
@@ -496,7 +497,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
     } catch (e) { exibirPopup('erro', 'Erro', e.message); } finally { setProcessando(false); }
   };
 
-  // 🚀 SALVAR PROGRESSO FÍSICO NO BANCO
   const handleSalvarProgressoFisico = async () => {
     setProcessando(true);
     try {
@@ -753,7 +753,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
           </div>
         )}
 
-        {/* 🚀 RODAPÉ E BOTÕES DA CONFERÊNCIA COM O NOVO BOTÃO DE SALVAR PROGRESSO */}
         {status === 'Em Conferência' && !pausaAtivaInicio && !isViewer && (
           <div className="recebimento-footer-acoes no-print">
             <button type="button" className="btn-cancelar-rec" onClick={aoVoltar}>Voltar</button>

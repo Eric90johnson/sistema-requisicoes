@@ -3,7 +3,8 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { supabase } from '../../../services/supabase';
 import '../../../styles/pages/painel/detalhes/separacaoReq.css';
 
-export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoFinalizarSeparacao, tempoDecorrido, exibirPopup, fecharPopupCustom, aoAtualizarHistorico }) {
+// 🚀 AQUI: Adicionei a prop baseProdutos na assinatura da função
+export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoFinalizarSeparacao, tempoDecorrido, exibirPopup, fecharPopupCustom, aoAtualizarHistorico, baseProdutos }) {
   const [itens, setItens] = useState(req.listaItens || []);
   const itensRef = useRef(itens);
   
@@ -23,7 +24,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
   const [pedidosBip, setPedidosBip] = useState({}); 
   const [codigoManual, setCodigoManual] = useState({}); 
   
-  // ESTADO DA PAUSA
   const [pausaPendente, setPausaPendente] = useState(false); 
   const isPausado = !!req.historico?.pausa_ativa_inicio;
 
@@ -31,7 +31,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
   const ultimoBipTexto = useRef("");
   const pedidosBipAntigoRef = useRef({});
 
-  // NOVO: Verifica se precisa exibir a coluna De-Para do Araturi
   const exibirCodigoMatriz = req.origem === 'Conjunto Ceará';
 
   const todosBipados = itens.length > 0 && itens.every(item => {
@@ -65,7 +64,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     if (!usuarioLogado || isEncarregado) return;
 
     const fetchAuths = async () => {
-      // 1. Busca os bips
       const { data, error } = await supabase.from('autorizacoes_bip')
         .select('*').eq('requisicao_id', req.id).eq('solicitante_nome', usuarioLogado.nome_completo).order('timestamp_criacao', { ascending: true });
         
@@ -88,7 +86,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
         setPedidosBip(mapNovo);
       }
 
-      // 2. Busca o status da solicitação de pausa do banco
       const { data: dataPausa } = await supabase.from('pausas_separacao')
         .select('*').eq('requisicao_id', req.id).eq('solicitante_nome', usuarioLogado.nome_completo).order('timestamp_criacao', { ascending: false }).limit(1);
       
@@ -106,7 +103,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     return () => clearInterval(intervaloAuth);
   }, [req.id, usuarioLogado, isEncarregado]);
 
-  // --- FUNÇÕES DA PAUSA (COM BLINDAGEM DE ERRO) ---
   const solicitarPausaAoLider = async (tipoPausa) => {
     if (!usuarioLogado?.encarregado_responsavel) {
       exibirPopup('erro', 'Sem Encarregado', 'Você não tem um Encarregado vinculado ao seu perfil.\nPeça ao administrador para atualizar o seu perfil primeiro.');
@@ -115,7 +111,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     
     setPausaPendente(true);
     
-    // O '.select()' no final garante que, se der erro no Supabase, a mensagem apareça!
     const { error } = await supabase.from('pausas_separacao').insert([{
       requisicao_id: req.id,
       solicitante_nome: usuarioLogado.nome_completo,
@@ -158,7 +153,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     exibirPopup('sucesso', 'Bem-vindo(a) de volta!', 'Sua separação foi retomada e o cronômetro voltou a correr. Bom trabalho!');
   };
 
-  // --- FUNÇÕES DE BIP MANUAL ---
   const solicitarBipManual = async (item) => {
     if (!usuarioLogado?.encarregado_responsavel) {
       exibirPopup('erro', 'Sem Encarregado', 'Você não tem um Encarregado vinculado.');
@@ -181,7 +175,7 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     let scanner = null;
     let isComponentMounted = true;
 
-    if (itemCameraAtiva !== null && !isPausado) { // Trava a câmera se estiver pausado
+    if (itemCameraAtiva !== null && !isPausado) { 
       setTimeout(() => {
         if (!isComponentMounted) return;
         scanner = new Html5Qrcode('leitor-camera-modal', {
@@ -376,9 +370,9 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
         <table className="tabela-itens">
           <thead>
             <tr className="tabela-itens-header-tr">
-              {/* NOVO: Coluna Extra no Cabeçalho Dinamicamente */}
               {exibirCodigoMatriz && <th className="th-tabela-itens" style={{ color: '#8e44ad' }}>Cód. Araturi</th>}
               <th className="th-tabela-itens">Código</th>
+              <th className="th-tabela-itens">Cód. Barras</th>
               <th className="th-tabela-itens">Descrição</th>
               <th className="th-tabela-itens td-tabela-itens-centro">Quantidade</th>
             </tr>
@@ -393,11 +387,15 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
               const estaExpandido = linhaExpandida === index;
               const statusBip = isEncarregado ? 'aprovado' : pedidosBip[item.cod];
 
+              // 🚀 NOVO: Busca de Código de Barras retroativa! Se o item não tiver o código salvo, o sistema 
+              // busca automaticamente na baseProdutos, garantindo que as notas antigas também funcionem.
+              const produtoCatalogo = baseProdutos ? baseProdutos.find(p => String(p.codigo) === String(item.cod)) : null;
+              const codigoBarrasExibicao = item.codigoBarra || item.codigo_barra || item.codigoBarras || produtoCatalogo?.codigoBarra || produtoCatalogo?.codigo_barra || '-';
+
               return (
                 <React.Fragment key={index}>
                   <tr className={`tr-clicavel ${estaExpandido ? 'linha-expandida-ativa' : ''} ${completo ? 'linha-item-completo' : 'linha-item-normal'}`} onClick={() => alternarExpansao(index)}>
                     
-                    {/* NOVO: Exibe a Célula do Código Araturi se for o caso */}
                     {exibirCodigoMatriz && (
                       <td className="td-tabela-itens">
                         <strong style={{ color: '#8e44ad', backgroundColor: '#fcf8ff', padding: '2px 6px', borderRadius: '4px' }}>
@@ -407,6 +405,8 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
                     )}
 
                     <td className="td-tabela-itens"><strong>{item.cod}</strong></td>
+                    {/* 🚀 AQUI UTILIZAMOS O CÓDIGO DE BARRAS INTELIGENTE */}
+                    <td className="td-tabela-itens">{codigoBarrasExibicao}</td>
                     <td className="td-tabela-itens">{item.descricao}</td>
                     <td className={`td-tabela-itens td-tabela-itens-centro ${completo ? 'texto-verde-sucesso' : ''}`}>
                       {teveEdicao ? (
@@ -419,8 +419,7 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
                   
                   {estaExpandido && (
                     <tr className="linha-expandida">
-                      {/* NOVO: Ajusta o colSpan para mesclar as colunas corretamente */}
-                      <td colSpan={exibirCodigoMatriz ? "4" : "3"}>
+                      <td colSpan={exibirCodigoMatriz ? "5" : "4"}>
                         <div className="detalhes-produto-expandido">
                           {modoExpansao === 'resumo' && (
                             <div className="info-bipagem-resumo">
@@ -497,7 +496,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
         return (
           <div className="camera-modal-overlay">
             <div className="camera-modal-content">
-              {/* NOVO: Mostra o código da Matriz também na tela da Câmera para facilitar */}
               <div className="camera-modal-header">
                 Lendo: {itemAtivo?.cod} {itemAtivo?.codigoMatriz ? `(Cód. Araturi: ${itemAtivo.codigoMatriz})` : ''} - {itemAtivo?.descricao}
               </div>

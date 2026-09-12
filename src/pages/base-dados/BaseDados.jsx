@@ -16,6 +16,7 @@ const parseValorMoeda = (valorStr) => {
 
 export default function BaseDados({ 
   aoVoltar, 
+  aoAtualizarCatalogo,
   produtos, 
   itensPreRequisicao = [], 
   aoAdicionarPreRequisicao, 
@@ -550,6 +551,15 @@ export default function BaseDados({
               {itensPreRequisicao.length > 0 && (
                 <button className="btn-ir-pre-requisicao" onClick={aoIrParaPreRequisicao}>
                   🛒 Ir para Pré-requisição ({itensPreRequisicao.length})
+                </button>
+              )}
+              {aoAtualizarCatalogo && (
+                <button
+                  className="btn-voltar"
+                  title="O catálogo é atualizado automaticamente a cada 20 min. Use isso só se acabou de cadastrar/alterar produtos e precisa ver agora."
+                  onClick={aoAtualizarCatalogo}
+                >
+                  🔄 Atualizar catálogo
                 </button>
               )}
               <button className="btn-voltar" onClick={aoVoltar}>← Voltar ao Painel</button>

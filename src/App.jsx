@@ -47,7 +47,6 @@ function App() {
 
   const [menuMobileAberto, setMenuMobileAberto] = useState(false);
 
-  // 🚀 ADICIONADO: Referência silenciosa do último movimento do usuário
   const tempoOciosoRef = useRef(Date.now());
 
   const handleLogar = (dadosUsuario) => {
@@ -57,7 +56,7 @@ function App() {
       setUsuarioLogado(dadosUsuario);
     }
     setIsLogado(true);
-    tempoOciosoRef.current = Date.now(); // Zera o relógio ao logar
+    tempoOciosoRef.current = Date.now(); 
   };
 
   const handleSair = async () => {
@@ -68,7 +67,6 @@ function App() {
     await supabase.auth.signOut();
   };
 
-  // 🚀 ADICIONADO: Motor de Inatividade (Desloga após 10 minutos)
   useEffect(() => {
     if (!isLogado) return;
 
@@ -76,20 +74,17 @@ function App() {
       tempoOciosoRef.current = Date.now();
     };
 
-    // Monitora as ações principais (mouse, teclado, toques na tela)
     window.addEventListener('mousemove', resetarTempo);
     window.addEventListener('keydown', resetarTempo);
     window.addEventListener('click', resetarTempo);
     window.addEventListener('touchstart', resetarTempo);
 
-    // Checa a inatividade a cada 10 segundos para não pesar o sistema
     const intervaloInatividade = setInterval(() => {
       const agora = Date.now();
       const tempoInativo = agora - tempoOciosoRef.current;
       
-      // 10 minutos = 600.000 milissegundos
       if (tempoInativo >= 600000) {
-        localStorage.setItem('sessao_expirada', 'true'); // Passa o aviso silencioso para a tela de Login
+        localStorage.setItem('sessao_expirada', 'true'); 
         handleSair();
       }
     }, 10000);
@@ -103,27 +98,70 @@ function App() {
     };
   }, [isLogado]);
 
-  const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false) => {
+  const CACHE_KEY_PRODUTOS = 'netadantas_cache_base_produtos';
+  const CACHE_KEY_PRODUTOS_TS = 'netadantas_cache_base_produtos_ts';
+  const CACHE_TTL_PRODUTOS_MS = 20 * 60 * 1000; 
+
+  const lerCacheProdutos = () => {
+    try {
+      const ts = Number(localStorage.getItem(CACHE_KEY_PRODUTOS_TS) || 0);
+      if (!ts || (Date.now() - ts) > CACHE_TTL_PRODUTOS_MS) return null;
+      const bruto = localStorage.getItem(CACHE_KEY_PRODUTOS);
+      if (!bruto) return null;
+      return JSON.parse(bruto);
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const salvarCacheProdutos = (produtosFormatados) => {
+    try {
+      localStorage.setItem(CACHE_KEY_PRODUTOS, JSON.stringify(produtosFormatados));
+      localStorage.setItem(CACHE_KEY_PRODUTOS_TS, String(Date.now()));
+    } catch (e) {}
+  };
+
+  const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false, forcarProdutos = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      const colunasRequisicoes = 'id, data, timestamp_criacao, origem, destino, solicitante, motivo, prioridade, itens, status, historico, metricas_separacao, numero_requisicao_externa, nota_fiscal, oculto';
+      // 🚀 EXCEÇÃO INTELIGENTE PARA O RANKING:
+      // Apenas usuários com permissão explícita para ver o ranking (ou admins) baixam o histórico completo.
+      // Encarregados comuns que não têm essa permissão continuarão no modo economia de dados!
+      const salvo = localStorage.getItem('netadantas_usuario');
+      const userMemoria = salvo ? JSON.parse(salvo) : null;
+      const isEquipeRanking = userMemoria?.acesso_admin || userMemoria?.username === 'admin' || userMemoria?.perm_ver_ranking;
+
+      let colunasRequisicoes = 'id, data, timestamp_criacao, origem, destino, solicitante, motivo, prioridade, itens, status, historico, metricas_separacao, numero_requisicao_externa, nota_fiscal, oculto';
+      
+      // Se tiver permissão pro ranking, baixa a 'lista_itens' para que a pontuação antiga calcule certa
+      if (isEquipeRanking) {
+        colunasRequisicoes += ', lista_itens';
+      }
+
       const { data: reqData } = await supabase.from('requisicoes').select(colunasRequisicoes).order('timestamp_criacao', { ascending: false }).limit(100);
       
       if (reqData) {
-        const reqsFormatadas = reqData.map(r => ({
-          ...r,
-          timestampCriacao: r.timestamp_criacao,
-          metricasSeparacao: r.metricas_separacao,
-          numeroRequisicaoExterna: r.numero_requisicao_externa,
-          notaFiscal: r.nota_fiscal,
-          oculto: r.oculto
-        }));
+        const reqsFormatadas = reqData.map(r => {
+          const formatada = {
+            ...r,
+            timestampCriacao: r.timestamp_criacao,
+            metricasSeparacao: r.metricas_separacao,
+            numeroRequisicaoExterna: r.numero_requisicao_externa,
+            notaFiscal: r.nota_fiscal,
+            oculto: r.oculto
+          };
+          if (r.lista_itens) {
+            formatada.listaItens = r.lista_itens;
+          }
+          return formatada;
+        });
+        
         setRequisicoes(reqsFormatadas);
 
         setReqSelecionada(prev => {
           if (!prev) return null;
           const atualizada = reqsFormatadas.find(r => r.id === prev.id);
-          return atualizada ? { ...atualizada, listaItens: prev.listaItens } : prev;
+          return atualizada ? { ...atualizada, listaItens: atualizada.listaItens || prev.listaItens } : prev;
         });
       }
 
@@ -151,26 +189,33 @@ function App() {
         setRecordesGlobais(objRecordes);
       }
 
-      let todosOsProdutos = [];
-      let buscouTodos = false;
-      let indexAtual = 0;
-      const tamanhoPagina = 1000;
+      const cacheProdutos = forcarProdutos ? null : lerCacheProdutos();
 
-      while (!buscouTodos) {
-        const { data: prodData, error } = await supabase.from('base_produtos').select('*').range(indexAtual, indexAtual + tamanhoPagina - 1);
-        if (error) break;
-        if (prodData && prodData.length > 0) {
-          todosOsProdutos = [...todosOsProdutos, ...prodData];
-          indexAtual += tamanhoPagina;
+      if (cacheProdutos && cacheProdutos.length > 0) {
+        setBaseProdutos(cacheProdutos);
+      } else {
+        let todosOsProdutos = [];
+        let buscouTodos = false;
+        let indexAtual = 0;
+        const tamanhoPagina = 1000;
+
+        while (!buscouTodos) {
+          const { data: prodData, error } = await supabase.from('base_produtos').select('*').range(indexAtual, indexAtual + tamanhoPagina - 1);
+          if (error) break;
+          if (prodData && prodData.length > 0) {
+            todosOsProdutos = [...todosOsProdutos, ...prodData];
+            indexAtual += tamanhoPagina;
+          }
+          if (!prodData || prodData.length < tamanhoPagina) { buscouTodos = true; }
         }
-        if (!prodData || prodData.length < tamanhoPagina) { buscouTodos = true; }
-      }
 
-      if (todosOsProdutos.length > 0) {
-        const produtosFormatados = todosOsProdutos.map(p => ({
-          ...p, codigoBarra: p.codigo_barra, precoVenda: p.preco_venda, precoCusto: p.preco_custo
-        }));
-        setBaseProdutos(produtosFormatados);
+        if (todosOsProdutos.length > 0) {
+          const produtosFormatados = todosOsProdutos.map(p => ({
+            ...p, codigoBarra: p.codigo_barra, precoVenda: p.preco_venda, precoCusto: p.preco_custo
+          }));
+          setBaseProdutos(produtosFormatados);
+          salvarCacheProdutos(produtosFormatados);
+        }
       }
     } catch (error) {
       console.error("Erro ao sincronizar com o Supabase:", error);
@@ -178,6 +223,10 @@ function App() {
       if (!silencioso) setCarregando(false);
     }
   }, []);
+
+  const recarregarCatalogoAgora = useCallback(() => {
+    carregarDadosDaNuvem(true, false, true);
+  }, [carregarDadosDaNuvem]);
 
   useEffect(() => {
     if (!isLogado) return;
@@ -272,7 +321,10 @@ function App() {
   };
 
   const handleAtualizarHistorico = async (id, novoHistorico) => {
-    const reqAtualizada = { ...requisicoes.find(r => r.id === id), historico: novoHistorico };
+    const reqBase = requisicoes.find(r => r.id === id);
+    const listaPreservada = reqSelecionada?.id === id ? reqSelecionada.listaItens : reqBase.listaItens;
+    const reqAtualizada = { ...reqBase, historico: novoHistorico, listaItens: listaPreservada };
+    
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     if (reqSelecionada?.id === id) setReqSelecionada(reqAtualizada);
     await supabase.from('requisicoes').update({ historico: novoHistorico }).eq('id', id);
@@ -375,9 +427,13 @@ function App() {
     const req = requisicoes.find(r => r.id === id);
     const historicoAtualizado = { ...req.historico, [novoStatus]: responsavel };
     if (novoStatus === 'Em Separação' && req.status !== 'Em Separação') { historicoAtualizado.inicio_separacao = Date.now(); }
-    const reqAtualizada = { ...req, status: novoStatus, historico: historicoAtualizado, ...dadosExtras };
+    
+    const listaPreservada = reqSelecionada?.id === id ? reqSelecionada.listaItens : req.listaItens;
+
+    const reqAtualizada = { ...req, status: novoStatus, historico: historicoAtualizado, listaItens: listaPreservada, ...dadosExtras };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
-    setReqSelecionada(reqAtualizada);
+    
+    if (reqSelecionada?.id === id) setReqSelecionada(reqAtualizada);
 
     const payloadBanco = { status: novoStatus, historico: historicoAtualizado };
     if (dadosExtras.numeroRequisicaoExterna) payloadBanco.numero_requisicao_externa = dadosExtras.numeroRequisicaoExterna;
@@ -398,7 +454,7 @@ function App() {
   const handleAtualizarItens = async (id, novaListaItens) => {
     const reqAtualizada = { ...requisicoes.find(r => r.id === id), listaItens: novaListaItens, lista_itens: novaListaItens };
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
-    setReqSelecionada(reqAtualizada);
+    if (reqSelecionada?.id === id) setReqSelecionada(reqAtualizada);
     await supabase.from('requisicoes').update({ lista_itens: novaListaItens }).eq('id', id);
   };
 
@@ -418,17 +474,21 @@ function App() {
     const novoStatusAutomatico = 'Separado';
     const historicoAtualizado = { ...req.historico, [novoStatusAutomatico]: responsavelSeparacao };
 
-    const reqAtualizada = { ...req, metricasSeparacao: novasMetricas, status: novoStatusAutomatico, historico: historicoAtualizado };
+    const reqAtualizada = { ...req, metricasSeparacao: novasMetricas, status: novoStatusAutomatico, historico: historicoAtualizado, listaItens: itensDaReq };
+    
     setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
-    setReqSelecionada(reqAtualizada);
+    if (reqSelecionada?.id === id) setReqSelecionada(reqAtualizada);
+    
     await supabase.from('requisicoes').update({ metricas_separacao: novasMetricas, status: novoStatusAutomatico, historico: historicoAtualizado }).eq('id', id);
     return novasMetricas;
   };
 
   const handleAlternarVisibilidade = async (id, novoEstadoOculto) => {
-    const reqAtualizada = { ...requisicoes.find(r => r.id === id), oculto: novoEstadoOculto };
-    setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
+    const req = requisicoes.find(r => r.id === id);
+    const listaPreservada = reqSelecionada?.id === id ? reqSelecionada.listaItens : req.listaItens;
+    const reqAtualizada = { ...req, oculto: novoEstadoOculto, listaItens: listaPreservada };
     
+    setRequisicoes(requisicoes.map(r => r.id === id ? reqAtualizada : r));
     if (reqSelecionada?.id === id) setReqSelecionada(reqAtualizada);
 
     const { error } = await supabase.from('requisicoes').update({ oculto: novoEstadoOculto }).eq('id', id);
@@ -476,7 +536,7 @@ function App() {
         telaAtual={telaAtual}
         menuMobileAberto={menuMobileAberto}
         setMenuMobileAberto={setMenuMobileAberto}
-        tempoOciosoRef={tempoOciosoRef} /* 🚀 ADICIONADO: Envia a referência do tempo para o Menu */
+        tempoOciosoRef={tempoOciosoRef} 
       />
 
       <div className="conteudo-principal-wrapper">
@@ -529,7 +589,7 @@ function App() {
               
               {telaAtual === 'historico' && <Historico requisicoes={requisicoes} aoVoltar={() => setTelaAtual('painel')} />}
               
-              {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => {setTelaAtual('painel'); setInicioCronometroGlobal(null); setTipoReposicaoGlobal('interna');}} produtos={baseProdutos} setProdutos={setBaseProdutos} itensPreRequisicao={itensPreRequisicao} aoAdicionarPreRequisicao={(p) => setItensPreRequisicao(v => v.some(i => String(i.codigo) === String(p.codigo)) ? v : [...v, p])} aoRemoverPreRequisicao={(c) => setItensPreRequisicao(v => v.filter(i => String(i.codigo) !== String(c)))} aoIrParaPreRequisicao={() => {setProdutosPreSelecionados(itensPreRequisicao); setItensPreRequisicao([]); setTelaAtual('nova');}} tipoReposicaoGlobal={tipoReposicaoGlobal} setTipoReposicaoGlobal={setTipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} setInicioCronometroGlobal={setInicioCronometroGlobal} />}
+              {telaAtual === 'base-dados' && <BaseDados aoVoltar={() => {setTelaAtual('painel'); setInicioCronometroGlobal(null); setTipoReposicaoGlobal('interna');}} aoAtualizarCatalogo={recarregarCatalogoAgora} produtos={baseProdutos} setProdutos={setBaseProdutos} itensPreRequisicao={itensPreRequisicao} aoAdicionarPreRequisicao={(p) => setItensPreRequisicao(v => v.some(i => String(i.codigo) === String(p.codigo)) ? v : [...v, p])} aoRemoverPreRequisicao={(c) => setItensPreRequisicao(v => v.filter(i => String(i.codigo) !== String(c)))} aoIrParaPreRequisicao={() => {setProdutosPreSelecionados(itensPreRequisicao); setItensPreRequisicao([]); setTelaAtual('nova');}} tipoReposicaoGlobal={tipoReposicaoGlobal} setTipoReposicaoGlobal={setTipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} setInicioCronometroGlobal={setInicioCronometroGlobal} />}
               
               {telaAtual === 'painel-recebimento' && (
                 <PainelRecebimento 

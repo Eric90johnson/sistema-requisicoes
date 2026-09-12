@@ -2,7 +2,7 @@ export const calcularRanking = (requisicoes, recebimentos = [], dataInicioRankin
   const pontuacoes = {};
 
   // ===============================================
-  // 1. PROCESSAR REQUISIÇÕES (SEPARAÇÃO INTERNA)
+  // 1. PROCESSAR REQUISIÇÕES (SEPARAÇÃO INTERNA E EXTERNA)
   // ===============================================
   const reqsValidas = requisicoes.filter(req => {
     if (!req.metricasSeparacao) return false;
@@ -28,9 +28,13 @@ export const calcularRanking = (requisicoes, recebimentos = [], dataInicioRankin
     if (!resp) return;
 
     const tempoSeg = req.metricasSeparacao.tempoTotalSegundos || 1; 
-    const itensFisicos = req.metricasSeparacao.totalItensFisicos || (req.listaItens ? req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0) : 0);
     
-    const upmReq = (itensFisicos / tempoSeg) * 60;
+    // Tenta puxar o total físico salvo no banco (notas novas)
+    // Se não tiver (notas velhas), tenta contar pela lista de itens (se estiver na memória)
+    // Se a lista não estiver devido à economia de banda, usa a quantidade de SKUs (req.itens) como fallback temporário
+    const itensFisicos = req.metricasSeparacao.totalItensFisicos || (req.listaItens ? req.listaItens.reduce((acc, item) => acc + Number(item.quantidade), 0) : req.itens || 0);
+    
+    const upmReq = tempoSeg > 0 ? ((itensFisicos / tempoSeg) * 60) : 0;
     const upmReqFormatado = Number(upmReq.toFixed(1));
     let ptsDestaReq = Math.round(itensFisicos * upmReqFormatado);
 
@@ -90,8 +94,17 @@ export const calcularRanking = (requisicoes, recebimentos = [], dataInicioRankin
 
     const tempoSeg = rec.metricas_recebimento.tempoTotalSegundos || 1;
     const itensFisicos = rec.metricas_recebimento.totalItensFisicos || 0;
-    const upmReqFormatado = rec.metricas_recebimento.upm || 0;
-    const ptsDestaReq = rec.metricas_recebimento.pontosGanhos || 0; // Já foi multiplicado por 1.5 no componente
+    
+    const upmCalc = tempoSeg > 0 ? ((itensFisicos / tempoSeg) * 60) : 0;
+    const upmReqFormatado = rec.metricas_recebimento.upm || Number(upmCalc.toFixed(1));
+    
+    // 🚀 CORREÇÃO RETROATIVA DE PONTOS:
+    // Se o recebimento foi feito antes de hoje, ele não tem 'pontosGanhos' no banco.
+    // Nós calculamos retroativamente para o usuário não perder a pontuação!
+    let ptsDestaReq = rec.metricas_recebimento.pontosGanhos;
+    if (ptsDestaReq === undefined) {
+      ptsDestaReq = Math.round(itensFisicos * upmReqFormatado * 1.5);
+    }
 
     const nomes = resp.split('+').map(n => n.trim());
     nomes.forEach(nome => {

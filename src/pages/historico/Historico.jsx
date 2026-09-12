@@ -55,8 +55,13 @@ export default function Historico({ requisicoes, aoVoltar }) {
     setBuscando(true);
     
     try {
+      const precisaListaItens = !!(filtroCodigo || filtroMarca);
+
+      const colunasBase = 'id, data, timestamp_criacao, origem, destino, solicitante, motivo, prioridade, itens, status, historico, metricas_separacao, numero_requisicao_externa, nota_fiscal, oculto';
+      const colunasQuery = precisaListaItens ? `${colunasBase}, lista_itens` : colunasBase;
+
       // Prepara a consulta base
-      let query = supabase.from('requisicoes').select('*');
+      let query = supabase.from('requisicoes').select(colunasQuery);
 
       // Aplica filtros nativos no banco para economizar banda (Lazy Loading)
       if (dataInicio) {
@@ -77,17 +82,21 @@ export default function Historico({ requisicoes, aoVoltar }) {
         query = query.ilike('nota_fiscal', `%${filtroNotaFiscal}%`);
       }
 
-      // Limita em 2000 para proteção do navegador caso a busca seja muito ampla
-      query = query.limit(2000).order('timestamp_criacao', { ascending: false });
+      const limiteResultados = precisaListaItens ? 400 : 1500;
+      query = query.limit(limiteResultados).order('timestamp_criacao', { ascending: false });
 
       const { data, error } = await query;
       if (error) throw error;
+
+      if (precisaListaItens && data.length === limiteResultados) {
+        alert(`Atenção: a busca por código/marca retornou o limite máximo de ${limiteResultados} requisições. Estreite o período de datas para garantir que nenhum resultado ficou de fora.`);
+      }
 
       // Formata os dados retornados
       const reqsFormatadas = data.map(r => ({
         ...r,
         timestampCriacao: r.timestamp_criacao,
-        listaItens: r.lista_itens,
+        listaItens: r.lista_itens, 
         metricasSeparacao: r.metricas_separacao,
         numeroRequisicaoExterna: r.numero_requisicao_externa,
         notaFiscal: r.nota_fiscal
@@ -210,15 +219,47 @@ export default function Historico({ requisicoes, aoVoltar }) {
     return `${(seg / itens).toFixed(1)}s / un`;
   };
 
-  const exportarParaExcel = () => {
+  // 🚀 OTIMIZADO E PROTEGIDO CONTRA ERRO 414
+  const exportarParaExcel = async () => {
     if (requisicoesOrdenadas.length === 0) {
       alert("Não há dados para exportar.");
       return;
     }
 
+    let listaParaExportar = [...requisicoesOrdenadas];
+    const idsFaltando = requisicoesOrdenadas.filter(r => !r.listaItens).map(r => r.id);
+
+    if (idsFaltando.length > 0) {
+      setBuscando(true);
+      try {
+        // Divide as requisições em lotes de 100 para evitar URLs grandes demais no banco
+        const tamanhoLote = 100;
+        let dataResultados = [];
+        
+        for (let i = 0; i < idsFaltando.length; i += tamanhoLote) {
+          const loteIds = idsFaltando.slice(i, i + tamanhoLote);
+          const { data, error } = await supabase.from('requisicoes').select('id, lista_itens').in('id', loteIds);
+          if (error) throw error;
+          dataResultados = [...dataResultados, ...data];
+        }
+
+        const mapaItens = {};
+        dataResultados.forEach(d => { mapaItens[d.id] = d.lista_itens; });
+
+        listaParaExportar = requisicoesOrdenadas.map(r => mapaItens[r.id] !== undefined ? { ...r, listaItens: mapaItens[r.id] } : r);
+        setDadosHistorico(prev => prev.map(r => mapaItens[r.id] !== undefined ? { ...r, listaItens: mapaItens[r.id] } : r));
+      } catch (e) {
+        console.error('Erro ao carregar itens para exportação:', e);
+        alert('Não foi possível carregar os itens de todas as requisições para o CSV. Tente novamente.');
+        setBuscando(false);
+        return;
+      }
+      setBuscando(false);
+    }
+
     let csv = "ID da Requisicao;Cod. do Produto;Descricao do Produto;Qtd. Solicitada;Qtd. Bipada;Motivo (Tipo);Status Atual;Data da Requisicao;Solicitante;Destino;Criado as;Finalizado as;Tempo Total Estimado;Tempo Separacao;Tempo Bip Medio;Separador;N do Sistema;Nota Fiscal;Observacoes do Produto\n";
 
-    requisicoesOrdenadas.forEach(req => {
+    listaParaExportar.forEach(req => {
       const id = req.id || '-';
       const motivo = req.motivo || '-';
       const status = req.status || '-';
@@ -262,11 +303,23 @@ export default function Historico({ requisicoes, aoVoltar }) {
     document.body.removeChild(link);
   };
 
-  const toggleLinha = (id) => {
-    if (linhaExpandida === id) {
+  const toggleLinha = async (req) => {
+    if (linhaExpandida === req.id) {
       setLinhaExpandida(null);
-    } else {
-      setLinhaExpandida(id);
+      return;
+    }
+
+    setLinhaExpandida(req.id);
+
+    if (!req.listaItens) {
+      try {
+        const { data, error } = await supabase.from('requisicoes').select('lista_itens').eq('id', req.id).single();
+        if (!error && data) {
+          setDadosHistorico(prev => prev.map(r => r.id === req.id ? { ...r, listaItens: data.lista_itens } : r));
+        }
+      } catch (e) {
+        console.error('Erro ao carregar itens da requisição:', e);
+      }
     }
   };
 
@@ -398,7 +451,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                   <React.Fragment key={req.id}>
                     <tr 
                       className={`tr-clicavel-historico ${linhaExpandida === req.id ? 'linha-ativa-historico' : ''}`} 
-                      onClick={() => toggleLinha(req.id)}
+                      onClick={() => toggleLinha(req)}
                       title="Clique para ver os produtos desta requisição"
                     >
                       <td><strong>{req.id}</strong></td>
@@ -459,7 +512,11 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                 </tr>
                               </thead>
                               <tbody>
-                                {req.listaItens && req.listaItens.length > 0 ? (
+                                {!req.listaItens ? (
+                                  <tr>
+                                    <td colSpan="5" style={{ textAlign: 'center', padding: '15px', color: '#999' }}>Carregando itens...</td>
+                                  </tr>
+                                ) : req.listaItens.length > 0 ? (
                                   req.listaItens.map((item, idx) => (
                                     <tr key={idx}>
                                       <td><strong>{item.cod}</strong></td>

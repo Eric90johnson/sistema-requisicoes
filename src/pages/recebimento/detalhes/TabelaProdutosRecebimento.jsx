@@ -6,14 +6,17 @@ export default function TabelaProdutosRecebimento({
   handleAtualizarItem, handleAdicionarItemVazio,
   handleDuplicarParaNovoLote, handleRemoverItem, abrirModalScanner,
   buscarProdutoPorCodigo, pedidosBip, codigoManual, setCodigoManual,
-  solicitarBipManual, isEncarregado, exibirPopup // 🚀 ADICIONADO AQUI
+  solicitarBipManual, isEncarregado, exibirPopup
 }) {
 
-  // TRAVA FÍSICA: Bloqueia a edição de quantidades, códigos e lotes.
-  const estaTravado = status === 'Concluída' || status === 'Cancelada' || status === 'Aguardando Cadastro' || status === 'Aguardando Precificação' || (status === 'Pendente' && !isEditing) || isViewer;
+  // 🚀 TRAVA FÍSICA CORRIGIDA: Permite destravar os campos físicos caso isEditing seja ativado durante "Aguardando Precificação"
+  const estaTravado = status === 'Concluída' || status === 'Cancelada' || status === 'Aguardando Cadastro' || (status === 'Aguardando Precificação' && !isEditing) || (status === 'Pendente' && !isEditing) || isViewer;
 
   // TRAVA DE PREÇOS: Fica liberada durante a etapa de "Aguardando Precificação".
   const estaTravadoPrecos = status === 'Concluída' || status === 'Cancelada' || status === 'Aguardando Cadastro' || (status === 'Pendente' && !isEditing) || isViewer;
+
+  // REGRA DE VISIBILIDADE: Só exibe as colunas de preços quando já passou da conferência
+  const mostrarPrecos = status === 'Aguardando Precificação' || status === 'Aguardando Cadastro' || status === 'Concluída';
 
   return (
     <div className="recebimento-card">
@@ -73,8 +76,13 @@ export default function TabelaProdutosRecebimento({
                 <th>Qtd Lote *</th>
                 <th>Conferido (Bip)</th>
                 <th>Avarias</th>
-                <th style={{ color: '#27ae60' }}>Custo (R$)</th>
-                <th style={{ color: '#2980b9' }}>Venda (R$)</th>
+                {/* EXIBE COLUNAS DE PREÇO APENAS SE A REGRA PERMITIR */}
+                {mostrarPrecos && (
+                  <>
+                    <th style={{ color: '#27ae60' }}>Custo (R$)</th>
+                    <th style={{ color: '#2980b9' }}>Venda (R$)</th>
+                  </>
+                )}
                 {!estaTravado && <th className="no-print">Ações</th>}
               </tr>
             </thead>
@@ -87,30 +95,34 @@ export default function TabelaProdutosRecebimento({
                   <tr key={item.id}>
                     {/* CÓDIGO DO FORNECEDOR */}
                     <td>
-                      <input 
-                        type="text" 
-                        placeholder="Ex: REF123" 
-                        value={item.codigoFornecedor || ''} 
-                        onChange={(e) => handleAtualizarItem(item.id, 'codigoFornecedor', e.target.value)} 
-                        disabled={estaTravado} 
-                        style={{ minWidth: '90px' }}
-                      />
+                      {estaTravado ? (
+                        <span style={{ fontWeight: '500', color: '#34495e', fontSize: '0.85rem' }}>{item.codigoFornecedor || '-'}</span>
+                      ) : (
+                        <input 
+                          type="text" 
+                          placeholder="Ex: REF123" 
+                          value={item.codigoFornecedor || ''} 
+                          onChange={(e) => handleAtualizarItem(item.id, 'codigoFornecedor', e.target.value)} 
+                          style={{ minWidth: '90px' }}
+                        />
+                      )}
                     </td>
 
                     {/* CÓDIGO DE BARRAS COM CÂMERA EMBUTIDA */}
                     <td>
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                        <input 
-                          type="text" 
-                          placeholder="Bipar..." 
-                          value={item.codigoBarras || ''} 
-                          onChange={(e) => handleAtualizarItem(item.id, 'codigoBarras', e.target.value)} 
-                          onBlur={(e) => buscarProdutoPorCodigo(item.id, e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscarProdutoPorCodigo(item.id, e.target.value); } }}
-                          disabled={estaTravado}
-                          style={{ paddingRight: '35px', minWidth: '130px' }}
-                        />
-                        {!estaTravado && (
+                      {estaTravado ? (
+                        <span style={{ fontWeight: '500', color: '#34495e', fontSize: '0.85rem' }}>{item.codigoBarras || '-'}</span>
+                      ) : (
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                          <input 
+                            type="text" 
+                            placeholder="Bipar..." 
+                            value={item.codigoBarras || ''} 
+                            onChange={(e) => handleAtualizarItem(item.id, 'codigoBarras', e.target.value)} 
+                            onBlur={(e) => buscarProdutoPorCodigo(item.id, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscarProdutoPorCodigo(item.id, e.target.value); } }}
+                            style={{ paddingRight: '35px', minWidth: '130px' }}
+                          />
                           <button 
                             type="button" 
                             onClick={() => abrirModalScanner(item, 'identificacao')}
@@ -120,66 +132,82 @@ export default function TabelaProdutosRecebimento({
                           >
                             📷
                           </button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </td>
 
                     {/* CÓDIGO DO SISTEMA */}
                     <td>
-                      <input 
-                        type="text" 
-                        placeholder="-" 
-                        value={item.codigoSistema || ''} 
-                        disabled 
-                        style={{ minWidth: '70px', backgroundColor: '#f1f2f6', color: '#7f8c8d', fontWeight: 'bold', textAlign: 'center' }}
-                      />
+                      <span style={{ fontWeight: 'bold', color: '#7f8c8d', fontSize: '0.85rem' }}>{item.codigoSistema || '-'}</span>
                     </td>
 
                     {/* DESCRIÇÃO DO PRODUTO */}
                     <td>
-                      <input 
-                        type="text" 
-                        placeholder="Descrição" 
-                        value={item.descricaoFornecedor || ''} 
-                        onChange={(e) => handleAtualizarItem(item.id, 'descricaoFornecedor', e.target.value)} 
-                        disabled={estaTravado} 
-                        style={{ 
-                          minWidth: '200px', 
-                          color: item.descricaoFornecedor === 'NOVO CADASTRO' ? '#e74c3c' : 'inherit',
-                          fontWeight: item.descricaoFornecedor === 'NOVO CADASTRO' ? 'bold' : 'normal'
-                        }}
-                      />
+                      {estaTravado ? (
+                        <span style={{ 
+                          fontWeight: item.descricaoFornecedor === 'NOVO CADASTRO' ? 'bold' : '500', 
+                          color: item.descricaoFornecedor === 'NOVO CADASTRO' ? '#e74c3c' : '#34495e',
+                          fontSize: '0.85rem'
+                        }}>
+                          {item.descricaoFornecedor || '-'}
+                        </span>
+                      ) : (
+                        <input 
+                          type="text" 
+                          placeholder="Descrição" 
+                          value={item.descricaoFornecedor || ''} 
+                          onChange={(e) => handleAtualizarItem(item.id, 'descricaoFornecedor', e.target.value)} 
+                          style={{ 
+                            minWidth: '200px', 
+                            color: item.descricaoFornecedor === 'NOVO CADASTRO' ? '#e74c3c' : 'inherit',
+                            fontWeight: item.descricaoFornecedor === 'NOVO CADASTRO' ? 'bold' : 'normal'
+                          }}
+                        />
+                      )}
                     </td>
 
                     {/* VALIDADE */}
                     <td>
-                      <input 
-                        type="month" 
-                        value={item.validade || ''} 
-                        onChange={(e) => handleAtualizarItem(item.id, 'validade', e.target.value)} 
-                        disabled={estaTravado} 
-                        style={{ minWidth: '120px' }} 
-                      />
+                      {estaTravado ? (
+                        <span style={{ fontWeight: '500', color: '#34495e', fontSize: '0.85rem' }}>{item.validade || '-'}</span>
+                      ) : (
+                        <input 
+                          type="month" 
+                          value={item.validade || ''} 
+                          onChange={(e) => handleAtualizarItem(item.id, 'validade', e.target.value)} 
+                          style={{ minWidth: '120px' }} 
+                        />
+                      )}
                     </td>
 
                     {/* QUANTIDADE LOTE */}
                     <td>
-                      <input 
-                        type="number" 
-                        placeholder="0" 
-                        style={{ width: '80px' }} 
-                        value={item.quantidade || ''} 
-                        onChange={(e) => handleAtualizarItem(item.id, 'quantidade', e.target.value)} 
-                        disabled={estaTravado} 
-                      />
+                      {estaTravado ? (
+                        <span style={{ fontWeight: '500', color: '#34495e', fontSize: '0.85rem' }}>{item.quantidade || '0'}</span>
+                      ) : (
+                        <input 
+                          type="number" 
+                          placeholder="0" 
+                          style={{ width: '80px' }} 
+                          value={item.quantidade || ''} 
+                          onChange={(e) => handleAtualizarItem(item.id, 'quantidade', e.target.value)} 
+                        />
+                      )}
                     </td>
 
                     {/* CONFERIDO */}
                     <td>
-                      <div className="bip-conferencia-grupo" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <span className="contador-bip" style={{ color: Number(item.quantidadeBipada) >= Number(item.quantidade) ? '#27ae60' : '#e74c3c' }}>
-                          {item.quantidadeBipada} / {item.quantidade} un
-                        </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {estaTravado ? (
+                          <span style={{ fontWeight: 'bold', color: '#000', fontSize: '0.85rem' }}>
+                            {item.quantidadeBipada} / {item.quantidade}
+                          </span>
+                        ) : (
+                          <span className="contador-bip" style={{ color: Number(item.quantidadeBipada) >= Number(item.quantidade) ? '#27ae60' : '#e74c3c' }}>
+                            {item.quantidadeBipada} / {item.quantidade} un
+                          </span>
+                        )}
+
                         {!estaTravado && Number(item.quantidadeBipada) < Number(item.quantidade) && (
                           <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                             <button 
@@ -202,7 +230,6 @@ export default function TabelaProdutosRecebimento({
                                   onChange={(e) => setCodigoManual({...codigoManual, [chaveItem]: e.target.value})} 
                                   style={{ padding: '4px', fontSize: '0.85rem', flex: 1, border: '1px solid #27ae60', borderRadius: '4px' }}
                                 />
-                                {/* 🚀 TRAVA DO BOTÃO OK MANUAL */}
                                 <button 
                                   type="button" 
                                   onClick={() => {
@@ -247,7 +274,7 @@ export default function TabelaProdutosRecebimento({
                               </button>
                             )}
 
-                            {/* 🚀 TRAVA DO LÁPIS MANUAL */}
+                            {/* TRAVA DO LÁPIS MANUAL */}
                             <button 
                               type="button" 
                               className="btn-bip-rapido no-print" 
@@ -280,41 +307,52 @@ export default function TabelaProdutosRecebimento({
 
                     {/* AVARIAS */}
                     <td>
-                      <input 
-                        type="number" 
-                        placeholder="0" 
-                        style={{ width: '60px', borderColor: item.avarias > 0 ? '#e74c3c' : '#bdc3c7' }} 
-                        value={item.avarias || ''} 
-                        onChange={(e) => handleAtualizarItem(item.id, 'avarias', e.target.value)} 
-                        disabled={estaTravado} 
-                      />
+                      {estaTravado ? (
+                        <span style={{ fontWeight: 'bold', color: item.avarias > 0 ? '#e74c3c' : '#34495e', fontSize: '0.85rem' }}>{item.avarias || '0'}</span>
+                      ) : (
+                        <input 
+                          type="number" 
+                          placeholder="0" 
+                          style={{ width: '60px', borderColor: item.avarias > 0 ? '#e74c3c' : '#bdc3c7' }} 
+                          value={item.avarias || ''} 
+                          onChange={(e) => handleAtualizarItem(item.id, 'avarias', e.target.value)} 
+                        />
+                      )}
                     </td>
 
-                    {/* CUSTO */}
-                    <td>
-                      <input 
-                        type="number"
-                        step="0.01" 
-                        placeholder="0,00" 
-                        style={{ width: '80px', borderColor: '#27ae60', backgroundColor: estaTravadoPrecos ? '#f1f2f6' : '#fff' }} 
-                        value={item.precoCusto || ''} 
-                        onChange={(e) => handleAtualizarItem(item.id, 'precoCusto', e.target.value)} 
-                        disabled={estaTravadoPrecos} 
-                      />
-                    </td>
-
-                    {/* VENDA */}
-                    <td>
-                      <input 
-                        type="number"
-                        step="0.01" 
-                        placeholder="0,00" 
-                        style={{ width: '80px', borderColor: '#2980b9', backgroundColor: estaTravadoPrecos ? '#f1f2f6' : '#fff' }} 
-                        value={item.precoVenda || ''} 
-                        onChange={(e) => handleAtualizarItem(item.id, 'precoVenda', e.target.value)} 
-                        disabled={estaTravadoPrecos} 
-                      />
-                    </td>
+                    {/* CUSTO E VENDA */}
+                    {mostrarPrecos && (
+                      <>
+                        <td>
+                          {estaTravadoPrecos ? (
+                            <span style={{ fontWeight: 'bold', color: '#27ae60', fontSize: '0.85rem' }}>{item.precoCusto ? `R$ ${item.precoCusto}` : '-'}</span>
+                          ) : (
+                            <input 
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0,00" 
+                              style={{ width: '80px', borderColor: '#27ae60' }} 
+                              value={item.precoCusto || ''} 
+                              onChange={(e) => handleAtualizarItem(item.id, 'precoCusto', e.target.value)} 
+                            />
+                          )}
+                        </td>
+                        <td>
+                          {estaTravadoPrecos ? (
+                            <span style={{ fontWeight: 'bold', color: '#2980b9', fontSize: '0.85rem' }}>{item.precoVenda ? `R$ ${item.precoVenda}` : '-'}</span>
+                          ) : (
+                            <input 
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0,00" 
+                              style={{ width: '80px', borderColor: '#2980b9' }} 
+                              value={item.precoVenda || ''} 
+                              onChange={(e) => handleAtualizarItem(item.id, 'precoVenda', e.target.value)} 
+                            />
+                          )}
+                        </td>
+                      </>
+                    )}
 
                     {/* AÇÕES DE LOTE E REMOVER */}
                     {!estaTravado && (
