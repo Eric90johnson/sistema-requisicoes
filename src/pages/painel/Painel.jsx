@@ -5,6 +5,7 @@ import '../../styles/pages/painel/ranking/ranking.css';
 import PainelMarketplace from '../marketplace/painel/PainelMarketplace'; 
 import { supabase } from '../../services/supabase';
 import { calcularRanking } from './utils/calculadoraRanking';
+import { useRankingData } from './hooks/useRankingData'; // 🚀 ADICIONADO: Importação do nosso novo Hook!
 
 export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, recebimentos = [], pedidosMarketplace = [], aoAbrirDetalhes, aoAlternarVisibilidade, abaExterna = 'interna', usuarioLogado }) {
   
@@ -36,11 +37,25 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   
   const canHideRequest = isMaster || usuarioLogado?.perm_ocultar_requisicao;
 
+  // 🚀 HOOK DO RANKING: Substitui dezenas de linhas por apenas esta chamada centralizada!
+  const {
+    dadosRankingReq,
+    dadosRankingRec,
+    carregandoRanking,
+    rankingCarregado,
+    buscarDadosRankingCompleto
+  } = useRankingData();
+
   const handleAbrirRanking = () => {
     if (canViewRanking) {
       setMostrarRanking(true);
       setColaboradorExpandido(null);
       setMostrarAvisoData(false);
+      
+      // Só busca no banco se ainda não tiver carregado na sessão atual
+      if (!rankingCarregado) {
+        buscarDadosRankingCompleto();
+      }
     } else {
       setMostrarModalAcessoNegado(true);
     }
@@ -166,24 +181,20 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     });
 
     return filtradas.sort((a, b) => {
-      // 1. Destaques visuais
       const aDestacado = idsDestacados.includes(a.id);
       const bDestacado = idsDestacados.includes(b.id);
       if (aDestacado && !bDestacado) return -1; 
       if (!aDestacado && bDestacado) return 1;  
 
-      // 2. Transporte/Recebimento pro final de tudo (Permanece azul embaixo)
       const aBaixaPrioridade = a.status === 'Transporte' || a.status === 'Recebimento';
       const bBaixaPrioridade = b.status === 'Transporte' || b.status === 'Recebimento';
       if (aBaixaPrioridade && !bBaixaPrioridade) return 1;
       if (!aBaixaPrioridade && bBaixaPrioridade) return -1;
 
-      // 3. Regra de Prioridade Mestre (1, 2, 3)
       const prioA = a.prioridade || 3; 
       const prioB = b.prioridade || 3;
       if (prioA !== prioB) return prioA - prioB; 
       
-      // 🚀 NOVA REGRA ADICIONADA: Organização por Status dentro da mesma prioridade
       const getPesoStatus = (st) => {
         if (st === 'Pendente') return 1;
         if (st === 'Em Separação') return 2;
@@ -198,7 +209,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
       if (pesoStatusA !== pesoStatusB) return pesoStatusA - pesoStatusB;
 
-      // 5. Se empatar em Prioridade e Status, vale a data de envio (Cronológico)
       const tempoA = a.timestampCriacao || 0;
       const tempoB = b.timestampCriacao || 0;
       return tempoA - tempoB; 
@@ -248,9 +258,10 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     }
   };
 
+  // 🚀 O RANKING AGORA USA OS DADOS IMPORTADOS DO HOOK
   const rankingCalculado = useMemo(() => {
-    return calcularRanking(requisicoes, recebimentos, dataInicioRanking, dataFimRanking);
-  }, [requisicoes, recebimentos, dataInicioRanking, dataFimRanking]);
+    return calcularRanking(dadosRankingReq, dadosRankingRec, dataInicioRanking, dataFimRanking);
+  }, [dadosRankingReq, dadosRankingRec, dataInicioRanking, dataFimRanking]);
 
   const formatarTempo = (segundos) => {
     const h = Math.floor(segundos / 3600).toString().padStart(2, '0');
@@ -491,15 +502,28 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
             
             <div className="ranking-modal-body">
               <div className="ranking-filtros">
-                <div className="filtro-grupo">
-                  <label>Data Início:</label>
-                  <input type="date" value={dataInicioRanking} onChange={(e) => {setDataInicioRanking(e.target.value); setMostrarAvisoData(false);}} />
+                <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                  <div className="filtro-grupo">
+                    <label>Data Início:</label>
+                    <input type="date" value={dataInicioRanking} onChange={(e) => {setDataInicioRanking(e.target.value); setMostrarAvisoData(false);}} />
+                  </div>
+                  <div className="filtro-grupo">
+                    <label>Data Fim:</label>
+                    <input type="date" value={dataFimRanking} onChange={(e) => {setDataFimRanking(e.target.value); setMostrarAvisoData(false);}} />
+                  </div>
                 </div>
-                <div className="filtro-grupo">
-                  <label>Data Fim:</label>
-                  <input type="date" value={dataFimRanking} onChange={(e) => {setDataFimRanking(e.target.value); setMostrarAvisoData(false);}} />
+                
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                  <button className="btn-limpar-ranking" onClick={() => {setDataInicioRanking(''); setDataFimRanking(''); setColaboradorExpandido(null); setMostrarAvisoData(false);}}>Limpar</button>
+                  <button 
+                    className="btn-limpar-ranking" 
+                    style={{ backgroundColor: '#3498db', borderColor: '#2980b9', color: 'white', fontWeight: 'bold' }} 
+                    onClick={buscarDadosRankingCompleto} 
+                    disabled={carregandoRanking}
+                  >
+                    {carregandoRanking ? '⏳...' : '🔄 Atualizar'}
+                  </button>
                 </div>
-                <button className="btn-limpar-ranking" onClick={() => {setDataInicioRanking(''); setDataFimRanking(''); setColaboradorExpandido(null); setMostrarAvisoData(false);}}>Limpar</button>
               </div>
 
               {mostrarAvisoData && (
@@ -509,7 +533,11 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
                 </div>
               )}
 
-              {rankingCalculado.length === 0 ? (
+              {carregandoRanking ? (
+                <div className="div-vazia-ranking" style={{ color: '#8e44ad', fontWeight: 'bold' }}>
+                  ⏳ Baixando histórico completo da nuvem para montar o ranking...
+                </div>
+              ) : rankingCalculado.length === 0 ? (
                 <div className="div-vazia-ranking">
                   Nenhum dado de separação finalizado neste período.
                 </div>

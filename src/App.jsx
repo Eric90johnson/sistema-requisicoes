@@ -124,16 +124,15 @@ function App() {
   const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false, forcarProdutos = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      // 🚀 EXCEÇÃO INTELIGENTE PARA O RANKING:
-      // Apenas usuários com permissão explícita para ver o ranking (ou admins) baixam o histórico completo.
-      // Encarregados comuns que não têm essa permissão continuarão no modo economia de dados!
+      // 🚀 EXCEÇÃO INTELIGENTE E ESTRITA PARA O RANKING:
+      // Apenas usuários com a permissão EXPLICITA 'perm_ver_ranking' (ou admin) baixam a lista_itens completa.
+      // Qualquer outro usuário (mesmo que seja encarregado) fará a requisição leve para economizar dados.
       const salvo = localStorage.getItem('netadantas_usuario');
       const userMemoria = salvo ? JSON.parse(salvo) : null;
-      const isEquipeRanking = userMemoria?.acesso_admin || userMemoria?.username === 'admin' || userMemoria?.perm_ver_ranking;
+      const isEquipeRanking = userMemoria?.perm_ver_ranking === true || userMemoria?.username === 'admin';
 
       let colunasRequisicoes = 'id, data, timestamp_criacao, origem, destino, solicitante, motivo, prioridade, itens, status, historico, metricas_separacao, numero_requisicao_externa, nota_fiscal, oculto';
       
-      // Se tiver permissão pro ranking, baixa a 'lista_itens' para que a pontuação antiga calcule certa
       if (isEquipeRanking) {
         colunasRequisicoes += ', lista_itens';
       }

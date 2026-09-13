@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import '../../styles/pages/painel/painel.css';
 import '../../styles/pages/painel/ranking/ranking.css'; // Importante para o visual do ranking
 import { calcularRanking } from '../painel/utils/calculadoraRanking';
+import { useRankingData } from '../painel/hooks/useRankingData'; // 🚀 ADICIONADO: Importação do Hook!
 
 export default function PainelRecebimento({ recebimentos = [], requisicoes = [], aoClicarNovoRecebimento, aoAbrirDetalhesRecebimento, usuarioLogado }) {
   
@@ -17,20 +18,34 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
 
   const canViewRanking = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin || usuarioLogado?.perm_ver_ranking;
 
+  // 🚀 HOOK DO RANKING: Substitui dezenas de linhas por apenas esta chamada centralizada!
+  const {
+    dadosRankingReq,
+    dadosRankingRec,
+    carregandoRanking,
+    rankingCarregado,
+    buscarDadosRankingCompleto
+  } = useRankingData();
+
   const handleAbrirRanking = () => {
     if (canViewRanking) {
       setMostrarRanking(true);
       setColaboradorExpandido(null);
       setMostrarAvisoData(false);
+      
+      // Só busca no banco se ainda não tiver carregado na sessão atual
+      if (!rankingCarregado) {
+        buscarDadosRankingCompleto();
+      }
     } else {
       setMostrarModalAcessoNegado(true);
     }
   };
 
+  // 🚀 O RANKING AGORA USA O HISTÓRICO COMPLETO BAIXADO E NÃO MAIS A LISTA DO PAINEL
   const rankingCalculado = useMemo(() => {
-    // Calcula usando TUDO: Requisições + Recebimentos
-    return calcularRanking(requisicoes, recebimentos, dataInicioRanking, dataFimRanking);
-  }, [requisicoes, recebimentos, dataInicioRanking, dataFimRanking]);
+    return calcularRanking(dadosRankingReq, dadosRankingRec, dataInicioRanking, dataFimRanking);
+  }, [dadosRankingReq, dadosRankingRec, dataInicioRanking, dataFimRanking]);
 
   const formatarTempo = (segundos) => {
     const h = Math.floor(segundos / 3600).toString().padStart(2, '0');
@@ -62,13 +77,12 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
     });
   }, [recebimentosAtivos]);
 
-  // 🚀 ADICIONADA A COR DO NOVO STATUS AQUI
   const getStatusClass = (status) => {
     switch (status) {
       case 'Pendente': return 'status-pendente';
       case 'Em Conferência': return 'status-separacao';
-      case 'Aguardando Precificação': return 'status-separado'; // Usa um tom amarelado/laranja
-      case 'Aguardando Cadastro': return 'status-faturado'; // Utiliza a classe azul
+      case 'Aguardando Precificação': return 'status-separado'; 
+      case 'Aguardando Cadastro': return 'status-faturado'; 
       case 'Concluída': return 'status-recebido';
       default: return 'status-pendente';
     }
@@ -185,15 +199,28 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
             
             <div className="ranking-modal-body">
               <div className="ranking-filtros">
-                <div className="filtro-grupo">
-                  <label>Data Início:</label>
-                  <input type="date" value={dataInicioRanking} onChange={(e) => {setDataInicioRanking(e.target.value); setMostrarAvisoData(false);}} />
+                <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                  <div className="filtro-grupo">
+                    <label>Data Início:</label>
+                    <input type="date" value={dataInicioRanking} onChange={(e) => {setDataInicioRanking(e.target.value); setMostrarAvisoData(false);}} />
+                  </div>
+                  <div className="filtro-grupo">
+                    <label>Data Fim:</label>
+                    <input type="date" value={dataFimRanking} onChange={(e) => {setDataFimRanking(e.target.value); setMostrarAvisoData(false);}} />
+                  </div>
                 </div>
-                <div className="filtro-grupo">
-                  <label>Data Fim:</label>
-                  <input type="date" value={dataFimRanking} onChange={(e) => {setDataFimRanking(e.target.value); setMostrarAvisoData(false);}} />
+                
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                  <button className="btn-limpar-ranking" onClick={() => {setDataInicioRanking(''); setDataFimRanking(''); setColaboradorExpandido(null); setMostrarAvisoData(false);}}>Limpar</button>
+                  <button 
+                    className="btn-limpar-ranking" 
+                    style={{ backgroundColor: '#3498db', borderColor: '#2980b9', color: 'white', fontWeight: 'bold' }} 
+                    onClick={buscarDadosRankingCompleto} 
+                    disabled={carregandoRanking}
+                  >
+                    {carregandoRanking ? '⏳...' : '🔄 Atualizar'}
+                  </button>
                 </div>
-                <button className="btn-limpar-ranking" onClick={() => {setDataInicioRanking(''); setDataFimRanking(''); setColaboradorExpandido(null); setMostrarAvisoData(false);}}>Limpar</button>
               </div>
 
               {mostrarAvisoData && (
@@ -203,7 +230,11 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
                 </div>
               )}
 
-              {rankingCalculado.length === 0 ? (
+              {carregandoRanking ? (
+                <div className="div-vazia-ranking" style={{ color: '#8e44ad', fontWeight: 'bold' }}>
+                  ⏳ Baixando histórico completo da nuvem para montar o ranking...
+                </div>
+              ) : rankingCalculado.length === 0 ? (
                 <div className="div-vazia-ranking">
                   Nenhum dado finalizado neste período.
                 </div>
