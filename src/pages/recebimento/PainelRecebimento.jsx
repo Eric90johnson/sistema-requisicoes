@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import '../../styles/pages/painel/painel.css';
-import '../../styles/pages/painel/ranking/ranking.css'; // Importante para o visual do ranking
+import '../../styles/pages/painel/ranking/ranking.css';
 import { calcularRanking } from '../painel/utils/calculadoraRanking';
-import { useRankingData } from '../painel/hooks/useRankingData'; // 🚀 ADICIONADO: Importação do Hook!
+import { useRankingData } from '../painel/hooks/useRankingData'; 
 
 export default function PainelRecebimento({ recebimentos = [], requisicoes = [], aoClicarNovoRecebimento, aoAbrirDetalhesRecebimento, usuarioLogado }) {
   
@@ -16,9 +16,18 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   const [mostrarAvisoData, setMostrarAvisoData] = useState(false); 
   const [mostrarModalAcessoNegado, setMostrarModalAcessoNegado] = useState(false);
 
+  // ==========================================
+  // 🚀 ESTADOS DOS FILTROS (ESTILO EXCEL)
+  // ==========================================
+  const [filtroStatus, setFiltroStatus] = useState('');
+  const [filtroData, setFiltroData] = useState('');
+  const [ordemData, setOrdemData] = useState('asc'); 
+  
+  // 🚀 Controle de qual menu flutuante está aberto ('status', 'data' ou null)
+  const [menuFiltroAberto, setMenuFiltroAberto] = useState(null);
+
   const canViewRanking = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin || usuarioLogado?.perm_ver_ranking;
 
-  // 🚀 HOOK DO RANKING: Substitui dezenas de linhas por apenas esta chamada centralizada!
   const {
     dadosRankingReq,
     dadosRankingRec,
@@ -32,8 +41,6 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
       setMostrarRanking(true);
       setColaboradorExpandido(null);
       setMostrarAvisoData(false);
-      
-      // Só busca no banco se ainda não tiver carregado na sessão atual
       if (!rankingCarregado) {
         buscarDadosRankingCompleto();
       }
@@ -42,7 +49,6 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
     }
   };
 
-  // 🚀 O RANKING AGORA USA O HISTÓRICO COMPLETO BAIXADO E NÃO MAIS A LISTA DO PAINEL
   const rankingCalculado = useMemo(() => {
     return calcularRanking(dadosRankingReq, dadosRankingRec, dataInicioRanking, dataFimRanking);
   }, [dadosRankingReq, dadosRankingRec, dataInicioRanking, dataFimRanking]);
@@ -65,17 +71,31 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   };
 
   // ==========================================
-  // LÓGICA DA TABELA DE RECEBIMENTOS
+  // LÓGICA DA TABELA DE RECEBIMENTOS E FILTROS
   // ==========================================
-  const recebimentosAtivos = recebimentos.filter(rec => rec.status !== 'Concluída');
+  const recebimentosAtivos = recebimentos.filter(rec => rec.status !== 'Concluída' && rec.status !== 'Cancelada');
 
-  const recebimentosOrdenados = useMemo(() => {
-    return recebimentosAtivos.sort((a, b) => {
+  const recebimentosFiltradosEOrdenados = useMemo(() => {
+    let filtrados = [...recebimentosAtivos];
+
+    if (filtroStatus) {
+      filtrados = filtrados.filter(rec => rec.status === filtroStatus);
+    }
+
+    if (filtroData) {
+      filtrados = filtrados.filter(rec => {
+        if (!rec.data_criacao) return false;
+        const dataRecLocal = new Date(rec.data_criacao).toLocaleDateString('en-CA'); 
+        return dataRecLocal === filtroData;
+      });
+    }
+
+    return filtrados.sort((a, b) => {
       const tempoA = new Date(a.data_criacao).getTime();
       const tempoB = new Date(b.data_criacao).getTime();
-      return tempoB - tempoA; // Mais recentes no topo
+      return ordemData === 'asc' ? tempoA - tempoB : tempoB - tempoA; 
     });
-  }, [recebimentosAtivos]);
+  }, [recebimentosAtivos, filtroStatus, filtroData, ordemData]);
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -91,6 +111,14 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   return (
     <div className="painel-container">
       
+      {/* 🚀 OVERLAY INVISÍVEL: Clicar fora fecha o menu flutuante */}
+      {menuFiltroAberto && (
+        <div 
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }} 
+          onClick={() => setMenuFiltroAberto(null)} 
+        />
+      )}
+
       {mostrarModalAcessoNegado && (
         <div className="modal-acesso-negado-overlay" onClick={() => setMostrarModalAcessoNegado(false)}>
           <div className="modal-acesso-negado-content" onClick={(e) => e.stopPropagation()}>
@@ -105,16 +133,13 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
       )}
 
       <div className="painel-header">
-        <button 
-          className="btn-ranking-abrir" 
-          onClick={handleAbrirRanking}
-        >
+        <button className="btn-ranking-abrir" onClick={handleAbrirRanking}>
           🏆 Ranking da Equipe
         </button>
         
         <div className="contador-requisicoes">
-          <span className="numero-destaque">{recebimentosAtivos.length}</span> 
-          <span>cargas pendentes de conferência/cadastro</span>
+          <span className="numero-destaque">{recebimentosFiltradosEOrdenados.length}</span> 
+          <span>cargas exibidas na tabela</span>
         </div>
 
         <button className="btn-nova-req btn-novo-pedido" onClick={aoClicarNovoRecebimento}>
@@ -128,8 +153,97 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
             <tr>
               <th>ID Relatório</th>
               <th>NF</th>
-              <th>Status</th>
-              <th>Data Registro</th>
+              
+              {/* 🚀 CABEÇALHO FILTRO EXCEL: STATUS */}
+              <th style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  Status
+                  <button 
+                    onClick={() => setMenuFiltroAberto(prev => prev === 'status' ? null : 'status')}
+                    style={{ 
+                      background: filtroStatus ? '#3498db' : 'transparent', 
+                      color: filtroStatus ? 'white' : '#7f8c8d', 
+                      border: '1px solid', borderColor: filtroStatus ? '#3498db' : '#bdc3c7', 
+                      borderRadius: '4px', cursor: 'pointer', padding: '2px 6px', fontSize: '0.7rem' 
+                    }}
+                    title="Filtrar Status"
+                  >
+                    ▼
+                  </button>
+                </div>
+
+                {/* MENU FLUTUANTE DO STATUS */}
+                {menuFiltroAberto === 'status' && (
+                  <div style={{ position: 'absolute', top: '100%', left: '0', backgroundColor: 'white', border: '1px solid #bdc3c7', borderRadius: '6px', padding: '15px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 50, minWidth: '220px', fontWeight: 'normal' }}>
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', color: '#34495e', fontWeight: 'bold' }}>Filtrar por Status:</label>
+                    <select 
+                      value={filtroStatus} 
+                      onChange={(e) => { setFiltroStatus(e.target.value); setMenuFiltroAberto(null); }}
+                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', outline: 'none' }}
+                    >
+                      <option value="">Todos Ativos</option>
+                      <option value="Pendente">Pendente</option>
+                      <option value="Em Conferência">Em Conferência</option>
+                      <option value="Aguardando Precificação">Ag. Precificação</option>
+                      <option value="Aguardando Cadastro">Ag. Cadastro</option>
+                    </select>
+                  </div>
+                )}
+              </th>
+              
+              {/* 🚀 CABEÇALHO FILTRO EXCEL: DATA REGISTRO */}
+              <th style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  Data Registro
+                  <button 
+                    onClick={() => setMenuFiltroAberto(prev => prev === 'data' ? null : 'data')}
+                    style={{ 
+                      background: (filtroData || ordemData !== 'asc') ? '#3498db' : 'transparent', 
+                      color: (filtroData || ordemData !== 'asc') ? 'white' : '#7f8c8d', 
+                      border: '1px solid', borderColor: (filtroData || ordemData !== 'asc') ? '#3498db' : '#bdc3c7', 
+                      borderRadius: '4px', cursor: 'pointer', padding: '2px 6px', fontSize: '0.7rem' 
+                    }}
+                    title="Filtrar e Ordenar Data"
+                  >
+                    ▼
+                  </button>
+                </div>
+
+                {/* MENU FLUTUANTE DA DATA */}
+                {menuFiltroAberto === 'data' && (
+                  <div style={{ position: 'absolute', top: '100%', left: '0', backgroundColor: 'white', border: '1px solid #bdc3c7', borderRadius: '6px', padding: '15px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 50, minWidth: '220px', fontWeight: 'normal' }}>
+                    
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', color: '#34495e', fontWeight: 'bold' }}>Buscar Data Exata:</label>
+                    <input 
+                      type="date" 
+                      value={filtroData} 
+                      onChange={(e) => { setFiltroData(e.target.value); setMenuFiltroAberto(null); }}
+                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', marginBottom: '15px', outline: 'none' }}
+                    />
+
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', color: '#34495e', fontWeight: 'bold' }}>Ordem de Exibição:</label>
+                    <select 
+                      value={ordemData} 
+                      onChange={(e) => { setOrdemData(e.target.value); setMenuFiltroAberto(null); }}
+                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', outline: 'none', marginBottom: (filtroData || ordemData !== 'asc') ? '15px' : '0' }}
+                    >
+                      <option value="asc">↑ Mais Antigos Primeiro</option>
+                      <option value="desc">↓ Mais Recentes Primeiro</option>
+                    </select>
+
+                    {/* Botão de Limpar (Só aparece se tiver algo filtrado) */}
+                    {(filtroData || ordemData !== 'asc') && (
+                      <button 
+                        onClick={() => { setFiltroData(''); setOrdemData('asc'); setMenuFiltroAberto(null); }}
+                        style={{ width: '100%', padding: '8px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
+                      >
+                        ✖ Limpar Filtros
+                      </button>
+                    )}
+                  </div>
+                )}
+              </th>
+              
               <th>Loja Destino</th>
               <th>Fornecedor / Marca</th>
               <th>Volumes</th>
@@ -137,18 +251,15 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
             </tr>
           </thead>
           <tbody>
-            {recebimentosOrdenados.length > 0 ? (
-              recebimentosOrdenados.map((rec) => (
+            {recebimentosFiltradosEOrdenados.length > 0 ? (
+              recebimentosFiltradosEOrdenados.map((rec) => (
                 <tr 
                   key={rec.id} 
                   className="linha-tabela-hover linha-tabela-clicavel"
                   onClick={() => aoAbrirDetalhesRecebimento ? aoAbrirDetalhesRecebimento(rec) : alert("Em breve: Detalhes do recebimento!")}
                 >
                   <td className="td-motivo-bold">{rec.numero_relatorio}</td>
-                  
-                  {/* NF COMO SEGUNDA COLUNA */}
                   <td style={{ color: '#e67e22', fontWeight: 'bold' }}>{rec.numero_nf}</td>
-                  
                   <td>
                     <span className={`status-badge ${getStatusClass(rec.status)}`}>
                       {rec.status}
@@ -164,7 +275,6 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
                   </td>
                   <td>{rec.volumes} cx</td>
                   <td className="td-historico-texto">
-                    {/* 🚀 ADICIONADA A MENSAGEM VISUAL PARA A DONA DA LOJA E PARA QUEM LANÇA */}
                     {rec.status === 'Aguardando Precificação' ? (
                        <span style={{ color: '#d35400', fontWeight: 'bold' }}>💲 Falta Precificar</span>
                     ) : rec.status === 'Aguardando Cadastro' ? (
@@ -178,7 +288,7 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
             ) : (
               <tr>
                 <td colSpan="8" className="td-vazio-tabela">
-                  Nenhuma carga pendente no momento. Pátio limpo!
+                  {filtroStatus || filtroData ? 'Nenhuma carga encontrada com os filtros selecionados.' : 'Nenhuma carga pendente no momento. Pátio limpo!'}
                 </td>
               </tr>
             )}
@@ -187,7 +297,7 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
       </div>
 
       {/* ========================================== */}
-      {/* MODAL DO RANKING (Idêntico ao Principal)     */}
+      {/* MODAL DO RANKING                             */}
       {/* ========================================== */}
       {mostrarRanking && (
         <div className="ranking-modal-overlay" onClick={() => setMostrarRanking(false)}>
