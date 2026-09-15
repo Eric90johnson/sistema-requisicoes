@@ -9,14 +9,30 @@ export default function TabelaProdutosRecebimento({
   solicitarBipManual, isEncarregado, exibirPopup
 }) {
 
-  // 🚀 TRAVA FÍSICA CORRIGIDA: Permite destravar os campos físicos caso isEditing seja ativado durante "Aguardando Precificação"
+  // 🚀 TRAVA FÍSICA CORRIGIDA
   const estaTravado = status === 'Concluída' || status === 'Cancelada' || status === 'Aguardando Cadastro' || (status === 'Aguardando Precificação' && !isEditing) || (status === 'Pendente' && !isEditing) || isViewer;
 
-  // TRAVA DE PREÇOS: Fica liberada durante a etapa de "Aguardando Precificação".
+  // TRAVA DE PREÇOS
   const estaTravadoPrecos = status === 'Concluída' || status === 'Cancelada' || status === 'Aguardando Cadastro' || (status === 'Pendente' && !isEditing) || isViewer;
 
-  // REGRA DE VISIBILIDADE: Só exibe as colunas de preços quando já passou da conferência
+  // REGRA DE VISIBILIDADE DE PREÇOS
   const mostrarPrecos = status === 'Aguardando Precificação' || status === 'Aguardando Cadastro' || status === 'Concluída';
+
+  // ==========================================
+  // MOTOR DE ÁUDIO PARA A TRAVA MESTRE
+  // ==========================================
+  const tocarSom = (tipo) => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      osc.type = tipo === 'erro' ? 'sawtooth' : 'sine';
+      osc.frequency.setValueAtTime(tipo === 'erro' ? 250 : 900, ctx.currentTime);
+      if (tipo === 'erro') osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.5);
+      osc.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + (tipo === 'erro' ? 0.6 : 0.2));
+    } catch (e) {}
+  };
 
   return (
     <div className="recebimento-card">
@@ -76,7 +92,6 @@ export default function TabelaProdutosRecebimento({
                 <th>Qtd Lote *</th>
                 <th>Conferido (Bip)</th>
                 <th>Avarias</th>
-                {/* EXIBE COLUNAS DE PREÇO APENAS SE A REGRA PERMITIR */}
                 {mostrarPrecos && (
                   <>
                     <th style={{ color: '#27ae60' }}>Custo (R$)</th>
@@ -108,7 +123,7 @@ export default function TabelaProdutosRecebimento({
                       )}
                     </td>
 
-                    {/* CÓDIGO DE BARRAS COM CÂMERA EMBUTIDA */}
+                    {/* CÓDIGO DE BARRAS MESTRE */}
                     <td>
                       {estaTravado ? (
                         <span style={{ fontWeight: '500', color: '#34495e', fontSize: '0.85rem' }}>{item.codigoBarras || '-'}</span>
@@ -121,7 +136,7 @@ export default function TabelaProdutosRecebimento({
                             onChange={(e) => handleAtualizarItem(item.id, 'codigoBarras', e.target.value)} 
                             onBlur={(e) => buscarProdutoPorCodigo(item.id, e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscarProdutoPorCodigo(item.id, e.target.value); } }}
-                            style={{ paddingRight: '35px', minWidth: '130px' }}
+                            style={{ paddingRight: '35px', minWidth: '130px', fontWeight: 'bold', color: '#2c3e50' }}
                           />
                           <button 
                             type="button" 
@@ -144,25 +159,11 @@ export default function TabelaProdutosRecebimento({
                     {/* DESCRIÇÃO DO PRODUTO */}
                     <td>
                       {estaTravado ? (
-                        <span style={{ 
-                          fontWeight: item.descricaoFornecedor === 'NOVO CADASTRO' ? 'bold' : '500', 
-                          color: item.descricaoFornecedor === 'NOVO CADASTRO' ? '#e74c3c' : '#34495e',
-                          fontSize: '0.85rem'
-                        }}>
+                        <span style={{ fontWeight: item.descricaoFornecedor === 'NOVO CADASTRO' ? 'bold' : '500', color: item.descricaoFornecedor === 'NOVO CADASTRO' ? '#e74c3c' : '#34495e', fontSize: '0.85rem' }}>
                           {item.descricaoFornecedor || '-'}
                         </span>
                       ) : (
-                        <input 
-                          type="text" 
-                          placeholder="Descrição" 
-                          value={item.descricaoFornecedor || ''} 
-                          onChange={(e) => handleAtualizarItem(item.id, 'descricaoFornecedor', e.target.value)} 
-                          style={{ 
-                            minWidth: '200px', 
-                            color: item.descricaoFornecedor === 'NOVO CADASTRO' ? '#e74c3c' : 'inherit',
-                            fontWeight: item.descricaoFornecedor === 'NOVO CADASTRO' ? 'bold' : 'normal'
-                          }}
-                        />
+                        <input type="text" placeholder="Descrição" value={item.descricaoFornecedor || ''} onChange={(e) => handleAtualizarItem(item.id, 'descricaoFornecedor', e.target.value)} style={{ minWidth: '200px', color: item.descricaoFornecedor === 'NOVO CADASTRO' ? '#e74c3c' : 'inherit', fontWeight: item.descricaoFornecedor === 'NOVO CADASTRO' ? 'bold' : 'normal' }} />
                       )}
                     </td>
 
@@ -171,12 +172,7 @@ export default function TabelaProdutosRecebimento({
                       {estaTravado ? (
                         <span style={{ fontWeight: '500', color: '#34495e', fontSize: '0.85rem' }}>{item.validade || '-'}</span>
                       ) : (
-                        <input 
-                          type="month" 
-                          value={item.validade || ''} 
-                          onChange={(e) => handleAtualizarItem(item.id, 'validade', e.target.value)} 
-                          style={{ minWidth: '120px' }} 
-                        />
+                        <input type="month" value={item.validade || ''} onChange={(e) => handleAtualizarItem(item.id, 'validade', e.target.value)} style={{ minWidth: '120px' }} />
                       )}
                     </td>
 
@@ -185,17 +181,11 @@ export default function TabelaProdutosRecebimento({
                       {estaTravado ? (
                         <span style={{ fontWeight: '500', color: '#34495e', fontSize: '0.85rem' }}>{item.quantidade || '0'}</span>
                       ) : (
-                        <input 
-                          type="number" 
-                          placeholder="0" 
-                          style={{ width: '80px' }} 
-                          value={item.quantidade || ''} 
-                          onChange={(e) => handleAtualizarItem(item.id, 'quantidade', e.target.value)} 
-                        />
+                        <input type="number" placeholder="0" style={{ width: '80px' }} value={item.quantidade || ''} onChange={(e) => handleAtualizarItem(item.id, 'quantidade', e.target.value)} />
                       )}
                     </td>
 
-                    {/* CONFERIDO */}
+                    {/* CONFERIDO (BIP E DIGITAÇÃO MANUAL) */}
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {estaTravado ? (
@@ -210,12 +200,7 @@ export default function TabelaProdutosRecebimento({
 
                         {!estaTravado && Number(item.quantidadeBipada) < Number(item.quantidade) && (
                           <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                            <button 
-                              type="button" 
-                              className="btn-bip-rapido no-print" 
-                              onClick={() => abrirModalScanner(item, 'contagem')}
-                              title="Ler com Câmera"
-                            >
+                            <button type="button" className="btn-bip-rapido no-print" onClick={() => abrirModalScanner(item, 'contagem')} title="Ler com Câmera">
                               📷 Bip
                             </button>
 
@@ -228,27 +213,52 @@ export default function TabelaProdutosRecebimento({
                                   placeholder="Cód. barras manual..." 
                                   value={codigoManual[chaveItem] || ''} 
                                   onChange={(e) => setCodigoManual({...codigoManual, [chaveItem]: e.target.value})} 
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      // Dispara o click do botão OK programaticamente ou puxa a lógica
+                                      document.getElementById(`btn-ok-${chaveItem}`).click();
+                                    }
+                                  }}
                                   style={{ padding: '4px', fontSize: '0.85rem', flex: 1, border: '1px solid #27ae60', borderRadius: '4px' }}
                                 />
                                 <button 
+                                  id={`btn-ok-${chaveItem}`}
                                   type="button" 
                                   onClick={() => {
-                                    const val = codigoManual[chaveItem];
-                                    if (val && val.trim()) {
+                                    const val = codigoManual[chaveItem]?.trim();
+                                    if (val) {
                                       const meta = Number(item.quantidade);
                                       const qtdAtual = Number(item.quantidadeBipada);
                                       
                                       if (meta > 0 && qtdAtual >= meta) {
-                                        if (exibirPopup) exibirPopup('aviso', 'Limite Atingido!', `Atenção: Você já conferiu todas as ${meta} unidades deste produto.`);
+                                        if (exibirPopup) exibirPopup('aviso', 'Limite Atingido!', `Atenção: Você já conferiu todas as ${meta} unidades.`);
                                         setCodigoManual({...codigoManual, [chaveItem]: ''});
                                         return;
                                       }
 
-                                      handleAtualizarItem(item.id, 'quantidadeBipada', qtdAtual + 1);
+                                      // 🚀 LÓGICA DA TRAVA MESTRE AQUI 🚀
+                                      const mestre = item.codigoBarras?.trim();
+                                      
+                                      if (!mestre) {
+                                        // 1º BIP: Grava como Mestre e avança
+                                        handleAtualizarItem(item.id, 'codigoBarras', val);
+                                        handleAtualizarItem(item.id, 'quantidadeBipada', qtdAtual + 1);
+                                        tocarSom('sucesso');
+                                      } else if (mestre === val) {
+                                        // BATEU: Soma!
+                                        handleAtualizarItem(item.id, 'quantidadeBipada', qtdAtual + 1);
+                                        tocarSom('sucesso');
+                                      } else {
+                                        // ERROU: Trava e Sirene!
+                                        tocarSom('erro');
+                                        if (exibirPopup) exibirPopup('erro', 'Código Inválido! ❌', `O código lido não corresponde ao produto mestre registrado.\n\nEsperado: ${mestre}\nLido: ${val}`);
+                                      }
+
                                       setCodigoManual({...codigoManual, [chaveItem]: ''});
                                     }
                                   }}
-                                  style={{ background: '#27ae60', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                  style={{ background: '#27ae60', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
                                 >
                                   OK
                                 </button>
@@ -256,50 +266,43 @@ export default function TabelaProdutosRecebimento({
                             ) : statusBip === 'pendente' ? (
                               <span style={{ fontSize: '0.75rem', color: '#d35400', fontWeight: 'bold' }}>⏳ Aguardando...</span>
                             ) : statusBip === 'recusado' ? (
-                              <button 
-                                type="button" 
-                                onClick={() => solicitarBipManual(item)}
-                                style={{ background: '#c0392b', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
-                              >
+                              <button type="button" onClick={() => solicitarBipManual(item)} style={{ background: '#c0392b', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}>
                                 ❌ Recusado (Pedir)
                               </button>
                             ) : (
-                              <button 
-                                type="button" 
-                                onClick={() => solicitarBipManual(item)}
-                                style={{ background: '#8e44ad', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
-                                title="Solicitar autorização ao encarregado"
-                              >
+                              <button type="button" onClick={() => solicitarBipManual(item)} style={{ background: '#8e44ad', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }} title="Solicitar autorização ao encarregado">
                                 🔑 Pedir Bip Manual
                               </button>
                             )}
 
-                            {/* TRAVA DO LÁPIS MANUAL */}
-                            <button 
-                              type="button" 
-                              className="btn-bip-rapido no-print" 
-                              style={{ backgroundColor: '#f39c12', padding: '6px 8px' }} 
-                              onClick={() => {
-                                const novaQtd = window.prompt(`Digite a quantidade conferida manualmente para:\n${item.descricaoFornecedor || 'Este Produto'}`, item.quantidadeBipada);
-                                if (novaQtd !== null && novaQtd.trim() !== '') {
-                                  const num = parseInt(novaQtd, 10);
-                                  const meta = Number(item.quantidade);
+                            {/* 🚀 TRAVA DO LÁPIS (APENAS ENCARREGADOS/ADMINS) */}
+                            {isEncarregado && (
+                              <button 
+                                type="button" 
+                                className="btn-bip-rapido no-print" 
+                                style={{ backgroundColor: '#f39c12', padding: '6px 8px' }} 
+                                onClick={() => {
+                                  const novaQtd = window.prompt(`Digite a quantidade conferida manualmente para:\n${item.descricaoFornecedor || 'Este Produto'}`, item.quantidadeBipada);
+                                  if (novaQtd !== null && novaQtd.trim() !== '') {
+                                    const num = parseInt(novaQtd, 10);
+                                    const meta = Number(item.quantidade);
 
-                                  if (!isNaN(num) && num >= 0) {
-                                    if (meta > 0 && num > meta) {
-                                      if (exibirPopup) exibirPopup('aviso', 'Limite Atingido!', `Você informou ${num} unidades, mas a nota indica apenas ${meta}. Não é possível registrar além da quantidade da NF.`);
-                                      return;
+                                    if (!isNaN(num) && num >= 0) {
+                                      if (meta > 0 && num > meta) {
+                                        if (exibirPopup) exibirPopup('aviso', 'Limite Atingido!', `Você informou ${num} unidades, mas a nota indica apenas ${meta}.`);
+                                        return;
+                                      }
+                                      handleAtualizarItem(item.id, 'quantidadeBipada', num);
+                                    } else {
+                                      alert('Por favor, digite um número válido e maior que zero.');
                                     }
-                                    handleAtualizarItem(item.id, 'quantidadeBipada', num);
-                                  } else {
-                                    alert('Por favor, digite um número válido e maior que zero.');
                                   }
-                                }
-                              }}
-                              title="Digitar Quantidade Manualmente"
-                            >
-                              ✏️
-                            </button>
+                                }}
+                                title="Digitar Quantidade em Lote (Somente Líderes)"
+                              >
+                                ✏️
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -310,13 +313,7 @@ export default function TabelaProdutosRecebimento({
                       {estaTravado ? (
                         <span style={{ fontWeight: 'bold', color: item.avarias > 0 ? '#e74c3c' : '#34495e', fontSize: '0.85rem' }}>{item.avarias || '0'}</span>
                       ) : (
-                        <input 
-                          type="number" 
-                          placeholder="0" 
-                          style={{ width: '60px', borderColor: item.avarias > 0 ? '#e74c3c' : '#bdc3c7' }} 
-                          value={item.avarias || ''} 
-                          onChange={(e) => handleAtualizarItem(item.id, 'avarias', e.target.value)} 
-                        />
+                        <input type="number" placeholder="0" style={{ width: '60px', borderColor: item.avarias > 0 ? '#e74c3c' : '#bdc3c7' }} value={item.avarias || ''} onChange={(e) => handleAtualizarItem(item.id, 'avarias', e.target.value)} />
                       )}
                     </td>
 
@@ -327,28 +324,14 @@ export default function TabelaProdutosRecebimento({
                           {estaTravadoPrecos ? (
                             <span style={{ fontWeight: 'bold', color: '#27ae60', fontSize: '0.85rem' }}>{item.precoCusto ? `R$ ${item.precoCusto}` : '-'}</span>
                           ) : (
-                            <input 
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="0,00" 
-                              style={{ width: '80px', borderColor: '#27ae60' }} 
-                              value={item.precoCusto || ''} 
-                              onChange={(e) => handleAtualizarItem(item.id, 'precoCusto', e.target.value)} 
-                            />
+                            <input type="text" inputMode="decimal" placeholder="0,00" style={{ width: '80px', borderColor: '#27ae60' }} value={item.precoCusto || ''} onChange={(e) => handleAtualizarItem(item.id, 'precoCusto', e.target.value)} />
                           )}
                         </td>
                         <td>
                           {estaTravadoPrecos ? (
                             <span style={{ fontWeight: 'bold', color: '#2980b9', fontSize: '0.85rem' }}>{item.precoVenda ? `R$ ${item.precoVenda}` : '-'}</span>
                           ) : (
-                            <input 
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="0,00" 
-                              style={{ width: '80px', borderColor: '#2980b9' }} 
-                              value={item.precoVenda || ''} 
-                              onChange={(e) => handleAtualizarItem(item.id, 'precoVenda', e.target.value)} 
-                            />
+                            <input type="text" inputMode="decimal" placeholder="0,00" style={{ width: '80px', borderColor: '#2980b9' }} value={item.precoVenda || ''} onChange={(e) => handleAtualizarItem(item.id, 'precoVenda', e.target.value)} />
                           )}
                         </td>
                       </>

@@ -229,40 +229,6 @@
   background: #732d91;
 }
 
-/* --- REGRAS DE IMPRESSÃO PROFISSIONAL --- */
-@media print {
-  .no-print, 
-  .cabecalho-global, 
-  .pro-sidebar, 
-  .cabecalho-global,
-  .recebimento-header {
-    display: none !important;
-  }
-
-  body, html {
-    background: white !important;
-    color: black !important;
-  }
-
-  .recebimento-container {
-    max-width: 100% !important;
-    padding: 0 !important;
-  }
-
-  .recebimento-card {
-    border: 1px solid #000 !important;
-    box-shadow: none !important;
-    margin-bottom: 15px !important;
-    page-break-inside: avoid;
-  }
-
-  .tabela-recebimento input {
-    border: none !important;
-    background: transparent !important;
-    padding: 0 !important;
-  }
-}
-
 .btn-imprimir-topo {
   background: #3498db;
   color: white;
@@ -291,4 +257,356 @@
 
 .btn-salvar-rec:hover {
   background: #219653;
+}
+
+/* ========================================== */
+/* ESTILOS DOS MODAIS (POPUP E SCANNER)       */
+/* ========================================== */
+.modal-overlay-custom {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+}
+
+.scanner-overlay {
+  background-color: rgba(0, 0, 0, 0.85);
+  padding: 20px;
+}
+
+.modal-content-custom {
+  background-color: white;
+  padding: 30px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.scanner-content {
+  max-width: 500px;
+  position: relative;
+}
+
+.modal-icon-custom {
+  font-size: 3.5rem;
+  margin-bottom: 10px;
+}
+
+.modal-content-custom h3 {
+  color: #2c3e50;
+  font-size: 1.4rem;
+  margin-bottom: 12px;
+}
+
+.modal-content-custom p {
+  color: #7f8c8d;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-bottom: 25px;
+  white-space: pre-wrap;
+}
+
+.modal-actions-custom {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-modal-confirm, .btn-modal-cancel {
+  flex: 1;
+  border: none;
+  padding: 12px 0;
+  min-width: 120px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-modal-confirm:hover, .btn-modal-cancel:hover {
+  opacity: 0.9;
+}
+
+.btn-modal-confirm.sucesso { background-color: #27ae60; color: white; }
+.btn-modal-confirm.aviso { background-color: #f39c12; color: white; }
+.btn-modal-confirm.erro { background-color: #e74c3c; color: white; }
+.btn-modal-cancel { background-color: #ecf0f1; color: #7f8c8d; }
+
+.btn-close-scanner {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.bip-mestre-info {
+  background: #eaf2f8;
+  padding: 8px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: #2980b9;
+  font-weight: bold;
+}
+
+.bip-livre-info {
+  background: #fdf2e9;
+  padding: 8px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: #d35400;
+  font-weight: bold;
+}
+
+.scanner-produto-nome {
+  color: #7f8c8d;
+  font-size: 1.1rem;
+  margin-bottom: 20px;
+}
+
+.scanner-circle-counter {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background-color: #f4f6f8;
+  border: 6px solid #3498db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  flex-direction: column;
+  transition: all 0.2s;
+}
+
+.scanner-circle-counter.error {
+  background-color: #fdedec;
+  border-color: #e74c3c;
+}
+
+.scanner-contador-atual {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.scanner-circle-counter.error .scanner-contador-atual {
+  color: #e74c3c;
+}
+
+.scanner-contador-total {
+  font-size: 0.9rem;
+  color: #7f8c8d;
+}
+
+.scanner-error-msg {
+  background-color: #fdedec;
+  color: #c0392b;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  font-weight: bold;
+}
+
+.input-scanner-oculto {
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+}
+
+.scanner-status-text {
+  font-size: 0.9rem;
+  color: #e67e22;
+  margin-bottom: 15px;
+}
+
+.btn-simular-bip {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  width: 100%;
+}
+
+.recebimento-header-clean {
+  background-color: transparent;
+  box-shadow: none;
+  padding: 0 0 20px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.recebimento-header-clean h2 {
+  font-size: 1.6rem;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.btn-voltar-clean {
+  background-color: transparent;
+  color: #8e44ad;
+  border: 1px solid #8e44ad;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.relatorio-destaque-txt {
+  font-size: 1.2rem;
+  color: #2c3e50;
+}
+
+.acoes-pendente-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -5px;
+  margin-bottom: 20px;
+}
+
+.btn-salvar-pendente {
+  background: #f39c12;
+  color: white;
+  border: none;
+  padding: 12px 25px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.pausas-container {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-pausa-almoco {
+  padding: 8px 12px;
+  background-color: #f1c40f;
+  color: #856404;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-pausa-fim {
+  padding: 8px 12px;
+  background-color: #34495e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.responsavel-group {
+  margin-bottom: 20px;
+}
+
+.input-btn-flex {
+  display: flex;
+  gap: 10px;
+}
+
+.input-btn-flex input {
+  flex: 1;
+}
+
+.btn-iniciar-conferencia {
+  background: #27ae60;
+  color: white;
+  border: none;
+  padding: 0 20px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.cronometro-recebimento {
+  background-color: #2c3e50;
+  color: white;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.cronometro-recebimento div {
+  font-size: 2.5rem;
+  font-weight: bold;
+}
+
+.btn-add-linha-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.btn-acao-tabela {
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.btn-acao-tabela.lote {
+  background: #3498db;
+}
+
+.btn-acao-tabela.remover {
+  background: #e74c3c;
+}
+
+/* --- REGRAS DE IMPRESSÃO PROFISSIONAL --- */
+@media print {
+  .no-print, 
+  .cabecalho-global, 
+  .pro-sidebar, 
+  .recebimento-header-clean,
+  .recebimento-header {
+    display: none !important;
+  }
+
+  body, html {
+    background: white !important;
+    color: black !important;
+  }
+
+  .recebimento-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .recebimento-card {
+    border: 1px solid #000 !important;
+    box-shadow: none !important;
+    margin-bottom: 15px !important;
+    page-break-inside: avoid;
+  }
+
+  .tabela-recebimento input {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
 }
