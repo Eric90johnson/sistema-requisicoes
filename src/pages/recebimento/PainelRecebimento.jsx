@@ -17,14 +17,10 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   const [mostrarModalAcessoNegado, setMostrarModalAcessoNegado] = useState(false);
 
   // ==========================================
-  // 🚀 ESTADOS DOS FILTROS (ESTILO EXCEL)
+  // 🚀 ESTADOS DOS FILTROS (MIGRADOS DO PAINEL PRINCIPAL)
   // ==========================================
-  const [filtroStatus, setFiltroStatus] = useState('');
-  const [filtroData, setFiltroData] = useState('');
-  const [ordemData, setOrdemData] = useState('asc'); 
-  
-  // 🚀 Controle de qual menu flutuante está aberto ('status', 'data' ou null)
-  const [menuFiltroAberto, setMenuFiltroAberto] = useState(null);
+  const [filtros, setFiltros] = useState({});
+  const [colunaFiltroAberta, setColunaFiltroAberta] = useState(null);
 
   const canViewRanking = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin || usuarioLogado?.perm_ver_ranking;
 
@@ -75,27 +71,24 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   // ==========================================
   const recebimentosAtivos = recebimentos.filter(rec => rec.status !== 'Concluída' && rec.status !== 'Cancelada');
 
+  // 🚀 OPÇÕES DINÂMICAS PARA OS FILTROS (ESTILO EXCEL)
+  const opcoesStatus = [...new Set(recebimentosAtivos.map(r => r.status))].filter(Boolean);
+  const opcoesData = [...new Set(recebimentosAtivos.map(r => new Date(r.data_criacao).toLocaleDateString('pt-BR')))].filter(Boolean);
+
   const recebimentosFiltradosEOrdenados = useMemo(() => {
-    let filtrados = [...recebimentosAtivos];
+    let filtradas = [...recebimentosAtivos];
 
-    if (filtroStatus) {
-      filtrados = filtrados.filter(rec => rec.status === filtroStatus);
-    }
+    // Aplica os filtros dinâmicos
+    if (filtros.status) filtradas = filtradas.filter(rec => rec.status === filtros.status);
+    if (filtros.data) filtradas = filtradas.filter(rec => new Date(rec.data_criacao).toLocaleDateString('pt-BR') === filtros.data);
 
-    if (filtroData) {
-      filtrados = filtrados.filter(rec => {
-        if (!rec.data_criacao) return false;
-        const dataRecLocal = new Date(rec.data_criacao).toLocaleDateString('en-CA'); 
-        return dataRecLocal === filtroData;
-      });
-    }
-
-    return filtrados.sort((a, b) => {
+    // 🚀 ORDENAÇÃO: MAIS ANTIGOS NO TOPO (ORDEM CRONOLÓGICA)
+    return filtradas.sort((a, b) => {
       const tempoA = new Date(a.data_criacao).getTime();
       const tempoB = new Date(b.data_criacao).getTime();
-      return ordemData === 'asc' ? tempoA - tempoB : tempoB - tempoA; 
+      return tempoA - tempoB; // Crescente (Antigos primeiro)
     });
-  }, [recebimentosAtivos, filtroStatus, filtroData, ordemData]);
+  }, [recebimentosAtivos, filtros]);
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -108,16 +101,49 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
     }
   };
 
+  // 🚀 COMPONENTE DE CABEÇALHO COM FILTRO EXCEL (IDÊNTICO AO PAINEL.JSX)
+  const RenderHeaderFiltro = ({ titulo, chave, opcoes }) => {
+    const estaAberto = colunaFiltroAberta === chave;
+    const filtroAtivo = filtros[chave];
+
+    return (
+      <th className={`th-com-filtro ${estaAberto ? 'filtro-aberto' : ''}`}>
+        <div 
+          className="cabecalho-filtro" 
+          onClick={() => setColunaFiltroAberta(estaAberto ? null : chave)}
+        >
+          {titulo}
+          <span className={`icone-filtro ${filtroAtivo ? 'ativo' : 'inativo'}`}>▼</span>
+        </div>
+
+        {estaAberto && (
+          <div className="filtro-dropdown">
+            <div 
+              className={`filtro-opcao ${!filtroAtivo ? 'selecionado' : ''}`}
+              onClick={() => { setFiltros({ ...filtros, [chave]: '' }); setColunaFiltroAberta(null); }}
+            >
+              (Todos)
+            </div>
+            {opcoes.map((opcao, idx) => (
+              <div 
+                key={idx}
+                className={`filtro-opcao ${filtroAtivo === opcao ? 'selecionado' : ''}`}
+                onClick={() => { setFiltros({ ...filtros, [chave]: opcao }); setColunaFiltroAberta(null); }}
+              >
+                {opcao}
+              </div>
+            ))}
+          </div>
+        )}
+      </th>
+    );
+  };
+
   return (
     <div className="painel-container">
       
-      {/* 🚀 OVERLAY INVISÍVEL: Clicar fora fecha o menu flutuante */}
-      {menuFiltroAberto && (
-        <div 
-          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }} 
-          onClick={() => setMenuFiltroAberto(null)} 
-        />
-      )}
+      {/* 🚀 OVERLAY INVISÍVEL IMPORTADO DA SUA LÓGICA */}
+      {colunaFiltroAberta && <div className="filtro-overlay" onClick={() => setColunaFiltroAberta(null)}></div>}
 
       {mostrarModalAcessoNegado && (
         <div className="modal-acesso-negado-overlay" onClick={() => setMostrarModalAcessoNegado(false)}>
@@ -154,95 +180,9 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
               <th>ID Relatório</th>
               <th>NF</th>
               
-              {/* 🚀 CABEÇALHO FILTRO EXCEL: STATUS */}
-              <th style={{ position: 'relative' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  Status
-                  <button 
-                    onClick={() => setMenuFiltroAberto(prev => prev === 'status' ? null : 'status')}
-                    style={{ 
-                      background: filtroStatus ? '#3498db' : 'transparent', 
-                      color: filtroStatus ? 'white' : '#7f8c8d', 
-                      border: '1px solid', borderColor: filtroStatus ? '#3498db' : '#bdc3c7', 
-                      borderRadius: '4px', cursor: 'pointer', padding: '2px 6px', fontSize: '0.7rem' 
-                    }}
-                    title="Filtrar Status"
-                  >
-                    ▼
-                  </button>
-                </div>
-
-                {/* MENU FLUTUANTE DO STATUS */}
-                {menuFiltroAberto === 'status' && (
-                  <div style={{ position: 'absolute', top: '100%', left: '0', backgroundColor: 'white', border: '1px solid #bdc3c7', borderRadius: '6px', padding: '15px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 50, minWidth: '220px', fontWeight: 'normal' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', color: '#34495e', fontWeight: 'bold' }}>Filtrar por Status:</label>
-                    <select 
-                      value={filtroStatus} 
-                      onChange={(e) => { setFiltroStatus(e.target.value); setMenuFiltroAberto(null); }}
-                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', outline: 'none' }}
-                    >
-                      <option value="">Todos Ativos</option>
-                      <option value="Pendente">Pendente</option>
-                      <option value="Em Conferência">Em Conferência</option>
-                      <option value="Aguardando Precificação">Ag. Precificação</option>
-                      <option value="Aguardando Cadastro">Ag. Cadastro</option>
-                    </select>
-                  </div>
-                )}
-              </th>
-              
-              {/* 🚀 CABEÇALHO FILTRO EXCEL: DATA REGISTRO */}
-              <th style={{ position: 'relative' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  Data Registro
-                  <button 
-                    onClick={() => setMenuFiltroAberto(prev => prev === 'data' ? null : 'data')}
-                    style={{ 
-                      background: (filtroData || ordemData !== 'asc') ? '#3498db' : 'transparent', 
-                      color: (filtroData || ordemData !== 'asc') ? 'white' : '#7f8c8d', 
-                      border: '1px solid', borderColor: (filtroData || ordemData !== 'asc') ? '#3498db' : '#bdc3c7', 
-                      borderRadius: '4px', cursor: 'pointer', padding: '2px 6px', fontSize: '0.7rem' 
-                    }}
-                    title="Filtrar e Ordenar Data"
-                  >
-                    ▼
-                  </button>
-                </div>
-
-                {/* MENU FLUTUANTE DA DATA */}
-                {menuFiltroAberto === 'data' && (
-                  <div style={{ position: 'absolute', top: '100%', left: '0', backgroundColor: 'white', border: '1px solid #bdc3c7', borderRadius: '6px', padding: '15px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 50, minWidth: '220px', fontWeight: 'normal' }}>
-                    
-                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', color: '#34495e', fontWeight: 'bold' }}>Buscar Data Exata:</label>
-                    <input 
-                      type="date" 
-                      value={filtroData} 
-                      onChange={(e) => { setFiltroData(e.target.value); setMenuFiltroAberto(null); }}
-                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', marginBottom: '15px', outline: 'none' }}
-                    />
-
-                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', color: '#34495e', fontWeight: 'bold' }}>Ordem de Exibição:</label>
-                    <select 
-                      value={ordemData} 
-                      onChange={(e) => { setOrdemData(e.target.value); setMenuFiltroAberto(null); }}
-                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', outline: 'none', marginBottom: (filtroData || ordemData !== 'asc') ? '15px' : '0' }}
-                    >
-                      <option value="asc">↑ Mais Antigos Primeiro</option>
-                      <option value="desc">↓ Mais Recentes Primeiro</option>
-                    </select>
-
-                    {/* Botão de Limpar (Só aparece se tiver algo filtrado) */}
-                    {(filtroData || ordemData !== 'asc') && (
-                      <button 
-                        onClick={() => { setFiltroData(''); setOrdemData('asc'); setMenuFiltroAberto(null); }}
-                        style={{ width: '100%', padding: '8px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
-                      >
-                        ✖ Limpar Filtros
-                      </button>
-                    )}
-                  </div>
-                )}
-              </th>
+              {/* 🚀 COLUNAS COM O SEU FILTRO PERFEITO */}
+              <RenderHeaderFiltro titulo="Status" chave="status" opcoes={opcoesStatus} />
+              <RenderHeaderFiltro titulo="Data Registro" chave="data" opcoes={opcoesData} />
               
               <th>Loja Destino</th>
               <th>Fornecedor / Marca</th>
@@ -288,7 +228,7 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
             ) : (
               <tr>
                 <td colSpan="8" className="td-vazio-tabela">
-                  {filtroStatus || filtroData ? 'Nenhuma carga encontrada com os filtros selecionados.' : 'Nenhuma carga pendente no momento. Pátio limpo!'}
+                  Nenhuma carga encontrada com estes filtros. Pátio limpo!
                 </td>
               </tr>
             )}
