@@ -13,6 +13,7 @@ import Menu from './components/menu/Menu';
 import InserirPedido from './pages/marketplace/inserir-pedido/InserirPedido';
 import Login from './pages/login/Login';
 import Admin from './pages/admin/Admin';
+import MetasEstoque from './pages/admin/metas/MetasEstoque'; // 🚀 ADICIONADO: Importação da nova tela de Metas
 import { supabase } from './services/supabase';
 
 function App() {
@@ -124,9 +125,6 @@ function App() {
   const carregarDadosDaNuvem = useCallback(async (silencioso = false, rapido = false, forcarProdutos = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      // 🚀 EXCEÇÃO INTELIGENTE E ESTRITA PARA O RANKING:
-      // Apenas usuários com a permissão EXPLICITA 'perm_ver_ranking' (ou admin) baixam a lista_itens completa.
-      // Qualquer outro usuário (mesmo que seja encarregado) fará a requisição leve para economizar dados.
       const salvo = localStorage.getItem('netadantas_usuario');
       const userMemoria = salvo ? JSON.parse(salvo) : null;
       const isEquipeRanking = userMemoria?.perm_ver_ranking === true || userMemoria?.username === 'admin';
@@ -636,20 +634,12 @@ function App() {
               
               {telaAtual === 'admin' && canSeeAdminMenu && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
 
+              {/* 🚀 AQUI ENTRA A NOVA TELA DE METAS */}
               {telaAtual === 'metas' && (
-                <div className="admin-container" style={{ marginTop: '20px' }}>
-                  <div className="admin-header">
-                    <h2>🎯 Metas e Desempenho</h2>
-                    <p>Módulo de Gestão de Indicadores e SLAs da Neta Dantas.</p>
-                  </div>
-                  <div className="card-novo-usuario" style={{ textAlign: 'center', padding: '60px 20px' }}>
-                    <span style={{ fontSize: '4rem', display: 'block', marginBottom: '20px' }}>🚧</span>
-                    <h3 style={{ justifyContent: 'center' }}>Módulo em Desenvolvimento</h3>
-                    <p style={{ color: '#7f8c8d', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6' }}>
-                      Em breve você poderá acompanhar aqui a velocidade da equipe (UPM), assertividade de separação e qualidade de entrega nas filiais.
-                    </p>
-                  </div>
-                </div>
+                <MetasEstoque 
+                  aoVoltar={() => setTelaAtual('painel')} 
+                  usuarioLogado={usuarioLogado} 
+                />
               )}
 
               {telaAtual === 'dashboard' && (
