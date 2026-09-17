@@ -12,8 +12,12 @@ export default function CabecalhoRecebimento({
         <div className="form-grid-4">
           <div className="input-group">
             <label>Loja Recebedora *</label>
+            {/* 🚀 CORREÇÃO: Select do modo Edição */}
             <select value={lojaRecebedora} onChange={(e) => setLojaRecebedora(e.target.value)}>
-              <option value="Matriz">Matriz</option><option value="Araturi">Araturi</option><option value="Conjunto Ceará">Conjunto Ceará</option><option value="Messejana">Messejana</option><option value="Mulungu">Mulungu</option>
+              <option value="Araturi">Araturi</option>
+              <option value="Conjunto Ceará">Conjunto Ceará</option>
+              <option value="Messejana">Messejana</option>
+              <option value="Mulungu">Mulungu</option>
             </select>
           </div>
           <div className="input-group"><label>Fornecedor *</label><input type="text" value={nomeFornecedor} onChange={(e) => setNomeFornecedor(e.target.value)} required /></div>

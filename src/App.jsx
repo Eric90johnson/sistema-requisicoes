@@ -13,7 +13,7 @@ import Menu from './components/menu/Menu';
 import InserirPedido from './pages/marketplace/inserir-pedido/InserirPedido';
 import Login from './pages/login/Login';
 import Admin from './pages/admin/Admin';
-import MetasEstoque from './pages/admin/metas/MetasEstoque'; // 🚀 ADICIONADO: Importação da nova tela de Metas
+import MetasEstoque from './pages/admin/metas/MetasEstoque'; 
 import { supabase } from './services/supabase';
 
 function App() {
@@ -32,7 +32,20 @@ function App() {
   const [produtosPreSelecionados, setProdutosPreSelecionados] = useState(null);
   const [reqEmEdicao, setReqEmEdicao] = useState(null); 
 
-  const [itensPreRequisicao, setItensPreRequisicao] = useState([]);
+  // ==========================================
+  // 🛒 CARRINHO COMPARTILHADO COM AUTO-SAVE
+  // ==========================================
+  const [itensPreRequisicao, setItensPreRequisicao] = useState(() => {
+    // 🚀 INICIALIZAÇÃO INTELIGENTE: Tenta ler o carrinho salvo no navegador
+    const carrinhoSalvo = localStorage.getItem('netadantas_carrinho_reposicao');
+    return carrinhoSalvo ? JSON.parse(carrinhoSalvo) : [];
+  });
+
+  // 🚀 VIGIA DO CARRINHO: Sempre que o usuário adicionar ou remover um item, salva no cache local
+  useEffect(() => {
+    localStorage.setItem('netadantas_carrinho_reposicao', JSON.stringify(itensPreRequisicao));
+  }, [itensPreRequisicao]);
+
   const [tipoReposicaoGlobal, setTipoReposicaoGlobal] = useState('interna'); 
   const [inicioCronometroGlobal, setInicioCronometroGlobal] = useState(null);
 
@@ -45,6 +58,9 @@ function App() {
 
   const [autorizacoesPendentes, setAutorizacoesPendentes] = useState([]);
   const [pausasPendentes, setPausasPendentes] = useState([]); 
+
+  // 🚀 NOVO ESTADO: Alerta Global de Carga Cadastrada
+  const [alertaCarga, setAlertaCarga] = useState({ visivel: false, relatorio: null, id: null });
 
   const [menuMobileAberto, setMenuMobileAberto] = useState(false);
 
@@ -298,6 +314,38 @@ function App() {
       if (timerId) clearTimeout(timerId);
     };
   }, [isLogado, carregarDadosDaNuvem, usuarioLogado]);
+
+  // 🚀 VIGIA INTELIGENTE DE NOVAS CARGAS (AGRUPADO)
+  useEffect(() => {
+    if (!isLogado || recebimentos.length === 0) return;
+    
+    const cargasNaoVistas = recebimentos.filter(r => r.status === 'Cadastrado' && !localStorage.getItem(`alerta_carga_ignorado_${r.id}`));
+    
+    if (cargasNaoVistas.length > 0) {
+      const nomesRelatorios = cargasNaoVistas.map(c => c.numero_relatorio).join(', ');
+      const textoRelatorio = cargasNaoVistas.length === 1 
+        ? `A nota/relatório ${nomesRelatorios} acabou de ser cadastrada` 
+        : `${cargasNaoVistas.length} novas notas (${nomesRelatorios}) acabaram de ser cadastradas`;
+
+      setAlertaCarga({ 
+        visivel: true, 
+        relatorio: textoRelatorio, 
+        ids: cargasNaoVistas.map(c => c.id) 
+      });
+    }
+  }, [recebimentos, isLogado]);
+
+  const handleFecharAlertaCarga = () => {
+    alertaCarga.ids.forEach(id => {
+      localStorage.setItem(`alerta_carga_ignorado_${id}`, 'true');
+    });
+    setAlertaCarga({ visivel: false, relatorio: '', ids: [] });
+  };
+
+  const handleIrParaCarga = () => {
+    handleFecharAlertaCarga();
+    navegarPara('painel-recebimento');
+  };
 
   const tocarSomNotificacao = () => {
     try {
@@ -593,7 +641,12 @@ function App() {
                   recebimentos={recebimentos} 
                   requisicoes={requisicoes}
                   aoClicarNovoRecebimento={() => setTelaAtual('novo-recebimento')} 
-                  
+                  itensPreRequisicao={itensPreRequisicao}
+                  aoIrParaPreRequisicao={() => {
+                    setProdutosPreSelecionados(itensPreRequisicao); 
+                    setItensPreRequisicao([]); 
+                    setTelaAtual('nova');
+                  }}
                   aoAbrirDetalhesRecebimento={async (rec) => { 
                     setCarregando(true);
                     try {
@@ -629,12 +682,14 @@ function App() {
                      carregarDadosDaNuvem(true, true); 
                   }} 
                   usuarioLogado={usuarioLogado} 
+                  itensPreRequisicao={itensPreRequisicao}
+                  aoAdicionarPreRequisicao={(p) => setItensPreRequisicao(v => v.some(i => String(i.codigo) === String(p.codigo)) ? v : [...v, p])}
+                  aoRemoverPreRequisicao={(c) => setItensPreRequisicao(v => v.filter(i => String(i.codigo) !== String(c)))}
                 />
               )}
               
               {telaAtual === 'admin' && canSeeAdminMenu && <Admin setProdutos={setBaseProdutos} abaAtiva={abaAdminAtiva} />}
 
-              {/* 🚀 AQUI ENTRA A NOVA TELA DE METAS */}
               {telaAtual === 'metas' && (
                 <MetasEstoque 
                   aoVoltar={() => setTelaAtual('painel')} 
@@ -688,6 +743,20 @@ function App() {
               </div>
             </div>
           ))}
+
+          {/* 🚀 TOAST DE NOTIFICAÇÃO GLOBAL DA CARGA CADASTRADA */}
+          {alertaCarga.visivel && (
+            <div className="toast-autorizacao-bip" style={{ borderColor: '#3498db' }}>
+              <div className="toast-bip-header" style={{ backgroundColor: '#3498db' }}>📦 Carga Liberada p/ Reposição!</div>
+              <div className="toast-bip-body">
+                <strong>{alertaCarga.relatorio}</strong> no sistema e os produtos estão prontos para irem para a prateleira.
+              </div>
+              <div className="toast-bip-footer">
+                <button className="btn-recusar-bip" onClick={handleFecharAlertaCarga}>Fechar ❌</button>
+                <button className="btn-aprovar-bip" style={{ backgroundColor: '#2980b9' }} onClick={handleIrParaCarga}>Ir p/ Recebimento ➔</button>
+              </div>
+            </div>
+          )}
         </div>
 
         <Rodape />

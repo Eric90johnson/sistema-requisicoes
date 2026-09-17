@@ -4,7 +4,8 @@ import '../../styles/pages/painel/ranking/ranking.css';
 import { calcularRanking } from '../painel/utils/calculadoraRanking';
 import { useRankingData } from '../painel/hooks/useRankingData'; 
 
-export default function PainelRecebimento({ recebimentos = [], requisicoes = [], aoClicarNovoRecebimento, aoAbrirDetalhesRecebimento, usuarioLogado }) {
+// 🚀 ADICIONADAS AS PROPS DO CARRINHO (itensPreRequisicao, aoIrParaPreRequisicao)
+export default function PainelRecebimento({ recebimentos = [], requisicoes = [], aoClicarNovoRecebimento, aoAbrirDetalhesRecebimento, usuarioLogado, itensPreRequisicao = [], aoIrParaPreRequisicao }) {
   
   // ==========================================
   // ESTADOS DO RANKING
@@ -17,7 +18,7 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   const [mostrarModalAcessoNegado, setMostrarModalAcessoNegado] = useState(false);
 
   // ==========================================
-  // 🚀 ESTADOS DOS FILTROS (MIGRADOS DO PAINEL PRINCIPAL)
+  // ESTADOS DOS FILTROS (MIGRADOS DO PAINEL PRINCIPAL)
   // ==========================================
   const [filtros, setFiltros] = useState({});
   const [colunaFiltroAberta, setColunaFiltroAberta] = useState(null);
@@ -71,22 +72,19 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   // ==========================================
   const recebimentosAtivos = recebimentos.filter(rec => rec.status !== 'Concluída' && rec.status !== 'Cancelada');
 
-  // 🚀 OPÇÕES DINÂMICAS PARA OS FILTROS (ESTILO EXCEL)
   const opcoesStatus = [...new Set(recebimentosAtivos.map(r => r.status))].filter(Boolean);
   const opcoesData = [...new Set(recebimentosAtivos.map(r => new Date(r.data_criacao).toLocaleDateString('pt-BR')))].filter(Boolean);
 
   const recebimentosFiltradosEOrdenados = useMemo(() => {
     let filtradas = [...recebimentosAtivos];
 
-    // Aplica os filtros dinâmicos
     if (filtros.status) filtradas = filtradas.filter(rec => rec.status === filtros.status);
     if (filtros.data) filtradas = filtradas.filter(rec => new Date(rec.data_criacao).toLocaleDateString('pt-BR') === filtros.data);
 
-    // 🚀 ORDENAÇÃO: MAIS ANTIGOS NO TOPO (ORDEM CRONOLÓGICA)
     return filtradas.sort((a, b) => {
       const tempoA = new Date(a.data_criacao).getTime();
       const tempoB = new Date(b.data_criacao).getTime();
-      return tempoA - tempoB; // Crescente (Antigos primeiro)
+      return tempoA - tempoB; 
     });
   }, [recebimentosAtivos, filtros]);
 
@@ -96,12 +94,12 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
       case 'Em Conferência': return 'status-separacao';
       case 'Aguardando Precificação': return 'status-separado'; 
       case 'Aguardando Cadastro': return 'status-faturado'; 
+      case 'Cadastrado': return 'status-recebido'; // 🚀 NOVO STATUS DE REPOSIÇÃO (Muda a cor para verde)
       case 'Concluída': return 'status-recebido';
       default: return 'status-pendente';
     }
   };
 
-  // 🚀 COMPONENTE DE CABEÇALHO COM FILTRO EXCEL (IDÊNTICO AO PAINEL.JSX)
   const RenderHeaderFiltro = ({ titulo, chave, opcoes }) => {
     const estaAberto = colunaFiltroAberta === chave;
     const filtroAtivo = filtros[chave];
@@ -142,7 +140,6 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   return (
     <div className="painel-container">
       
-      {/* 🚀 OVERLAY INVISÍVEL IMPORTADO DA SUA LÓGICA */}
       {colunaFiltroAberta && <div className="filtro-overlay" onClick={() => setColunaFiltroAberta(null)}></div>}
 
       {mostrarModalAcessoNegado && (
@@ -168,9 +165,22 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
           <span>cargas exibidas na tabela</span>
         </div>
 
-        <button className="btn-nova-req btn-novo-pedido" onClick={aoClicarNovoRecebimento}>
-          + Novo Recebimento
-        </button>
+        {/* 🚀 BOTÕES DE AÇÃO COM O CARRINHO COMPARTILHADO INJETADO */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {itensPreRequisicao.length > 0 && (
+            <button 
+              className="btn-nova-req" 
+              onClick={aoIrParaPreRequisicao}
+              style={{ backgroundColor: '#e67e22', display: 'flex', alignItems: 'center', gap: '8px' }} // Laranja destacando o carrinho
+            >
+              <span>🛒</span> Fazer Requisição ({itensPreRequisicao.length})
+            </button>
+          )}
+
+          <button className="btn-nova-req btn-novo-pedido" onClick={aoClicarNovoRecebimento}>
+            + Novo Recebimento
+          </button>
+        </div>
       </div>
 
       <div className="tabela-container-scroll">
@@ -179,11 +189,8 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
             <tr>
               <th>ID Relatório</th>
               <th>NF</th>
-              
-              {/* 🚀 COLUNAS COM O SEU FILTRO PERFEITO */}
               <RenderHeaderFiltro titulo="Status" chave="status" opcoes={opcoesStatus} />
               <RenderHeaderFiltro titulo="Data Registro" chave="data" opcoes={opcoesData} />
-              
               <th>Loja Destino</th>
               <th>Fornecedor / Marca</th>
               <th>Volumes</th>
@@ -196,7 +203,7 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
                 <tr 
                   key={rec.id} 
                   className="linha-tabela-hover linha-tabela-clicavel"
-                  onClick={() => aoAbrirDetalhesRecebimento ? aoAbrirDetalhesRecebimento(rec) : alert("Em breve: Detalhes do recebimento!")}
+                  onClick={() => aoAbrirDetalhesRecebimento ? aoAbrirDetalhesRecebimento(rec) : null}
                 >
                   <td className="td-motivo-bold">{rec.numero_relatorio}</td>
                   <td style={{ color: '#e67e22', fontWeight: 'bold' }}>{rec.numero_nf}</td>
@@ -219,6 +226,8 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
                        <span style={{ color: '#d35400', fontWeight: 'bold' }}>💲 Falta Precificar</span>
                     ) : rec.status === 'Aguardando Cadastro' ? (
                        <span style={{ color: '#2980b9', fontWeight: 'bold' }}>⏳ Falta Lançar Sist.</span>
+                    ) : rec.status === 'Cadastrado' ? (
+                       <span style={{ color: '#27ae60', fontWeight: 'bold' }}>📦 Pronto p/ Reposição</span>
                     ) : (
                        rec.responsavel_recebedor || <span style={{ color: '#e74c3c' }}>Aguardando...</span>
                     )}

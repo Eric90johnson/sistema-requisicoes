@@ -11,7 +11,11 @@ import CronometroRecebimento from './detalhes/CronometroRecebimento';
 import TabelaProdutosRecebimento from './detalhes/TabelaProdutosRecebimento';
 import ImpressaoRecebimento from './detalhes/ImpressaoRecebimento';
 
-export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLogado }) {
+export default function DetalhesRecebimento({ 
+  recebimento, aoVoltar, usuarioLogado,
+  // 🚀 PROPS INJETADAS DO CARRINHO DE REPOSIÇÃO
+  itensPreRequisicao = [], aoAdicionarPreRequisicao, aoRemoverPreRequisicao
+}) {
   // ==========================================
   // 1. ESTADOS GERAIS E CABEÇALHO
   // ==========================================
@@ -26,6 +30,9 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   const [responsavelRecebedor, setResponsavelRecebedor] = useState(recebimento?.responsavel_recebedor || usuarioLogado?.nome_completo || '');
   
   const [responsavelCadastro, setResponsavelCadastro] = useState(recebimento?.responsavel_cadastro || usuarioLogado?.nome_completo || '');
+  // 🚀 NOVO ESTADO PARA A ASSINATURA FINAL
+  const [responsavelEncerramento, setResponsavelEncerramento] = useState(usuarioLogado?.nome_completo || '');
+  
   const [observacoes, setObservacoes] = useState(recebimento?.observacoes || '');
 
   const [itens, setItens] = useState(
@@ -128,14 +135,11 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
             if (diferenca > 0) setTempoDecorrido(Math.floor(diferenca / 1000));
           }
         }
-        if (recebimento.status === 'Concluída' || recebimento.status === 'Cancelada' || recebimento.status === 'Aguardando Cadastro' || recebimento.status === 'Aguardando Precificação') {
+        if (recebimento.status === 'Concluída' || recebimento.status === 'Cadastrado' || recebimento.status === 'Cancelada' || recebimento.status === 'Aguardando Cadastro' || recebimento.status === 'Aguardando Precificação') {
           setTempoDecorrido(recebimento.metricas_recebimento.tempoTotalSegundos || 0);
         }
       }
 
-      // 🚀 CORREÇÃO DO BUG DE APAGAR PREÇOS: 
-      // Agora o sistema SÓ subscreve a tabela do banco se NÃO estiver na etapa de precificação,
-      // garantindo que o que você digita não seja apagado pelo recarregamento do painel.
       if (isViewer || (recebimento.status !== 'Em Conferência' && recebimento.status !== 'Aguardando Precificação')) {
         if (recebimento.itens && recebimento.itens.length > 0) {
           setItens(recebimento.itens);
@@ -285,8 +289,6 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   const atualizarItensE_SalvarGlobal = (novoEstadoOuFuncao) => {
     setItens(prev => {
       const novaLista = typeof novoEstadoOuFuncao === 'function' ? novoEstadoOuFuncao(prev) : novoEstadoOuFuncao;
-      
-      // 🚀 AGORA ELE SALVA AUTOMATICAMENTE OS PREÇOS NA ETAPA DE PRECIFICAÇÃO
       if (souOConferente || status === 'Aguardando Precificação') {
         supabase.from('recebimento_mercadorias').update({ itens: novaLista }).eq('id', recebimento.id);
       }
@@ -587,7 +589,7 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
   };
 
   // ==========================================
-  // ETAPA 3: ASSINATURA DE QUEM FEZ O CADASTRO E CONCLUSÃO DEFINITIVA
+  // ETAPA 3: ASSINATURA DE QUEM FEZ O CADASTRO E MUDANÇA PARA "CADASTRADO" (REPOSIÇÃO)
   // ==========================================
   const handleConcluirCadastro = async () => {
     if (!responsavelCadastro.trim()) {
@@ -596,12 +598,39 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
     setProcessando(true);
     try {
       await supabase.from('recebimento_mercadorias').update({
-        status: 'Concluída',
+        status: 'Cadastrado',
         responsavel_cadastro: responsavelCadastro.trim()
       }).eq('id', recebimento.id);
 
+      setStatus('Cadastrado');
+      exibirPopup('sucesso', 'Cadastro Finalizado! 🏆', `A nota foi cadastrada com sucesso no sistema da loja.\n\nAgora ela está liberada para a equipe repor as prateleiras!`, () => { if (aoVoltar) aoVoltar(); });
+    } catch (error) {
+      exibirPopup('erro', 'Erro', error.message);
+    } finally {
+      setProcessando(false);
+    }
+  };
+
+  // ==========================================
+  // 🚀 ETAPA 4 (FINAL): ENCERRAR O RECEBIMENTO DEFINITIVO
+  // ==========================================
+  const handleFinalizarRecebimentoDefinitivo = async () => {
+    if (!responsavelEncerramento.trim()) {
+      return exibirPopup('aviso', 'Responsável pelo Encerramento', 'Informe o nome de quem está encerrando a nota.');
+    }
+    setProcessando(true);
+    try {
+      const msgEncerramento = `\n\n[${new Date().toLocaleString('pt-BR')}] Sistema: Recebimento encerrado definitivamente por ${responsavelEncerramento.trim()}.`;
+      const novaObs = observacoes ? observacoes + msgEncerramento : msgEncerramento;
+
+      await supabase.from('recebimento_mercadorias').update({ 
+        status: 'Concluída',
+        observacoes: novaObs
+      }).eq('id', recebimento.id);
+      
       setStatus('Concluída');
-      exibirPopup('sucesso', 'Recebimento 100% Concluído! 🏆', `A nota foi conferida e cadastrada no sistema com sucesso.`, () => { if (aoVoltar) aoVoltar(); });
+      setObservacoes(novaObs);
+      exibirPopup('sucesso', 'Recebimento Encerrado! 🏁', `O relatório foi arquivado com sucesso e a operação foi concluída em definitivo.`, () => { if (aoVoltar) aoVoltar(); });
     } catch (error) {
       exibirPopup('erro', 'Erro', error.message);
     } finally {
@@ -657,6 +686,18 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
             <button className="btn-voltar-recebimento" onClick={aoVoltar} style={{ backgroundColor: 'transparent', color: '#8e44ad', border: '1px solid #8e44ad', padding: '10px 18px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>← Voltar ao Painel</button>
           </div>
         </div>
+
+        {/* 🚀 BANNER VERDE AVISANDO QUE O MODO REPOSIÇÃO ESTÁ ATIVO */}
+        {status === 'Cadastrado' && (
+          <div style={{ backgroundColor: '#eafaf1', borderLeft: '4px solid #27ae60', padding: '15px 20px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ color: '#27ae60', margin: '0 0 5px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              📦 Modo Reposição Ativo
+            </h3>
+            <p style={{ margin: 0, color: '#2c3e50', fontSize: '0.95rem' }}>
+              Esta carga já foi cadastrada. Clique nas linhas dos produtos abaixo para adicioná-los ao carrinho e criar a requisição de abastecimento da loja.
+            </p>
+          </div>
+        )}
       </div>
 
       <form className="recebimento-form" onSubmit={handleSalvarRecebimentoFinal}>
@@ -700,7 +741,7 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
               💻 Última Etapa: Cadastro da NF no Sistema
             </h4>
             <p style={{ color: '#34495e', margin: '0 0 15px 0', fontSize: '0.95rem' }}>
-              A precificação foi concluída. Informe quem realizou o lançamento da Nota Fiscal no sistema da loja para encerrar o processo.
+              A precificação foi concluída. Informe quem realizou o lançamento da Nota Fiscal no sistema da loja para liberar a carga para reposição.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxWidth: '600px' }}>
@@ -716,6 +757,35 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
                 />
                 <button type="button" onClick={handleConcluirCadastro} disabled={processando} style={{ background: '#3498db', color: 'white', border: 'none', padding: '0 25px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem' }}>
                   {processando ? '⏳ Aguarde...' : 'Confirmar Cadastro ✔️'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🚀 NOVO BLOCO FINAL DE ENCERRAMENTO (IDÊNTICO AO CADASTRO) */}
+        {status === 'Cadastrado' && !isEditing && !isViewer && (
+          <div style={{ backgroundColor: '#f4f6f7', borderLeft: '4px solid #7f8c8d', borderRadius: '0 8px 8px 0', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '20px' }} className="no-print">
+            <h4 style={{ color: '#2c3e50', margin: '0 0 10px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🏁 Fim do Processo: Encerrar Relatório
+            </h4>
+            <p style={{ color: '#34495e', margin: '0 0 15px 0', fontSize: '0.95rem' }}>
+              A reposição da loja já foi feita? Informe quem está encerrando e clique abaixo para arquivar este relatório em definitivo.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxWidth: '600px' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#7f8c8d' }}>Resp. Encerramento</label>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input
+                  type="text"
+                  placeholder="Ex: Carlos"
+                  value={responsavelEncerramento}
+                  onChange={(e) => setResponsavelEncerramento(e.target.value)}
+                  style={{ flex: 1, padding: '10px 12px', border: '1px solid #dcdde1', borderRadius: '6px', outline: 'none', fontSize: '1rem', backgroundColor: '#fdfdfd' }}
+                  disabled={processando}
+                />
+                <button type="button" onClick={handleFinalizarRecebimentoDefinitivo} disabled={processando} style={{ background: '#3498db', color: 'white', border: 'none', padding: '0 25px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem' }}>
+                  {processando ? '⏳ Aguarde...' : 'Finalizar Recebimento ✔️'}
                 </button>
               </div>
             </div>
@@ -741,6 +811,9 @@ export default function DetalhesRecebimento({ recebimento, aoVoltar, usuarioLoga
               pedidosBip={pedidosBip} codigoManual={codigoManual} setCodigoManual={setCodigoManual}
               solicitarBipManual={solicitarBipManual} isEncarregado={isEncarregado}
               exibirPopup={exibirPopup} 
+              itensPreRequisicao={itensPreRequisicao}
+              aoAdicionarPreRequisicao={aoAdicionarPreRequisicao}
+              aoRemoverPreRequisicao={aoRemoverPreRequisicao}
             />
           </>
         )}

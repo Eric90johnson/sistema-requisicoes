@@ -9,8 +9,8 @@ import TabelaProdutosRecebimento from './detalhes/TabelaProdutosRecebimento';
 const CACHE_KEY = 'netadantas_recebimento_draft';
 
 export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
-  const [lojaRecebedora, setLojaRecebedora] = useState('Matriz');
-  const [numeroRelatorio, setNumeroRelatorio] = useState('REC.X.001');
+  const [lojaRecebedora, setLojaRecebedora] = useState('Araturi');
+  const [numeroRelatorio, setNumeroRelatorio] = useState('REC.A.001');
   const [nomeFornecedor, setNomeFornecedor] = useState('');
   const [marca, setMarca] = useState('');
   const [numeroNF, setNumeroNF] = useState('');
@@ -51,7 +51,7 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
   const [aguardandoRestauracao, setAguardandoRestauracao] = useState(true);
 
   // ==========================================
-  // AUTO-SAVE BLINDADO (NOVO MOTOR)
+  // AUTO-SAVE BLINDADO
   // ==========================================
   useEffect(() => {
     const draft = localStorage.getItem(CACHE_KEY);
@@ -61,8 +61,8 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
       () => {
         try {
           const dados = JSON.parse(draft);
-          setLojaRecebedora(dados.lojaRecebedora || 'Matriz');
-          setNumeroRelatorio(dados.numeroRelatorio || 'REC.X.001');
+          setLojaRecebedora(dados.lojaRecebedora || 'Araturi');
+          setNumeroRelatorio(dados.numeroRelatorio || 'REC.A.001');
           setNomeFornecedor(dados.nomeFornecedor || '');
           setMarca(dados.marca || '');
           setNumeroNF(dados.numeroNF || '');
@@ -73,9 +73,8 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
           setItens(dados.itens && dados.itens.length > 0 ? dados.itens : itens);
           setStatus(dados.status || 'Pendente');
           
-          // 🚀 SEM PAUSA FANTASMA: Se o cronômetro estava rodando, ele vai calcular o tempo total desde o início real
           setInicioConferencia(dados.inicioConferencia || null);
-          setTempoDecorrido(dados.tempoDecorrido || 0); // Atualiza no próximo tick do setInterval
+          setTempoDecorrido(dados.tempoDecorrido || 0); 
           
           setPausaAtivaInicio(dados.pausaAtivaInicio || null);
           setPausaAtivaId(dados.pausaAtivaId || null);
@@ -93,13 +92,11 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
     }
   }, []);
 
-  // Cria uma "Foto" dos dados atuais em tempo real sem afetar as renderizações do React
   const stateRef = useRef();
   useEffect(() => {
     stateRef.current = { lojaRecebedora, numeroRelatorio, nomeFornecedor, marca, numeroNF, volumes, numeroPedido, responsavelRecebedor, observacoes, itens, status, inicioConferencia, tempoDecorrido, pausaAtivaInicio, pausaAtivaId, tipoPausaAtiva, tempoPausadoTotal };
   });
 
-  // Salva no banco local a cada 2 segundos independente de qualquer coisa!
   useEffect(() => {
     const interval = setInterval(() => {
       if (!aguardandoRestauracao && stateRef.current && stateRef.current.status !== 'Concluída') {
@@ -109,7 +106,6 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
     return () => clearInterval(interval);
   }, [aguardandoRestauracao]);
 
-  // Função para garantir salvamento imediato se o usuário clicar em "Voltar"
   const handleVoltar = () => {
     if (!aguardandoRestauracao && stateRef.current && stateRef.current.status !== 'Concluída') {
       localStorage.setItem(CACHE_KEY, JSON.stringify(stateRef.current));
@@ -122,12 +118,10 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
   };
 
   useEffect(() => {
-    let siglaLoja = 'X';
-    if (lojaRecebedora === 'Araturi') siglaLoja = 'A';
-    else if (lojaRecebedora === 'Conjunto Ceará') siglaLoja = 'C';
+    let siglaLoja = 'A';
+    if (lojaRecebedora === 'Conjunto Ceará') siglaLoja = 'C';
     else if (lojaRecebedora === 'Messejana') siglaLoja = 'M';
     else if (lojaRecebedora === 'Mulungu') siglaLoja = 'MU';
-    else if (lojaRecebedora === 'Matriz') siglaLoja = 'MT';
 
     const buscarProximoNumero = async () => {
       try {
@@ -142,7 +136,7 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
         setNumeroRelatorio(`REC.${siglaLoja}.001`);
       }
     };
-    if (numeroRelatorio === 'REC.X.001' || numeroRelatorio.split('.')[1] !== siglaLoja) buscarProximoNumero();
+    if (numeroRelatorio === 'REC.A.001' || numeroRelatorio.split('.')[1] !== siglaLoja) buscarProximoNumero();
   }, [lojaRecebedora, numeroRelatorio]);
 
   useEffect(() => {
@@ -429,11 +423,21 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
           </div>
 
           <div className="form-grid-4">
-            <div className="input-group"><label>Loja Recebedora *</label><select value={lojaRecebedora} onChange={(e) => setLojaRecebedora(e.target.value)} disabled={status !== 'Pendente'}><option value="Matriz">Matriz</option><option value="Araturi">Araturi</option></select></div>
+            <div className="input-group">
+              <label>Loja Recebedora *</label>
+              <select value={lojaRecebedora} onChange={(e) => setLojaRecebedora(e.target.value)} disabled={status !== 'Pendente'}>
+                <option value="Araturi">Araturi</option>
+                <option value="Conjunto Ceará">Conjunto Ceará</option>
+                <option value="Messejana">Messejana</option>
+                <option value="Mulungu">Mulungu</option>
+              </select>
+            </div>
             <div className="input-group"><label>Nome do Fornecedor *</label><input type="text" value={nomeFornecedor} onChange={(e) => setNomeFornecedor(e.target.value)} required disabled={status !== 'Pendente'} /></div>
             <div className="input-group"><label>Marca *</label><input type="text" value={marca} onChange={(e) => setMarca(e.target.value)} required disabled={status !== 'Pendente'} /></div>
             <div className="input-group"><label>Número da NF *</label><input type="text" value={numeroNF} onChange={(e) => setNumeroNF(e.target.value)} required disabled={status !== 'Pendente'} /></div>
             <div className="input-group"><label>Qtd. Volumes *</label><input type="number" value={volumes} onChange={(e) => setVolumes(e.target.value)} required disabled={status !== 'Pendente'} /></div>
+            {/* 🚀 O CAMPO NÚMERO DO PEDIDO RETORNOU E É OPCIONAL */}
+            <div className="input-group"><label>Número do Pedido (Opcional)</label><input type="text" value={numeroPedido} onChange={(e) => setNumeroPedido(e.target.value)} disabled={status !== 'Pendente'} /></div>
           </div>
         </div>
 
@@ -513,9 +517,6 @@ export default function RecebimentoProdutos({ aoVoltar, usuarioLogado }) {
   );
 }
 
-// ==========================================
-// COMPONENTE DA CÂMERA DE CÓDIGO DE BARRAS
-// ==========================================
 function CameraScanner({ onScan }) {
   useEffect(() => {
     const scanner = new Html5QrcodeScanner("reader-barcode", { 
@@ -531,7 +532,7 @@ function CameraScanner({ onScan }) {
         scanner.pause(true);
         setTimeout(() => scanner.resume(), 1500);
       },
-      (error) => { /* Ignora erros de frame vazio */ }
+      (error) => {  }
     );
 
     return () => {
