@@ -3,6 +3,7 @@ import { supabase } from '../../services/supabase';
 import '../../styles/pages/historico/historico.css';
 
 export default function Historico({ requisicoes, aoVoltar }) {
+  // 🚀 AQUI: O estado que alterna as "duas telas" em uma só!
   const [tipoHistorico, setTipoHistorico] = useState('transferencia'); 
 
   // Filtros de Pesquisa
@@ -16,19 +17,18 @@ export default function Historico({ requisicoes, aoVoltar }) {
   const [filtroMarca, setFiltroMarca] = useState(''); 
 
   const [linhaExpandida, setLinhaExpandida] = useState(null);
+  const [produtoExpandido, setProdutoExpandido] = useState(null);
+  
   const [ordenacao, setOrdenacao] = useState({ coluna: 'data', direcao: 'desc' });
 
-  // Controle de Busca Direta no Banco
   const [dadosHistorico, setDadosHistorico] = useState([]);
   const [buscando, setBuscando] = useState(false);
   const [pesquisaRealizada, setPesquisaRealizada] = useState(false);
 
-  // 🚀 ESTADO INTELIGENTE: Guarda as informações em tempo real da base de produtos (Apenas Código e Descrição)
   const [baseAtualizada, setBaseAtualizada] = useState({});
 
-  // Listas de Status adaptativas
   const opcoesStatusReq = ['Pendente', 'Em Separação', 'Separado', 'Em Edição', 'Cancelada', 'Saída de produtos', 'Faturamento', 'Transporte', 'Recebimento', 'Concluída'];
-  const opcoesStatusRec = ['Pendente', 'Em Conferência', 'Aguardando Precificação', 'Aguardando Cadastro', 'Concluída', 'Cancelada'];
+  const opcoesStatusRec = ['Pendente', 'Em Conferência', 'Aguardando Precificação', 'Aguardando Cadastro', 'Concluída', 'Cancelada', 'Cadastrado'];
   const opcoesStatusAtuais = tipoHistorico === 'transferencia' ? opcoesStatusReq : opcoesStatusRec;
 
   const handleTrocarTipo = (novoTipo) => {
@@ -43,18 +43,10 @@ export default function Historico({ requisicoes, aoVoltar }) {
       case 'Saída de produtos': case 'Aguardando Precificação': return 'status-separado';
       case 'Faturamento': case 'Aguardando Cadastro': return 'status-faturado';
       case 'Transporte': return 'status-enviado';
-      case 'Recebimento': case 'Concluída': return 'status-recebido';
+      case 'Recebimento': case 'Concluída': case 'Cadastrado': return 'status-recebido';
       case 'Cancelada': return 'status-pendente';
       default: return 'status-pendente';
     }
-  };
-
-  const converterData = (dataStr) => {
-    if (!dataStr) return null;
-    if (dataStr.includes('T')) return new Date(dataStr);
-    const partes = dataStr.split('/');
-    if (partes.length === 3) return new Date(`${partes[2]}-${partes[1]}-${partes[0]}T00:00:00`);
-    return new Date(dataStr);
   };
 
   const handlePesquisar = async () => {
@@ -65,6 +57,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
 
     setBuscando(true);
     setLinhaExpandida(null);
+    setProdutoExpandido(null);
     
     try {
       if (tipoHistorico === 'transferencia') {
@@ -120,7 +113,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
 
       } else {
         const precisaListaItens = !!filtroCodigo; 
-        const colunasBase = 'id, data_criacao, loja_recebedora, numero_relatorio, nome_fornecedor, marca, numero_nf, volumes, numero_pedido, responsavel_recebedor, responsavel_cadastro, observacoes, status, metricas_recebimento';
+        const colunasBase = 'id, data_criacao, loja_recebedora, numero_relatorio, nome_fornecedor, marca, numero_nf, volumes, numero_pedido, responsavel_recebedor, responsavel_cadastro, observacoes, status, metricas_recebimento, historico_diluicao';
         const colunasQuery = precisaListaItens ? `${colunasBase}, itens` : colunasBase;
 
         let query = supabase.from('recebimento_mercadorias').select(colunasQuery);
@@ -147,7 +140,8 @@ export default function Historico({ requisicoes, aoVoltar }) {
           timestampCriacao: new Date(r.data_criacao).getTime(),
           listaItens: r.itens, 
           metricasSeparacao: r.metricas_recebimento,
-          destino: r.loja_recebedora
+          destino: r.loja_recebedora,
+          historicoDiluicao: r.historico_diluicao 
         }));
 
         const resultadosFinais = recsFormatados.filter(req => {
@@ -207,17 +201,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
   }, [dadosHistorico, ordenacao, tipoHistorico]);
 
   const limparFiltros = (forcarTipo = null) => {
-    setDataInicio('');
-    setDataFim('');
-    setFiltroId('');
-    setFiltroCodigo('');
-    setFiltroOrdem('');
-    setFiltroNotaFiscal('');
-    setFiltroStatus('');
-    setFiltroMarca(''); 
-    setLinhaExpandida(null);
-    setDadosHistorico([]);
-    setPesquisaRealizada(false);
+    setDataInicio(''); setDataFim(''); setFiltroId(''); setFiltroCodigo(''); setFiltroOrdem(''); setFiltroNotaFiscal(''); setFiltroStatus(''); setFiltroMarca(''); setLinhaExpandida(null); setProdutoExpandido(null); setDadosHistorico([]); setPesquisaRealizada(false);
   };
 
   const formatarTempo = (segundos) => {
@@ -365,11 +349,8 @@ export default function Historico({ requisicoes, aoVoltar }) {
         if (req.listaItens && req.listaItens.length > 0) {
           req.listaItens.forEach(item => {
             const codBarras = item.codigoBarra || item.codigo_barra || item.codigoBarras || '-';
-            
-            // 🚀 CHAVES EXATAS DO RECEBIMENTO APLICADAS NA EXPORTAÇÃO
             let displayCod = item.codigoSistema || item.codigo || item.cod || '';
             let displayDesc = item.descricaoFornecedor || item.descricaoProduto || item.descricao || item.nome || '-';
-            
             let pCusto = item.precoCusto || item.preco_custo || item.custo || '-';
             let pVenda = item.precoVenda || item.preco_venda || item.venda || '-';
             
@@ -380,13 +361,10 @@ export default function Historico({ requisicoes, aoVoltar }) {
                 displayCod = mapaBaseExport[codBarras].cod || displayCod;
                 displayDesc = mapaBaseExport[codBarras].desc || displayDesc;
               }
-              if (displayDesc.toUpperCase() === 'NOVO CADASTRO') {
-                displayDesc = '-';
-              }
+              if (displayDesc.toUpperCase() === 'NOVO CADASTRO') displayDesc = '-';
             }
             
             displayCod = displayCod || '-';
-
             const avarias = item.avarias || item.qtdAvarias || '0';
             const qtdConferida = item.quantidade || item.bipContagem || item.quantidadeRecebida || '0';
             const obs = item.observacao ? item.observacao.replace(/"/g, '""').replace(/\n/g, ' ') : '-';
@@ -412,10 +390,12 @@ export default function Historico({ requisicoes, aoVoltar }) {
   const toggleLinha = async (req) => {
     if (linhaExpandida === req.id) {
       setLinhaExpandida(null);
+      setProdutoExpandido(null); 
       return;
     }
 
     setLinhaExpandida(req.id);
+    setProdutoExpandido(null);
 
     let itensDaReq = req.listaItens;
 
@@ -423,15 +403,18 @@ export default function Historico({ requisicoes, aoVoltar }) {
       try {
         const tabela = tipoHistorico === 'transferencia' ? 'requisicoes' : 'recebimento_mercadorias';
         const colunaItens = tipoHistorico === 'transferencia' ? 'lista_itens' : 'itens';
+        const selectCols = tipoHistorico === 'recebimento' ? `${colunaItens}, historico_diluicao` : colunaItens;
         
-        const { data, error } = await supabase.from(tabela).select(colunaItens).eq('id', req.id).single();
+        const { data, error } = await supabase.from(tabela).select(selectCols).eq('id', req.id).single();
         if (!error && data) {
           itensDaReq = data[colunaItens];
-          setDadosHistorico(prev => prev.map(r => r.id === req.id ? { ...r, listaItens: itensDaReq } : r));
+          setDadosHistorico(prev => prev.map(r => r.id === req.id ? { 
+            ...r, 
+            listaItens: itensDaReq,
+            historicoDiluicao: data.historico_diluicao || r.historicoDiluicao
+          } : r));
         }
-      } catch (e) {
-        console.error('Erro ao carregar itens da requisição:', e);
-      }
+      } catch (e) {}
     }
 
     if (tipoHistorico === 'recebimento' && req.status === 'Concluída' && itensDaReq) {
@@ -441,24 +424,15 @@ export default function Historico({ requisicoes, aoVoltar }) {
         
         if (barcodes.length > 0) {
           try {
-            // 🚀 BUSCA APENAS CÓDIGO E DESCRIÇÃO PARA A ATUALIZAÇÃO RETROATIVA
-            const { data: prodsAtualizados } = await supabase
-              .from('base_produtos')
-              .select('codigo, codigo_barra, descricao')
-              .in('codigo_barra', barcodes);
-
+            const { data: prodsAtualizados } = await supabase.from('base_produtos').select('codigo, codigo_barra, descricao').in('codigo_barra', barcodes);
             if (prodsAtualizados && prodsAtualizados.length > 0) {
               setBaseAtualizada(prev => {
                 const novoMapa = { ...prev };
-                prodsAtualizados.forEach(p => {
-                  novoMapa[p.codigo_barra] = { cod: p.codigo, desc: p.descricao };
-                });
+                prodsAtualizados.forEach(p => { novoMapa[p.codigo_barra] = { cod: p.codigo, desc: p.descricao }; });
                 return novoMapa;
               });
             }
-          } catch (e) {
-            console.error("Erro ao buscar atualizações de base:", e);
-          }
+          } catch (e) {}
         }
       }
     }
@@ -736,7 +710,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                               </table>
                             )}
 
-                            {/* 🚀 VISÃO RECEBIMENTO (COM CHAVES CORRIGIDAS) */}
+                            {/* 🚀 VISÃO RECEBIMENTO (LÊ DA COLUNA NOVA E DA COLUNA ITENS) */}
                             {tipoHistorico === 'recebimento' && (
                               <table className="subtabela-historico">
                                 <thead>
@@ -746,6 +720,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                     <th>Descrição do Produto</th>
                                     <th style={{ textAlign: 'center' }}>Qtd. Conferida</th>
                                     <th style={{ textAlign: 'center' }}>Avarias</th>
+                                    {/* 🚀 TÍTULO RESTAURADO PARA CUSTO ORIGINAL */}
                                     <th>Custo</th>
                                     <th>Venda</th>
                                     <th>Observações</th>
@@ -760,12 +735,10 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                     req.listaItens.map((item, idx) => {
                                       const codBarras = item.codigoBarra || item.codigo_barra || item.codigoBarras || '-';
                                       
-                                      // 🚀 CORREÇÃO DEFINITIVA: Mapeando os nomes exatos das chaves usadas no Painel de Recebimento
                                       let displayCod = item.codigoSistema || item.codigo || item.cod || '';
                                       let displayDesc = item.descricaoFornecedor || item.descricaoProduto || item.descricao || item.nome || '-';
                                       let seloStatus = null;
 
-                                      // 🚀 PREÇOS RETIRADOS ESTRITAMENTE DA NOTA (DA ETAPA DE PRECIFICAÇÃO)
                                       let pCusto = item.precoCusto || item.preco_custo || item.custo || '-';
                                       let pVenda = item.precoVenda || item.preco_venda || item.venda || '-';
 
@@ -778,7 +751,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                           seloStatus = <span style={{ fontSize: '0.75rem', backgroundColor: '#27ae60', color: 'white', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>Cadastrado</span>;
                                         } else {
                                           seloStatus = <span style={{ fontSize: '0.75rem', backgroundColor: '#f39c12', color: 'white', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>Novo Cadastro</span>;
-                                          // Limpa a descrição se estiver preenchida apenas com a palavra genérica
                                           if (displayDesc.toUpperCase() === 'NOVO CADASTRO') {
                                             displayDesc = '-';
                                           }
@@ -790,25 +762,72 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                       const avarias = item.avarias || item.qtdAvarias || 0;
                                       const qtdConferida = item.quantidade || item.bipContagem || item.quantidadeRecebida || 0;
 
+                                      const diluicaoDesteItem = (req.historicoDiluicao && req.historicoDiluicao.find(d => d.id_item === item.id)?.dados_diluicao) || item.dadosDiluicao;
+                                      const temDiluicao = diluicaoDesteItem && Object.keys(diluicaoDesteItem).length > 0;
+                                      
+                                      const isProdutoExpandido = produtoExpandido === idx;
+
                                       return (
-                                        <tr key={idx}>
-                                          <td style={{ color: displayCod !== '-' ? '#2980b9' : 'inherit' }}><strong>{displayCod}</strong></td>
-                                          <td style={{ color: '#7f8c8d' }}>{codBarras}</td>
-                                          <td>{displayDesc} {seloStatus}</td>
-                                          
-                                          <td style={{ textAlign: 'center', color: '#27ae60', fontWeight: 'bold' }}>
-                                            {qtdConferida} un
-                                          </td>
-                                          
-                                          <td style={{ textAlign: 'center', color: avarias > 0 ? '#e74c3c' : 'inherit', fontWeight: avarias > 0 ? 'bold' : 'normal' }}>
-                                            {avarias > 0 ? `${avarias} un` : '-'}
-                                          </td>
-                                          
-                                          <td style={{ color: '#e67e22' }}>{formatarPrecoLocal(pCusto)}</td>
-                                          <td style={{ color: '#2980b9', fontWeight: 'bold' }}>{formatarPrecoLocal(pVenda)}</td>
-                                          
-                                          <td style={{ fontStyle: 'italic', color: '#7f8c8d' }}>{item.observacao || '-'}</td>
-                                        </tr>
+                                        <React.Fragment key={idx}>
+                                          <tr 
+                                            onClick={() => temDiluicao ? setProdutoExpandido(prev => prev === idx ? null : idx) : null}
+                                            style={{ 
+                                              cursor: temDiluicao ? 'pointer' : 'default',
+                                              backgroundColor: isProdutoExpandido ? '#fdfbf7' : 'inherit',
+                                              transition: 'background 0.2s'
+                                            }}
+                                            title={temDiluicao ? "Clique para ver a memória de cálculo da diluição deste produto" : ""}
+                                          >
+                                            <td style={{ color: displayCod !== '-' ? '#2980b9' : 'inherit' }}><strong>{displayCod}</strong></td>
+                                            <td style={{ color: '#7f8c8d' }}>{codBarras}</td>
+                                            <td>{displayDesc} {seloStatus}</td>
+                                            
+                                            <td style={{ textAlign: 'center', color: '#27ae60', fontWeight: 'bold' }}>
+                                              {qtdConferida} un
+                                            </td>
+                                            
+                                            <td style={{ textAlign: 'center', color: avarias > 0 ? '#e74c3c' : 'inherit', fontWeight: avarias > 0 ? 'bold' : 'normal' }}>
+                                              {avarias > 0 ? `${avarias} un` : '-'}
+                                            </td>
+                                            
+                                            {/* 🚀 REMOVIDA A PALAVRA PONDERADO E ADICIONADO APENAS O ÍCONE */}
+                                            <td style={{ color: '#e67e22', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                              {formatarPrecoLocal(pCusto)}
+                                              {temDiluicao && <span style={{ fontSize: '1rem' }} title="Possui Cálculo Ponderado">🧮</span>}
+                                            </td>
+                                            
+                                            <td style={{ color: '#2980b9', fontWeight: 'bold' }}>{formatarPrecoLocal(pVenda)}</td>
+                                            
+                                            <td style={{ fontStyle: 'italic', color: '#7f8c8d' }}>{item.observacao || '-'}</td>
+                                          </tr>
+
+                                          {/* 🚀 EXPANSÃO DA DILUIÇÃO - TEXTO SIMPLES LIMPO */}
+                                          {isProdutoExpandido && temDiluicao && (
+                                            <tr style={{ backgroundColor: '#fdfdfd' }}>
+                                              <td colSpan="8" style={{ padding: '0', borderBottom: '2px solid #3498db' }}>
+                                                <div style={{ padding: '12px 20px', color: '#34495e', fontSize: '0.9rem', borderLeft: '4px solid #3498db', lineHeight: '1.6' }}>
+                                                  <div style={{ color: '#2980b9', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.95rem' }}>
+                                                    🧮 Memória de Cálculo (Diluição Ponderada)
+                                                  </div>
+                                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '30px' }}>
+                                                    <div>
+                                                      • <strong>NF Atual:</strong> {diluicaoDesteItem.qtdNf || 0} un | {formatarPrecoLocal(diluicaoDesteItem.valorNf || 0)}<br/>
+                                                      • <strong>Matriz:</strong> {diluicaoDesteItem.qtdMatriz || 0} un | {formatarPrecoLocal(diluicaoDesteItem.valorMatriz || 0)}
+                                                    </div>
+                                                    <div>
+                                                      • <strong>Conjunto Ceará:</strong> {diluicaoDesteItem.qtdCc || 0} un | {formatarPrecoLocal(diluicaoDesteItem.valorCc || 0)}<br/>
+                                                      • <strong>Messejana:</strong> {diluicaoDesteItem.qtdMess || 0} un | {formatarPrecoLocal(diluicaoDesteItem.valorMess || 0)}
+                                                    </div>
+                                                    <div style={{ borderLeft: '2px solid #bdc3c7', paddingLeft: '20px' }}>
+                                                      <strong>Estoque Total:</strong> {diluicaoDesteItem.totalQtd || 0} un<br/>
+                                                      <span style={{ color: '#27ae60', fontSize: '1.05rem' }}>👉 <strong>Custo Final:</strong> {formatarPrecoLocal(diluicaoDesteItem.custoMedio || 0)}</span>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </React.Fragment>
                                       );
                                     })
                                   ) : (

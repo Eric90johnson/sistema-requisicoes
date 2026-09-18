@@ -492,7 +492,7 @@ function App() {
     const responsavelAtual = req.historico && req.historico[statusAtual] ? req.historico[statusAtual] : '';
     if (responsavelAtual.includes(novoResponsavel)) return;
     const responsavelConcatenado = responsavelAtual ? `${responsavelAtual} + ${novoResponsavel}` : novoResponsavel;
-    const historicoAtualizado = { ...req.historico, [statusAtual]: responsavelConcatenado };
+    const historicoAtualizado = { ...req.historico, [statusAtual]: responsavelAtual };
     await handleAtualizarHistorico(id, historicoAtualizado);
   };
 
@@ -611,7 +611,7 @@ function App() {
                 />
               )}
               
-              {telaAtual === 'nova' && <NovaRequisicao aoVoltar={handleCancelarEdicao} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} aoCancelarReq={handleCancelarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} reqEmEdicao={reqEmEdicao} usuarioLogado={usuarioLogado} recordesGlobais={recordesGlobais} tipoReposicaoGlobal={tipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} />}
+              {telaAtual === 'nova' && <NovaRequisicao aoVoltar={handleCancelarEdicao} baseProdutos={baseProdutos} aoSalvar={handleSalvarRequisicao} aoCancelarReq={handleCancelarRequisicao} requisicoes={requisicoes} produtosPreSelecionados={produtosPreSelecionados} reqEmEdicao={reqEmEdicao} usuarioLogado={usuarioLogado} recordesGlobais={recordesGlobais} tipoReposicaoGlobal={tipoReposicaoGlobal} inicioCronometroGlobal={inicioCronometroGlobal} aoAbrirDetalhes={abrirDetalhes} />}
               
               {telaAtual === 'detalhes' && (
                 <DetalhesRequisicao 

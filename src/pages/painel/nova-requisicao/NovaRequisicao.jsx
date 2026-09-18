@@ -18,7 +18,8 @@ export default function NovaRequisicao({
   usuarioLogado,
   recordesGlobais = {},
   tipoReposicaoGlobal = 'interna',
-  inicioCronometroGlobal = null
+  inicioCronometroGlobal = null,
+  aoAbrirDetalhes 
 }) {
   
   const lojas = ['Araturi', 'Conjunto Ceará', 'Messejana', 'Mulungu'];
@@ -100,7 +101,6 @@ export default function NovaRequisicao({
   const [novaObs, setNovaObs] = useState(''); 
 
   const [codigo, setCodigo] = useState('');
-  // NOVO: Estado para armazenar o código da matriz preenchido manualmente
   const [codigoMatriz, setCodigoMatriz] = useState(''); 
   const [descricao, setDescricao] = useState('');
   const [quantidade, setQuantidade] = useState('');
@@ -231,7 +231,6 @@ export default function NovaRequisicao({
 
         return {
           cod: baseProd.codigo,
-          // NOVO: Adicionado codigoMatriz vindo da pré-requisição se existir
           codigoMatriz: prod.codigoMatriz || null,
           descricao: baseProd.descricao || 'Produto não encontrado',
           quantidade: qtdSolicitada, 
@@ -288,7 +287,6 @@ export default function NovaRequisicao({
 
     const itemNovo = { 
       cod: codigo, 
-      // NOVO: Registra o código da matriz no item se a loja for Conj. Ceará
       codigoMatriz: lojaDe === 'Conjunto Ceará' ? codigoMatriz : null, 
       descricao: descricao || 'Produto não encontrado', 
       quantidade: qtdSolicitada,
@@ -297,32 +295,98 @@ export default function NovaRequisicao({
       insuficiente: isInsuficiente
     };
 
-    if (isInsuficiente) {
+    const reqsDuplicadas = requisicoes.filter(req => 
+      req.destino === lojaPara && 
+      req.status !== 'Concluída' && 
+      req.status !== 'Cancelada' && 
+      (reqEmEdicao ? req.id !== reqEmEdicao.id : true) && 
+      req.listaItens && req.listaItens.some(item => String(item.cod) === String(codigo)) 
+    );
+
+    // 🚀 ATUALIZAÇÃO: Separando as notas problemáticas (Transporte ou Recebimento)
+    const reqsGargalo = reqsDuplicadas.filter(req => req.status === 'Recebimento' || req.status === 'Transporte');
+    const reqsComuns = reqsDuplicadas.filter(req => req.status !== 'Recebimento' && req.status !== 'Transporte');
+
+    const prosseguirComAdicao = () => {
+      if (isInsuficiente) {
+        mostrarAlerta(
+          'aviso', 
+          'Estoque Insuficiente', 
+          `Você está solicitando ${qtdSolicitada} un, mas o estoque atual no ${lojaDe} é de apenas ${estoqueAtual} un!\n\nDeseja adicionar este produto mesmo assim?`,
+          () => { 
+            setItensAdicionados(prev => [...prev, itemNovo]);
+            setCodigo(''); setCodigoMatriz(''); setDescricao(''); setQuantidade('');
+            if (inputCodigoRef.current) inputCodigoRef.current.focus();
+            fecharAlerta();
+          },
+          () => { 
+            fecharAlerta();
+            if (inputCodigoRef.current) inputCodigoRef.current.focus();
+          },
+          'Sim, Adicionar',
+          'Não, Inserir Novo'
+        );
+        return; 
+      }
+
+      setItensAdicionados(prev => [...prev, itemNovo]);
+      setCodigo(''); setCodigoMatriz(''); setDescricao(''); setQuantidade('');
+      if (inputCodigoRef.current) inputCodigoRef.current.focus();
+    };
+
+    // 🚀 O HARD LOCK APRIMORADO: Bloqueia se o produto já está em Transporte ou aguardando Recebimento
+    if (reqsGargalo.length > 0) {
+      // Pega a requisição mais antiga que está travada nesses status
+      const reqAlvo = reqsGargalo.sort((a, b) => a.timestampCriacao - b.timestampCriacao)[0];
+
       mostrarAlerta(
-        'aviso', 
-        'Estoque Insuficiente', 
-        `Você está solicitando ${qtdSolicitada} un, mas o estoque atual no ${lojaDe} é de apenas ${estoqueAtual} un!\n\nDeseja adicionar este produto mesmo assim?`,
-        () => { 
-          setItensAdicionados([...itensAdicionados, itemNovo]);
-          // NOVO: Limpa as duas caixas de código
-          setCodigo(''); setCodigoMatriz(''); setDescricao(''); setQuantidade('');
-          if (inputCodigoRef.current) inputCodigoRef.current.focus();
+        'erro',
+        '⛔ Ação Bloqueada: Estoque Fantasma!',
+        `O item (${codigo}) "${itemNovo.descricao}" já está a caminho ou aguardando conferência na sua loja!\n\nEle encontra-se na ${reqAlvo.id} com o status "${reqAlvo.status}".\n\nPara evitar o acúmulo de duplicidades, você deve ir até esta requisição e dar andamento nela antes de solicitar este produto novamente.`,
+        () => {
           fecharAlerta();
+          if (aoAbrirDetalhes) {
+            aoAbrirDetalhes(reqAlvo);
+          } else {
+            aoVoltar(); // Fallback
+          }
         },
-        () => { 
+        () => {
           fecharAlerta();
           if (inputCodigoRef.current) inputCodigoRef.current.focus();
         },
-        'Sim, Adicionar',
-        'Não, Inserir Novo'
+        `Ir para a ${reqAlvo.id}`,
+        'Cancelar'
       );
       return; 
     }
 
-    setItensAdicionados([...itensAdicionados, itemNovo]);
-    // NOVO: Limpa as duas caixas de código após adição com sucesso
-    setCodigo(''); setCodigoMatriz(''); setDescricao(''); setQuantidade('');
-    if (inputCodigoRef.current) inputCodigoRef.current.focus();
+    // 🚀 O SOFT LOCK: Avisos comuns de duplicidade em notas que ainda estão sendo processadas no CD
+    if (reqsComuns.length > 0) {
+      const numerosDasNotas = reqsComuns.map(r => r.id).join(', ');
+      const textoPluralOuSingular = reqsComuns.length > 1 
+        ? 'nas seguintes Requisições ativas' 
+        : 'na seguinte Requisição ativa';
+
+      mostrarAlerta(
+        'aviso',
+        'Produto Já Solicitado!',
+        `O item (${codigo}) "${itemNovo.descricao}" já foi solicitado para o(a) ${lojaPara} ${textoPluralOuSingular}:\n\n${numerosDasNotas}\n\nVerifique se não há requisições pendentes de recebimento ou conclusão para a sua loja. Vamos evitar o acúmulo de requisições duplicadas no painel!\n\nMesmo assim, deseja pedir este produto novamente?`,
+        () => {
+          fecharAlerta();
+          setTimeout(prosseguirComAdicao, 300); 
+        },
+        () => {
+          fecharAlerta();
+          if (inputCodigoRef.current) inputCodigoRef.current.focus();
+        },
+        'Sim, Pedir Novamente',
+        'Cancelar'
+      );
+      return; 
+    }
+
+    prosseguirComAdicao();
   };
 
   const iniciarEdicao = (index, qtdAtual) => {
@@ -421,7 +485,7 @@ export default function NovaRequisicao({
 
           novosItens.push({
             cod: codFormatado,
-            codigoMatriz: null, // Na importação em lote não temos a Matriz manual
+            codigoMatriz: null, 
             descricao: descFinal,
             quantidade: qtdSolicitada,
             estoque: estoqueAtual,
@@ -627,11 +691,9 @@ export default function NovaRequisicao({
         />
 
         <TabelaProdutosForm
-          // NOVO: Passando os dados necessários para exibir a caixa extra
           lojaDe={lojaDe}
           codigoMatriz={codigoMatriz}
           setCodigoMatriz={setCodigoMatriz}
-          // ======================================
           codigo={codigo}
           setCodigo={setCodigo}
           descricao={descricao}

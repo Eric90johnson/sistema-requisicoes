@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CalculadoraDiluicao from './CalculadoraDiluicao'; 
 
 export default function TabelaProdutosRecebimento({
   itens, status, isEditing, isViewer, responsavelRecebedor,
@@ -7,23 +8,24 @@ export default function TabelaProdutosRecebimento({
   handleDuplicarParaNovoLote, handleRemoverItem, abrirModalScanner,
   buscarProdutoPorCodigo, pedidosBip, codigoManual, setCodigoManual,
   solicitarBipManual, isEncarregado, exibirPopup,
-  // 🚀 NOVAS PROPS DO CARRINHO
   itensPreRequisicao = [], aoAdicionarPreRequisicao, aoRemoverPreRequisicao
 }) {
 
-  // 🚀 NOVO MODO: REPOSIÇÃO
   const isModoReposicao = status === 'Cadastrado';
+  const isModoPrecificacao = status === 'Aguardando Precificação' || status === 'Aguardando Cadastro';
 
   const estaTravado = status === 'Concluída' || status === 'Cancelada' || status === 'Aguardando Cadastro' || status === 'Cadastrado' || (status === 'Aguardando Precificação' && !isEditing) || (status === 'Pendente' && !isEditing) || isViewer;
-  const estaTravadoPrecos = status === 'Concluída' || status === 'Cancelada' || status === 'Aguardando Cadastro' || status === 'Cadastrado' || (status === 'Pendente' && !isEditing) || isViewer;
+  const estaTravadoPrecos = status === 'Concluída' || status === 'Cancelada' || status === 'Cadastrado' || (status === 'Pendente' && !isEditing) || isViewer;
+  
   const mostrarPrecos = status === 'Aguardando Precificação' || status === 'Aguardando Cadastro' || status === 'Cadastrado' || status === 'Concluída';
 
-  // 🚀 ESTADOS DA LINHA EXPANDIDA (Igual BaseDados)
   const [linhaExpandida, setLinhaExpandida] = useState(null);
   const [qtdsReposicao, setQtdsReposicao] = useState({});
 
   const toggleExpandirLinha = (id) => {
-    if (isModoReposicao) setLinhaExpandida(prev => (prev === id ? null : id));
+    if (isModoReposicao || isModoPrecificacao) {
+      setLinhaExpandida(prev => (prev === id ? null : id));
+    }
   };
 
   const isProdutoNoCarrinho = (item) => {
@@ -36,7 +38,6 @@ export default function TabelaProdutosRecebimento({
     const qtdDigitada = qtdsReposicao[item.id] || 1;
     const codSistemaSeguro = item.codigoSistema && item.codigoSistema !== '-' ? item.codigoSistema : (item.codigoBarras || item.codigoFornecedor);
     
-    // Formata o produto no mesmo padrão que a tela NovaRequisicao espera
     const produtoFormatado = {
       codigo: codSistemaSeguro,
       descricao: item.descricaoFornecedor,
@@ -70,9 +71,11 @@ export default function TabelaProdutosRecebimento({
           <p style={{ margin: '0', color: '#7f8c8d', fontSize: '0.9rem', fontWeight: 'normal' }}>
             {isModoReposicao 
               ? '📦 Modo Reposição: Clique na linha do produto para enviar ao carrinho de requisição.'
-              : isViewer 
-                ? `Visualizando em Tempo Real. (${responsavelRecebedor} está conferindo agora)` 
-                : 'Conferência física, controle de lotes, identificação por código de barras e precificação.'}
+              : isModoPrecificacao
+                ? '💲 Modo Precificação: Clique na linha do produto para abrir a Calculadora de Diluição.'
+                : isViewer 
+                  ? `Visualizando em Tempo Real. (${responsavelRecebedor} está conferindo agora)` 
+                  : 'Conferência física, controle de lotes, identificação por código de barras e precificação.'}
           </p>
         </div>
         
@@ -125,11 +128,11 @@ export default function TabelaProdutosRecebimento({
                     <tr 
                       onClick={() => toggleExpandirLinha(item.id)}
                       style={{ 
-                        cursor: isModoReposicao ? 'pointer' : 'default', 
-                        backgroundColor: estaExpandido ? '#f0f8ff' : (jaAdicionado && isModoReposicao ? '#eafaf1' : 'inherit'),
+                        cursor: (isModoReposicao || isModoPrecificacao) ? 'pointer' : 'default', 
+                        backgroundColor: estaExpandido ? '#fdfbf7' : (jaAdicionado && isModoReposicao ? '#eafaf1' : 'inherit'),
                         transition: 'background 0.2s'
                       }}
-                      title={isModoReposicao ? "Clique para repor este produto" : ""}
+                      title={isModoReposicao ? "Clique para repor este produto" : (isModoPrecificacao ? "Clique para Diluição Ponderada" : "")}
                     >
                       <td>
                         {estaTravado ? (
@@ -248,20 +251,21 @@ export default function TabelaProdutosRecebimento({
                         )}
                       </td>
 
+                      {/* INPUTS DE CUSTO E VENDA LIBERADOS NO MODO CADASTRO */}
                       {mostrarPrecos && (
                         <>
                           <td>
                             {estaTravadoPrecos ? (
                               <span style={{ fontWeight: 'bold', color: '#27ae60', fontSize: '0.85rem' }}>{item.precoCusto ? `R$ ${item.precoCusto}` : '-'}</span>
                             ) : (
-                              <input type="text" inputMode="decimal" placeholder="0,00" style={{ width: '80px', borderColor: '#27ae60' }} value={item.precoCusto || ''} onChange={(e) => handleAtualizarItem(item.id, 'precoCusto', e.target.value)} />
+                              <input type="text" inputMode="decimal" onClick={(e) => e.stopPropagation()} placeholder="0,00" style={{ width: '80px', borderColor: '#27ae60' }} value={item.precoCusto || ''} onChange={(e) => handleAtualizarItem(item.id, 'precoCusto', e.target.value)} />
                             )}
                           </td>
                           <td>
                             {estaTravadoPrecos ? (
                               <span style={{ fontWeight: 'bold', color: '#2980b9', fontSize: '0.85rem' }}>{item.precoVenda ? `R$ ${item.precoVenda}` : '-'}</span>
                             ) : (
-                              <input type="text" inputMode="decimal" placeholder="0,00" style={{ width: '80px', borderColor: '#2980b9' }} value={item.precoVenda || ''} onChange={(e) => handleAtualizarItem(item.id, 'precoVenda', e.target.value)} />
+                              <input type="text" inputMode="decimal" onClick={(e) => e.stopPropagation()} placeholder="0,00" style={{ width: '80px', borderColor: '#2980b9' }} value={item.precoVenda || ''} onChange={(e) => handleAtualizarItem(item.id, 'precoVenda', e.target.value)} />
                             )}
                           </td>
                         </>
@@ -275,40 +279,43 @@ export default function TabelaProdutosRecebimento({
                       )}
                     </tr>
 
-                    {/* 🚀 LINHA EXPANDIDA (CARRINHO DE REPOSIÇÃO) */}
-                    {estaExpandido && isModoReposicao && (
+                    {/* 🚀 LINHA EXPANDIDA DA CALCULADORA / REPOSIÇÃO */}
+                    {estaExpandido && (
                       <tr style={{ backgroundColor: '#f9fafd' }}>
-                        <td colSpan={mostrarPrecos ? "10" : "8"} style={{ padding: '15px', borderBottom: '2px solid #3498db', textAlign: 'center' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px 25px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                              <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#7f8c8d', marginBottom: '5px' }}>Qtd. para Repor:</label>
-                              <input 
-                                type="number" 
-                                min="1" 
-                                placeholder="Ex: 5" 
-                                value={qtdsReposicao[item.id] || ''} 
-                                onChange={(e) => setQtdsReposicao({...qtdsReposicao, [item.id]: e.target.value})} 
-                                onClick={(e) => e.stopPropagation()} 
-                                style={{ padding: '10px', width: '100px', borderRadius: '6px', border: '1px solid #bdc3c7', fontSize: '1rem', outline: 'none' }}
-                              />
+                        <td colSpan={mostrarPrecos ? "10" : "8"} style={{ padding: '15px', borderBottom: '2px solid #3498db' }}>
+                          
+                          {/* MODO REPOSIÇÃO */}
+                          {isModoReposicao && (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px 25px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#7f8c8d', marginBottom: '5px' }}>Qtd. para Repor:</label>
+                                <input 
+                                  type="number" min="1" placeholder="Ex: 5" value={qtdsReposicao[item.id] || ''} 
+                                  onChange={(e) => setQtdsReposicao({...qtdsReposicao, [item.id]: e.target.value})} 
+                                  onClick={(e) => e.stopPropagation()} 
+                                  style={{ padding: '10px', width: '100px', borderRadius: '6px', border: '1px solid #bdc3c7', fontSize: '1rem', outline: 'none' }}
+                                />
+                              </div>
+                              {jaAdicionado ? (
+                                <button onClick={(e) => { e.stopPropagation(); aoRemoverPreRequisicao(item.codigoSistema || item.codigoBarras || item.codigoFornecedor); setLinhaExpandida(null); }} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>❌ Remover do Carrinho</button>
+                              ) : (
+                                <button onClick={(e) => handleAdicionarAoCarrinho(e, item)} style={{ background: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>➕ Enviar para Carrinho</button>
+                              )}
                             </div>
-                            
-                            {jaAdicionado ? (
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); aoRemoverPreRequisicao(item.codigoSistema || item.codigoBarras || item.codigoFornecedor); setLinhaExpandida(null); }} 
-                                style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                              >
-                                ❌ Remover do Carrinho
-                              </button>
-                            ) : (
-                              <button 
-                                onClick={(e) => handleAdicionarAoCarrinho(e, item)} 
-                                style={{ background: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                              >
-                                ➕ Enviar para Carrinho
-                              </button>
-                            )}
-                          </div>
+                          )}
+
+                          {/* 🚀 MODO PRECIFICAÇÃO LIBERADO (Aguardando Precificação OU Cadastro) */}
+                          {isModoPrecificacao && (
+                            <CalculadoraDiluicao 
+                              item={item} 
+                              aoAplicar={(valorCalculado, dadosDiluicao) => {
+                                handleAtualizarItem(item.id, 'precoCusto', valorCalculado);
+                                handleAtualizarItem(item.id, 'dadosDiluicao', dadosDiluicao); // 🚀 AUDITORIA SALVA!
+                                setLinhaExpandida(null); 
+                              }} 
+                            />
+                          )}
+
                         </td>
                       </tr>
                     )}
