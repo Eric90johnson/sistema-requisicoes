@@ -269,9 +269,17 @@ export default function DetalhesRecebimento({
     handleAtualizarItem(itemId, 'codigoBarras', codigoBarras);
     if (!codigoBarras || codigoBarras.trim() === '') return;
     try {
-      const { data } = await supabase.from('base_produtos').select('codigo, descricao').eq('codigo_barra', codigoBarras.trim()).single();
-      if (data) atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === itemId ? { ...item, codigoSistema: data.codigo, descricaoFornecedor: data.descricao } : item)); else throw new Error('Não encontrado');
-    } catch (err) { atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === itemId ? { ...item, codigoSistema: '-', descricaoFornecedor: 'NOVO CADASTRO' } : item)); }
+      // 🚀 CORREÇÃO DO ERRO 406: Usar maybeSingle() em vez de single()
+      const { data, error } = await supabase.from('base_produtos').select('codigo, descricao').eq('codigo_barra', codigoBarras.trim()).maybeSingle();
+      if (error) throw error;
+      if (data) {
+        atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === itemId ? { ...item, codigoSistema: data.codigo, descricaoFornecedor: data.descricao } : item)); 
+      } else { 
+        atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === itemId ? { ...item, codigoSistema: '-', descricaoFornecedor: 'NOVO CADASTRO' } : item));
+      }
+    } catch (err) { 
+      atualizarItensE_SalvarGlobal(prev => prev.map(item => item.id === itemId ? { ...item, codigoSistema: '-', descricaoFornecedor: 'NOVO CADASTRO' } : item)); 
+    }
   };
 
   const fecharModalScanner = () => setScannerAtivo(null);

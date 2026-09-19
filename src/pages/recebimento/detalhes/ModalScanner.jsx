@@ -9,9 +9,20 @@ export default function ModalScanner({
   const ultimoBipTempo = useRef(0);
   const ultimoBipTexto = useRef("");
 
+  // 🚀 PROTEÇÃO 3: Blindagem contra re-renders do cronômetro.
+  // Salvamos as funções na memória para que a câmera não ache que elas mudaram a cada 1 segundo.
+  const funcoesRef = useRef({ buscarProdutoPorCodigo, fecharModalScanner, incrementarBip, tocarBipSucesso, exibirPopup });
+  
   useEffect(() => {
-    // 🚀 A TRAVA QUE RESOLVE O ERRO DA TELA BRANCA!
-    if (!scannerAtivo) return; 
+    funcoesRef.current = { buscarProdutoPorCodigo, fecharModalScanner, incrementarBip, tocarBipSucesso, exibirPopup };
+  });
+
+  const scannerId = scannerAtivo?.item?.id;
+  const scannerTipo = scannerAtivo?.tipo;
+
+  useEffect(() => {
+    // Se não tiver ID válido (modal fechado), não faz nada
+    if (!scannerId) return; 
 
     let isComponentMounted = true;
     
@@ -25,32 +36,46 @@ export default function ModalScanner({
       scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 100 } },
         (decodedText) => {
           const agora = Date.now();
+          // Trava anti-duplo-bip: não lê o mesmo código se não passou 1,5 segundos
           if (decodedText === ultimoBipTexto.current && (agora - ultimoBipTempo.current < 1500)) return;
           ultimoBipTexto.current = decodedText;
           ultimoBipTempo.current = agora;
 
-          if (scannerAtivo.tipo === 'identificacao') {
-            tocarBipSucesso();
-            buscarProdutoPorCodigo(scannerAtivo.item.id, decodedText);
-            fecharModalScanner();
+          if (scannerTipo === 'identificacao') {
+            funcoesRef.current.tocarBipSucesso();
+            
+            try {
+              if (html5QrCodeRef.current) {
+                html5QrCodeRef.current.pause();
+              }
+            } catch(e) {}
+
+            funcoesRef.current.buscarProdutoPorCodigo(scannerId, decodedText);
+            funcoesRef.current.fecharModalScanner();
           } else {
-            incrementarBip(scannerAtivo.item.id);
+            funcoesRef.current.incrementarBip(scannerId);
           }
         },
         (err) => { }
       ).catch(err => {
-        exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões.');
-        fecharModalScanner();
+        funcoesRef.current.exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões.');
+        funcoesRef.current.fecharModalScanner();
       });
     }, 150);
 
     return () => {
       isComponentMounted = false;
       if (html5QrCodeRef.current) {
-        html5QrCodeRef.current.stop().then(() => html5QrCodeRef.current.clear()).catch(() => {});
+        try {
+          html5QrCodeRef.current.stop().then(() => {
+            html5QrCodeRef.current.clear();
+          }).catch(() => {});
+        } catch (error) {
+          console.warn("Parada forçada do scanner interceptada com sucesso (Erro evitado).");
+        }
       }
     };
-  }, [scannerAtivo, buscarProdutoPorCodigo, fecharModalScanner, incrementarBip, tocarBipSucesso, exibirPopup]);
+  }, [scannerId, scannerTipo]); // 🚀 O SEGREDO ESTÁ AQUI: Agora a câmera SÓ reinicia se trocar o produto aberto!
 
   if (!scannerAtivo) return null;
 
