@@ -31,17 +31,18 @@ export default function EsteiraInterna({ req, onProcessar }) {
     );
   }
 
+  // 🚀 Mantemos o 'Recebimento' na checagem apenas para não travar notas antigas
   if (req.status === 'Separado' || req.status === 'Recebimento') {
     return (
       <div className="esteira-box">
-        <h3>🏢 Finalizar Reposição Interna</h3>
+        <h3>🏢 Etapa 1: Recebimento e Conclusão Interna</h3>
         <div className="esteira-inputs">
           <div className="esteira-input-group">
-            <label>Nome do Recebedor</label>
-            <input type="text" value={responsavel} onChange={e => setResponsavel(e.target.value)} />
+            <label>Nome de quem recebeu (e arquivou)</label>
+            <input type="text" placeholder="Ex: João" value={responsavel} onChange={e => setResponsavel(e.target.value)} />
           </div>
           <button className="btn-avancar-esteira" onClick={() => handleAvancar('Concluída')}>
-            Confirmar Recebimento ✔️
+            Confirmar Recebimento e Concluir ✔️
           </button>
         </div>
       </div>

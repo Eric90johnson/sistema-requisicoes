@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import '../../../styles/pages/painel/detalhes/detalhes.css';
 import Romaneio from '../romaneio/Romaneio';
+import { supabase } from '../../../services/supabase'; // 🚀 Conexão injetada para as metas/OTIF
 
 import ObservacoesReq from './ObservacoesReq';
 import EdicaoReq from './EdicaoReq';
 import SeparacaoReq from './SeparacaoReq';
 import EsteiraInterna from './EsteiraInterna';
 import EsteiraExterna from './EsteiraExterna';
+
+// 🚀 Nossos novos módulos isolados de OTIF
+import PopupDivergenciaRecebedor from './PopupDivergenciaRecebedor';
+import PopupAnaliseOrigem from './PopupAnaliseOrigem';
 
 export default function DetalhesRequisicao({ 
   req, usuarioLogado, baseProdutos, aoVoltar, aoMudarStatus, 
@@ -20,6 +25,12 @@ export default function DetalhesRequisicao({
   const [tempoDecorrido, setTempoDecorrido] = useState(0);
   const [cronometroRodando, setCronometroRodando] = useState(false);
 
+  // 🚀 ESTADOS DO MOTOR DE QUALIDADE (OTIF)
+  const [divergenciaAtiva, setDivergenciaAtiva] = useState(false);
+  const [recebedorAtual, setRecebedorAtual] = useState('');
+  const [analiseAtiva, setAnaliseAtiva] = useState(false);
+  const [dadosDivergencia, setDadosDivergencia] = useState(null);
+
   const [popupCustom, setPopupCustom] = useState({
     visivel: false, tipo: 'info', titulo: '', mensagem: '', onConfirm: null, onCancel: null
   });
@@ -30,6 +41,22 @@ export default function DetalhesRequisicao({
   
   const fecharPopupCustom = () => setPopupCustom({ ...popupCustom, visivel: false });
 
+  // 🚀 BUSCADOR AUTOMÁTICO DE DIVERGÊNCIA PENDENTE (Para a Loja de Origem)
+  useEffect(() => {
+    if (req?.status === 'Divergência') {
+      const fetchDivergencia = async () => {
+        const { data, error } = await supabase
+          .from('registro_divergencias')
+          .select('*')
+          .eq('requisicao_id', String(req.id))
+          .eq('status', 'Pendente')
+          .single();
+        if (data && !error) setDadosDivergencia(data);
+      };
+      fetchDivergencia();
+    }
+  }, [req?.status, req?.id]);
+
   // TRAVA DE SEGURANÇA: Garante que req.listaItens é um array antes de usar o .every()
   const isGamificada = req.metricasSeparacao && Array.isArray(req.listaItens) && req.listaItens.length > 0 && req.listaItens.every(i => i.bipContagem === undefined);
   
@@ -39,9 +66,7 @@ export default function DetalhesRequisicao({
   }));
 
   const dispararDesafioDeProdutividade = () => {
-    // TRAVA DE SEGURANÇA: Previne o erro .reduce() of undefined
     const listaItensSegura = Array.isArray(req.listaItens) ? req.listaItens : [];
-    
     const totalItensFisicos = listaItensSegura.reduce((acc, item) => {
       const meta = item.quantidadeEditada !== undefined ? Number(item.quantidadeEditada) : Number(item.quantidade);
       return acc + meta;
@@ -60,7 +85,6 @@ export default function DetalhesRequisicao({
     exibirPopup('info', '🔥 Desafio de Agilidade', msgDesafio);
   };
 
-  // --- O CORAÇÃO DO NOVO CRONÔMETRO DE PAUSA ---
   useEffect(() => {
     let intervalo;
     if (req.status === 'Em Separação' && !req.metricasSeparacao) {
@@ -108,19 +132,88 @@ export default function DetalhesRequisicao({
 
   const isReposicaoInterna = req.motivo === 'Reposição Interna' || (req.origem && req.destino && req.origem === req.destino);
 
+  // 🚀 LÓGICA DE DIVERGÊNCIA E ANÁLISE
+  const handleAbrirDivergencia = (nomeRecebedor) => {
+    setRecebedorAtual(nomeRecebedor);
+    setDivergenciaAtiva(true);
+  };
+
+  const handleSubmitDivergencia = async (itensDivergentes) => {
+    try {
+      const { error } = await supabase.from('registro_divergencias').insert([{
+        requisicao_id: String(req.id),
+        loja_origem: req.origem || 'Matriz',
+        loja_destino: req.destino,
+        recebedor_destino: recebedorAtual,
+        itens_divergentes: itensDivergentes,
+        status: 'Pendente',
+        timestamp_criacao: Date.now()
+      }]);
+      
+      if (error) throw error;
+      
+      // Crava no histórico a falha de qualidade
+      if (aoAtualizarObservacoes) {
+        const obsErro = `\n\n[ALERTA DE QUALIDADE] O recebedor ${recebedorAtual} relatou divergências e bloqueou o recebimento. Analisar via Painel de Transferência.`;
+        aoAtualizarObservacoes(req.id, obsErro);
+      }
+      
+      aoMudarStatus(req.id, 'Divergência', recebedorAtual);
+      setDivergenciaAtiva(false);
+      
+      exibirPopup('aviso', 'Divergência Registrada', 'A equipe de origem foi notificada (Prioridade Alta) e deverá analisar o caso.', () => {
+        fecharPopupCustom();
+        aoVoltar();
+      });
+    } catch (error) {
+      exibirPopup('erro', 'Erro de Conexão', 'Falha ao registrar a divergência: ' + error.message);
+    }
+  };
+
+  const handleSubmitAnalise = async (procedente, justificativa) => {
+    try {
+      const nomeAnalista = usuarioLogado?.nome_completo || 'Equipe Origem';
+      
+      const { error } = await supabase.from('registro_divergencias')
+        .update({
+          status: 'Analisado',
+          analise_procedente: procedente,
+          justificativa_origem: justificativa,
+          responsavel_analise: nomeAnalista
+        })
+        .eq('id', dadosDivergencia.id);
+        
+      if (error) throw error;
+      
+      const textoVeredito = procedente ? 'PROCEDENTE (Falha na Origem)' : 'IMPROCEDENTE (Erro do Recebedor)';
+      
+      if (aoAtualizarObservacoes) {
+        const obsVeredito = `\n\n[ANÁLISE DE QUALIDADE CONCLUÍDA]\nAnalista: ${nomeAnalista}\nVeredito: ${textoVeredito}\nJustificativa: ${justificativa}`;
+        aoAtualizarObservacoes(req.id, obsVeredito);
+      }
+      
+      aoMudarStatus(req.id, 'Concluída', nomeAnalista);
+      setAnaliseAtiva(false);
+      
+      exibirPopup('sucesso', 'Análise Finalizada e Arquivada', 'O indicador de qualidade (OTIF) foi atualizado e a nota foi finalizada.', () => {
+        fecharPopupCustom();
+        aoVoltar();
+      });
+    } catch (error) {
+      exibirPopup('erro', 'Erro de Conexão', 'Falha ao salvar análise: ' + error.message);
+    }
+  };
+
   const processarEsteira = (proximoStatus, responsavelDigitado, dadosDaEsteira = {}) => {
     if (!responsavelDigitado.trim()) { 
       exibirPopup('aviso', 'Atenção', 'Por favor, insira o nome do responsável pela etapa!'); 
       return; 
     }
-    
     const dadosExtras = {};
-
     if (proximoStatus === 'Em Separação' && req.status !== 'Em Separação') {
        dispararDesafioDeProdutividade();
        dadosExtras.inicio_separacao = Date.now(); 
     }
-
     if (req.status === 'Separado' && !isReposicaoInterna) {
       if (!todosBipadosStatus) { 
         exibirPopup('erro', 'Trava de Segurança', 'Você não pode dar saída sem bipar a quantidade exata de TODOS os produtos solicitados (ou ajustar a quantidade)!'); 
@@ -136,7 +229,6 @@ export default function DetalhesRequisicao({
       }
       dadosExtras.numeroRequisicaoExterna = dadosDaEsteira.numReqExterna;
     }
-    
     if (req.status === 'Saída de produtos' && !isReposicaoInterna) {
       if (!dadosDaEsteira.notaFiscal?.trim()) { 
         exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Nota Fiscal de transferência!'); 
@@ -153,7 +245,7 @@ export default function DetalhesRequisicao({
          aoVoltar(); 
        });
     } else if (proximoStatus === 'Concluída') {
-       exibirPopup('sucesso', 'Requisição Concluída!', `A requisição foi recebida e finalizada com sucesso!\n\nLembrete: Arquive a nota/romaneio após o abastecimento das prateleiras.`, () => {
+       exibirPopup('sucesso', 'Recebimento e Conclusão!', `A mercadoria foi recebida e a requisição finalizada no sistema com sucesso!\n\nLembrete: Arquive a nota/romaneio fisicamente após o abastecimento das prateleiras.`, () => {
          fecharPopupCustom();
          aoVoltar(); 
        });
@@ -169,6 +261,8 @@ export default function DetalhesRequisicao({
       case 'Faturamento': return 'status-faturado'; 
       case 'Transporte': return 'status-enviado'; 
       case 'Recebimento': return 'status-recebido'; 
+      case 'Concluída': return 'status-recebido'; 
+      case 'Divergência': return 'status-divergencia'; // 🚀 Nova tag visual para alertas
       case 'Cancelada': return 'status-pendente'; 
       default: return 'status-pendente'; 
     }
@@ -244,10 +338,27 @@ export default function DetalhesRequisicao({
           </div>
         )}
 
+        {/* 🚀 CAIXA DE ALERTA PARA A EQUIPE DA ORIGEM RESPONDER À DIVERGÊNCIA */}
+        {req.status === 'Divergência' && (
+          <div style={{ backgroundColor: '#fdf2f1', border: '2px solid #e74c3c', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+            <h3 style={{ color: '#c0392b', margin: '0 0 10px 0' }}>🚨 ATENÇÃO: DIVERGÊNCIA NO RECEBIMENTO (OTIF REPROVADO)</h3>
+            <p style={{ color: '#c0392b', margin: '0 0 15px 0' }}>
+              A loja <strong>{req.destino}</strong> relatou problemas (produtos faltantes ou trocados) ao conferir fisicamente a carga.
+            </p>
+            <button 
+              onClick={() => setAnaliseAtiva(true)}
+              disabled={!dadosDivergencia}
+              style={{ backgroundColor: dadosDivergencia ? '#e74c3c' : '#bdc3c7', color: 'white', padding: '12px 20px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: dadosDivergencia ? 'pointer' : 'not-allowed' }}
+            >
+              {dadosDivergencia ? '🔍 Analisar Divergência (Responder)' : '⏳ Carregando dados da divergência...'}
+            </button>
+          </div>
+        )}
+
         {isReposicaoInterna ? (
           <EsteiraInterna req={req} onProcessar={processarEsteira} />
         ) : (
-          <EsteiraExterna req={req} onProcessar={processarEsteira} />
+          <EsteiraExterna req={req} onProcessar={processarEsteira} onAbrirDivergencia={handleAbrirDivergencia} />
         )}
       </div>
 
@@ -277,7 +388,6 @@ export default function DetalhesRequisicao({
           </div>
         )}
 
-        {/* 🚀 AQUI: Enviando a baseProdutos para o componente de separação */}
         <SeparacaoReq 
           req={req} 
           usuarioLogado={usuarioLogado} 
@@ -314,6 +424,23 @@ export default function DetalhesRequisicao({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 🚀 INJEÇÃO DOS MODAIS ISOLADOS */}
+      {divergenciaAtiva && (
+        <PopupDivergenciaRecebedor 
+          req={req} 
+          onClose={() => setDivergenciaAtiva(false)} 
+          onSubmitDivergencia={handleSubmitDivergencia} 
+        />
+      )}
+
+      {analiseAtiva && dadosDivergencia && (
+        <PopupAnaliseOrigem 
+          divergencia={dadosDivergencia} 
+          onClose={() => setAnaliseAtiva(false)} 
+          onSubmitAnalise={handleSubmitAnalise} 
+        />
       )}
 
       <Romaneio req={req} baseProdutos={baseProdutos} />

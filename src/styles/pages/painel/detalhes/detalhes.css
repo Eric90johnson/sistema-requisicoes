@@ -217,3 +217,9 @@
     gap: 10px;
   }
 }
+
+.status-divergencia {
+  background-color: #e74c3c;
+  color: #fff;
+  border: 1px solid #c0392b;
+}

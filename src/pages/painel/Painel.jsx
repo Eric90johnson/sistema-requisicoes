@@ -5,7 +5,7 @@ import '../../styles/pages/painel/ranking/ranking.css';
 import PainelMarketplace from '../marketplace/painel/PainelMarketplace'; 
 import { supabase } from '../../services/supabase';
 import { calcularRanking } from './utils/calculadoraRanking';
-import { useRankingData } from './hooks/useRankingData'; // 🚀 ADICIONADO: Importação do nosso novo Hook!
+import { useRankingData } from './hooks/useRankingData'; 
 
 export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, recebimentos = [], pedidosMarketplace = [], aoAbrirDetalhes, aoAlternarVisibilidade, abaExterna = 'interna', usuarioLogado }) {
   
@@ -34,10 +34,8 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const isMaster = usuarioLogado?.username === 'admin' || usuarioLogado?.acesso_admin;
   const canViewRanking = isMaster || usuarioLogado?.perm_ver_ranking;
-  
   const canHideRequest = isMaster || usuarioLogado?.perm_ocultar_requisicao;
 
-  // 🚀 HOOK DO RANKING: Substitui dezenas de linhas por apenas esta chamada centralizada!
   const {
     dadosRankingReq,
     dadosRankingRec,
@@ -52,7 +50,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       setColaboradorExpandido(null);
       setMostrarAvisoData(false);
       
-      // Só busca no banco se ainda não tiver carregado na sessão atual
       if (!rankingCarregado) {
         buscarDadosRankingCompleto();
       }
@@ -181,6 +178,12 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     });
 
     return filtradas.sort((a, b) => {
+      // 🚀 FORÇA A DIVERGÊNCIA (X9) PARA O TOPO ABSOLUTO
+      const aDivergencia = a.status === 'Divergência';
+      const bDivergencia = b.status === 'Divergência';
+      if (aDivergencia && !bDivergencia) return -1;
+      if (!aDivergencia && bDivergencia) return 1;
+
       const aDestacado = idsDestacados.includes(a.id);
       const bDestacado = idsDestacados.includes(b.id);
       if (aDestacado && !bDestacado) return -1; 
@@ -196,6 +199,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
       if (prioA !== prioB) return prioA - prioB; 
       
       const getPesoStatus = (st) => {
+        if (st === 'Divergência') return 0;
         if (st === 'Pendente') return 1;
         if (st === 'Em Separação') return 2;
         if (st === 'Separado') return 3;
@@ -223,6 +227,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const getStatusClass = (status) => {
     switch (status) {
+      case 'Divergência': return 'status-divergencia-tag'; // 🚀 Nova tag
       case 'Pendente': return 'status-pendente';
       case 'Em Separação': return 'status-separacao';
       case 'Separado': return 'status-separado';
@@ -237,6 +242,9 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   };
 
   const getLinhaPrioridadeClass = (req) => {
+    // 🚀 Lógica de cor da linha para o novo Alerta Laranja
+    if (req.status === 'Divergência') return 'linha-divergencia-alerta';
+
     if (req.status === 'Transporte' || req.status === 'Recebimento') return 'prioridade-baixa';
     
     switch (req.prioridade) {
@@ -258,7 +266,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     }
   };
 
-  // 🚀 O RANKING AGORA USA OS DADOS IMPORTADOS DO HOOK
   const rankingCalculado = useMemo(() => {
     return calcularRanking(dadosRankingReq, dadosRankingRec, dataInicioRanking, dataFimRanking);
   }, [dadosRankingReq, dadosRankingRec, dataInicioRanking, dataFimRanking]);

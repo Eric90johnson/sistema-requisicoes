@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
 import '../../../styles/pages/painel/detalhes/esteira.css';
 
-export default function EsteiraExterna({ req, onProcessar }) {
+export default function EsteiraExterna({ req, onProcessar, onAbrirDivergencia }) {
   const [responsavel, setResponsavel] = useState('');
   const [numReqExterna, setNumReqExterna] = useState('');
   const [notaFiscal, setNotaFiscal] = useState('');
+  const [modoOtif, setModoOtif] = useState(false); // 🚀 Novo estado para o controle de Qualidade
 
-  if (req.status === 'Em Separação' || req.status === 'Concluída' || req.status === 'Cancelada') return null;
+  if (req.status === 'Em Separação' || req.status === 'Concluída' || req.status === 'Cancelada' || req.status === 'Divergência') return null;
 
   const handleAvancar = (proximoStatus) => {
     onProcessar(proximoStatus, responsavel, { numReqExterna, notaFiscal });
     setResponsavel('');
     if (proximoStatus === 'Saída de produtos') setNumReqExterna('');
     if (proximoStatus === 'Faturamento') setNotaFiscal('');
+    setModoOtif(false);
   };
 
   if (req.status === 'Pendente') {
@@ -97,32 +99,53 @@ export default function EsteiraExterna({ req, onProcessar }) {
   if (req.status === 'Transporte') {
     return (
       <div className="esteira-box">
-        <h3>🏬 Etapa 4: Recebimento na Loja</h3>
+        <h3>🏬 Etapa 4: Recebimento e Qualidade</h3>
         <div className="esteira-inputs">
           <div className="esteira-input-group">
-            <label>Nome de quem recebeu</label>
-            <input type="text" placeholder="Ex: Gerente Fernanda" value={responsavel} onChange={e => setResponsavel(e.target.value)} />
+            <label>Nome de quem está recebendo fisicamente na loja</label>
+            <input 
+              type="text" 
+              placeholder="Ex: Gerente Fernanda" 
+              value={responsavel} 
+              onChange={e => setResponsavel(e.target.value)} 
+              disabled={modoOtif} 
+            />
           </div>
-          <button className="btn-avancar-esteira" onClick={() => handleAvancar('Recebimento')}>
-            Confirmar Recebimento ✔️
-          </button>
-        </div>
-      </div>
-    );
-  }
 
-  if (req.status === 'Recebimento') {
-    return (
-      <div className="esteira-box">
-        <h3>🏁 Etapa 5: Arquivar Requisição</h3>
-        <div className="esteira-inputs">
-          <div className="esteira-input-group">
-            <label>Nome de quem abasteceu/arquivou</label>
-            <input type="text" placeholder="Ex: Estoquista" value={responsavel} onChange={e => setResponsavel(e.target.value)} />
-          </div>
-          <button className="btn-avancar-esteira" onClick={() => handleAvancar('Concluída')}>
-            Finalizar e Arquivar ✔️
-          </button>
+          {!modoOtif ? (
+            <button 
+              className="btn-avancar-esteira" 
+              onClick={() => {
+                if (!responsavel.trim()) {
+                  alert('Por favor, informe o nome de quem está recebendo a mercadoria.');
+                  return;
+                }
+                setModoOtif(true);
+              }}
+            >
+              Avaliar Recebimento ✔️
+            </button>
+          ) : (
+            <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#f9f9f9', borderLeft: '4px solid #f39c12', borderRadius: '4px' }}>
+              <p style={{ margin: '0 0 15px 0', fontWeight: 'bold', color: '#2c3e50' }}>
+                🤔 Todos os produtos enviados estavam corretos?
+              </p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  onClick={() => handleAvancar('Concluída')} 
+                  style={{ flex: 1, padding: '10px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  ✅ Sim, tudo certo
+                </button>
+                <button 
+                  onClick={() => onAbrirDivergencia(responsavel)} 
+                  style={{ flex: 1, padding: '10px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  ❌ Não, relatar divergência
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
