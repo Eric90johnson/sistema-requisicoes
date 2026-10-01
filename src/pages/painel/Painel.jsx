@@ -60,11 +60,8 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   useEffect(() => {
     let isMounted = true;
-    let timerId = null;
 
-    const loopBuscaAlerta = async () => {
-      if (!isMounted) return;
-
+    const buscarAlertaInicial = async () => {
       try {
         const { data, error } = await supabase
           .from('alertas_reposicao')
@@ -72,30 +69,44 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
           .order('data_criacao', { ascending: false })
           .limit(1);
 
-        if (!error && data && data.length > 0) {
-          const alerta = data[0];
-          const jaIgnorado = localStorage.getItem(`alerta_ignorado_${alerta.id}`);
-          if (!jaIgnorado) {
-            setAlertaDelta(prev => {
-              if (prev.id !== alerta.id) {
-                return { visivel: true, estagio: 'pergunta', produtos: alerta.lista_produtos, id: alerta.id };
-              }
-              return prev;
-            });
-          }
+        if (isMounted && !error && data && data.length > 0) {
+          processarNovoAlerta(data[0]);
         }
-      } catch (e) {}
-
-      if (isMounted) {
-        timerId = setTimeout(loopBuscaAlerta, 5000);
+      } catch (e) {
+        console.error("Erro na busca inicial do alerta:", e);
       }
     };
 
-    loopBuscaAlerta();
+    const processarNovoAlerta = (alerta) => {
+      const jaIgnorado = localStorage.getItem(`alerta_ignorado_${alerta.id}`);
+      if (!jaIgnorado) {
+        setAlertaDelta(prev => {
+          if (prev.id !== alerta.id) {
+            return { visivel: true, estagio: 'pergunta', produtos: alerta.lista_produtos, id: alerta.id };
+          }
+          return prev;
+        });
+      }
+    };
+
+    buscarAlertaInicial();
+
+    const subscription = supabase
+      .channel('escuta-novos-alertas')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'alertas_reposicao' },
+        (payload) => {
+          if (isMounted) {
+            processarNovoAlerta(payload.new);
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
       isMounted = false;
-      if (timerId) clearTimeout(timerId);
+      supabase.removeChannel(subscription);
     };
   }, []);
 
@@ -113,30 +124,35 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     aoClicarNovo(alertaDelta.produtos); 
   };
 
+  // 🚀 LÓGICA DE ANIMAÇÃO DE DESTAQUE CORRIGIDA (Fim do "Loop")
   useEffect(() => {
     const alteradas = [];
-    const agora = Date.now();
+
+    // Proteção: Evita piscar a tela toda no primeiro carregamento do banco de dados
+    if (reqsAnterioresRef.current.length === 0 && requisicoes.length > 0) {
+      reqsAnterioresRef.current = requisicoes;
+      return;
+    }
 
     requisicoes.forEach(reqAtual => {
-      if (reqAtual.timestampCriacao && (agora - reqAtual.timestampCriacao < 5000)) {
+      const reqAntiga = reqsAnterioresRef.current.find(r => r.id === reqAtual.id);
+      
+      // Avalia estritamente se a nota acabou de chegar na lista (!reqAntiga) ou se mudou de etapa
+      if (!reqAntiga || reqAntiga.status !== reqAtual.status) {
         alteradas.push(reqAtual.id);
-      } else {
-        if (reqsAnterioresRef.current.length > 0) {
-          const reqAntiga = reqsAnterioresRef.current.find(r => r.id === reqAtual.id);
-          if (!reqAntiga || reqAntiga.status !== reqAtual.status) {
-            alteradas.push(reqAtual.id);
-          }
-        }
       }
     });
 
     if (alteradas.length > 0) {
       setIdsDestacados(prev => [...new Set([...prev, ...alteradas])]);
+      
+      // Destaca a linha e depois de 3.5s devolve ela para a ordem padrão suavemente
       setTimeout(() => {
         setIdsDestacados(prev => prev.filter(id => !alteradas.includes(id)));
       }, 3500);
     }
     
+    // Atualiza a "foto" da memória para a próxima verificação
     reqsAnterioresRef.current = requisicoes;
   }, [requisicoes]);
 
@@ -178,7 +194,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
     });
 
     return filtradas.sort((a, b) => {
-      // 🚀 FORÇA A DIVERGÊNCIA (X9) PARA O TOPO ABSOLUTO
       const aDivergencia = a.status === 'Divergência';
       const bDivergencia = b.status === 'Divergência';
       if (aDivergencia && !bDivergencia) return -1;
@@ -227,7 +242,7 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
 
   const getStatusClass = (status) => {
     switch (status) {
-      case 'Divergência': return 'status-divergencia-tag'; // 🚀 Nova tag
+      case 'Divergência': return 'status-divergencia-tag'; 
       case 'Pendente': return 'status-pendente';
       case 'Em Separação': return 'status-separacao';
       case 'Separado': return 'status-separado';
@@ -242,7 +257,6 @@ export default function Painel({ aoClicarNovo, aoClicarNovoPedido, requisicoes, 
   };
 
   const getLinhaPrioridadeClass = (req) => {
-    // 🚀 Lógica de cor da linha para o novo Alerta Laranja
     if (req.status === 'Divergência') return 'linha-divergencia-alerta';
 
     if (req.status === 'Transporte' || req.status === 'Recebimento') return 'prioridade-baixa';
