@@ -1,209 +1,193 @@
-/* Container Principal (Bordas mínimas padrão Neta Dantas) */
+/* Container Base */
 .metas-container {
   padding: 20px;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 25px;
+  gap: 20px;
+  background-color: #f8f9fc;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-.metas-header {
+/* ========================================= */
+/* CABEÇALHO E ABAS                          */
+/* ========================================= */
+.metas-header-wrapper {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 2px solid #ecf0f1;
-  padding-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 15px;
+  background: transparent;
+  padding: 0 0 10px 0;
 }
 
-.metas-header h2 {
-  margin: 0;
-  color: #2c3e50;
+.metas-header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 15px;
 }
 
-.metas-header p {
-  margin: 5px 0 0 0;
+.abas-metas {
+  display: flex;
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.btn-aba-meta {
+  background: transparent;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-weight: 600;
   color: #7f8c8d;
-  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
 }
 
+.btn-aba-meta.ativa {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.btn-voltar-metas {
+  background-color: white;
+  color: #3b82f6;
+  border: 1px solid #e5e7eb;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.secao-titulo {
+  margin-bottom: 20px;
+}
+.secao-titulo h3 { margin: 0; font-size: 1.1rem; color: #1e293b; }
+.secao-sub { font-size: 0.85rem; color: #64748b; }
+
+.fade-in { animation: fadeIn 0.3s ease-in-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
 /* ========================================= */
-/* GRID DE KPIs (CARDS SUPERIORES)           */
+/* CARDS DE PERFORMANCE SUPERIOR (VISÃO GERAL) */
 /* ========================================= */
-.kpi-grid {
+.perf-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 25px;
 }
 
-.kpi-card {
+.perf-card {
   background: white;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  border-left: 5px solid;
-  transition: transform 0.2s;
-}
-
-.kpi-card:hover {
-  transform: translateY(-3px);
-}
-
-.kpi-icon {
-  font-size: 2.5rem;
-  background: #f8f9fa;
-  width: 70px;
-  height: 70px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-}
-
-.kpi-info {
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+  border: 1px solid #f1f5f9;
   display: flex;
   flex-direction: column;
 }
 
-.kpi-titulo {
-  font-size: 0.9rem;
-  color: #7f8c8d;
-  font-weight: bold;
-  text-transform: uppercase;
-  margin-bottom: 5px;
-}
+.perf-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.perf-titulo { font-size: 0.85rem; font-weight: 600; }
+.perf-valor { font-size: 1.8rem; font-weight: 800; color: #1e293b; line-height: 1.2; }
+.perf-status { font-size: 0.8rem; margin-bottom: 15px; }
 
-.kpi-valor {
-  font-size: 2rem;
-  font-weight: 900;
-  color: #2c3e50;
-  line-height: 1;
-}
-
-.kpi-meta {
-  font-size: 0.85rem;
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.badge-meta-ok { 
-  color: #27ae60; 
-  font-weight: bold; 
-  background: #e8f8f5; 
-  padding: 2px 6px; 
-  border-radius: 4px; 
-}
-
-.badge-meta-atencao { 
-  color: #e67e22; 
-  font-weight: bold; 
-  background: #fdf2e9; 
-  padding: 2px 6px; 
-  border-radius: 4px; 
-}
+.perf-barra-bg { width: 100%; height: 6px; background-color: #f1f5f9; border-radius: 4px; overflow: hidden; }
+.perf-barra-fill { height: 100%; border-radius: 4px; }
 
 /* ========================================= */
-/* ÁREA DE CONTEÚDO DIVIDIDA                 */
+/* DASHBOARD MIDDLE GRID                     */
 /* ========================================= */
-.metas-body-grid {
+.dash-body-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 25px;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
 }
+@media (max-width: 900px) { .dash-body-grid { grid-template-columns: 1fr; } }
 
-@media (max-width: 992px) {
-  .metas-body-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.painel-secao {
+.painel-card {
   background: white;
-  border-radius: 10px;
-  padding: 25px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+  border: 1px solid #f1f5f9;
 }
 
-.painel-secao h3 {
-  margin-top: 0;
-  border-bottom: 1px solid #ecf0f1;
-  padding-bottom: 10px;
-  margin-bottom: 20px;
-  color: #34495e;
-}
+.card-header h4 { margin: 0; font-size: 1rem; color: #1e293b; }
+.card-header span { font-size: 0.8rem; color: #64748b; display: block; margin-top: 2px; margin-bottom: 15px; }
 
-/* ========================================= */
-/* BARRA DE PROGRESSO SLA                    */
-/* ========================================= */
-.sla-item {
-  margin-bottom: 20px;
-}
-
-.sla-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  font-weight: bold;
-  color: #2c3e50;
-}
-
-.sla-track {
-  width: 100%;
-  height: 12px;
-  background-color: #ecf0f1;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.sla-fill {
-  height: 100%;
-  border-radius: 6px;
-  transition: width 1s ease-in-out;
-}
-
-/* ========================================= */
-/* LISTA DE METAS DA EQUIPE (CHECKLIST)      */
-/* ========================================= */
-.meta-tarefa-item {
+/* Saúde da Operação */
+.saude-lista { display: flex; flex-direction: column; gap: 8px; }
+.saude-item {
   display: flex;
   align-items: center;
-  padding: 15px;
-  background: #fcfcfc;
-  border: 1px solid #ecf0f1;
-  border-radius: 8px;
-  margin-bottom: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.saude-item:last-child { border-bottom: none; }
+.s-icon { font-size: 1.2rem; margin-right: 10px; width: 25px; text-align: center; }
+.s-label { flex: 1; font-size: 0.9rem; color: #475569; }
+.s-val { font-weight: bold; font-size: 1rem; color: #1e293b; margin-right: 15px; width: 20px; text-align: center; }
+.s-tag { font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; font-weight: 600; }
+
+.tag-normal { background: #dcfce7; color: #166534; }
+.tag-atencao { background: #fef9c3; color: #854d0e; }
+.tag-critico { background: #fee2e2; color: #991b1b; }
+
+/* Tabela Ranking */
+.select-filtro-ranking { border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; color: #475569; outline: none; }
+.tabela-ranking-limpa { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.tabela-ranking-limpa th { text-align: left; padding: 10px 5px; color: #64748b; border-bottom: 1px solid #e2e8f0; font-weight: 500; }
+.tabela-ranking-limpa td { padding: 12px 5px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+
+/* ========================================= */
+/* ABA DE CONFIGURAÇÃO                       */
+/* ========================================= */
+.btn-salvar-metas {
+  background: #3b82f6; color: white; border: none; padding: 8px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+.btn-salvar-metas:hover { background: #2563eb; }
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 15px;
+  margin-bottom: 20px;
 }
 
-.meta-status-circle {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+.config-card {
+  background: white; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0;
+}
+
+.cc-header { padding: 12px 15px; font-size: 0.9rem; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+.cc-body { padding: 15px; display: flex; flex-direction: column; gap: 15px; }
+
+.input-row { display: flex; flex-direction: column; gap: 5px; }
+.input-row label { font-size: 0.8rem; color: #64748b; }
+.input-box { display: flex; align-items: center; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; }
+.input-box input { flex: 1; border: none; padding: 8px; outline: none; font-size: 0.95rem; color: #1e293b; text-align: right; }
+.input-box span { background: #f8fafc; color: #64748b; padding: 8px 12px; font-size: 0.8rem; font-weight: 500; border-left: 1px solid #cbd5e1; }
+
+.footer-grid {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 0.8rem;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
-.meta-status-concluida { background: #27ae60; }
-.meta-status-pendente { background: #bdc3c7; }
+.tabela-historico-metas { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.tabela-historico-metas th { text-align: left; padding: 10px; color: #64748b; border-bottom: 1px solid #e2e8f0; font-weight: 500; }
+.tabela-historico-metas td { padding: 10px; border-bottom: 1px solid #f1f5f9; color: #475569; }
 
-.meta-texto h4 {
-  margin: 0 0 3px 0;
-  color: #2c3e50;
-  font-size: 1rem;
-}
-
-.meta-texto p {
-  margin: 0;
-  color: #7f8c8d;
-  font-size: 0.85rem;
-}
+.desempenho-lista { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
+.desemp-item { display: flex; flex-direction: column; gap: 5px; }
+.d-labels { display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569; }
+.d-labels strong { color: #1e293b; }
+.d-bar-bg { width: 100%; height: 8px; background-color: #f1f5f9; border-radius: 4px; overflow: hidden; }
+.d-bar-fill { height: 100%; border-radius: 4px; }
