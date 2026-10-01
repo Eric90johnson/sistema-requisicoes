@@ -8,7 +8,8 @@ export default function TabelaProdutosRecebimento({
   handleDuplicarParaNovoLote, handleRemoverItem, abrirModalScanner,
   buscarProdutoPorCodigo, pedidosBip, codigoManual, setCodigoManual,
   solicitarBipManual, isEncarregado, exibirPopup,
-  itensPreRequisicao = [], aoAdicionarPreRequisicao, aoRemoverPreRequisicao
+  itensPreRequisicao = [], aoAdicionarPreRequisicao, aoRemoverPreRequisicao,
+  baseProdutos = [] // 🚀 ADICIONADO PARA HIDRATAÇÃO DINÂMICA
 }) {
 
   const isModoReposicao = status === 'Cadastrado';
@@ -29,18 +30,26 @@ export default function TabelaProdutosRecebimento({
   };
 
   const isProdutoNoCarrinho = (item) => {
-    const codVerificacao = item.codigoSistema || item.codigoBarras || item.codigoFornecedor;
+    // 🚀 Hidratação no momento de checar o carrinho
+    const produtoBase = baseProdutos?.find(p => p.codigo_barra && String(p.codigo_barra) === String(item.codigoBarras));
+    const codigoSistemaExibicao = produtoBase ? produtoBase.codigo : item.codigoSistema;
+    const codVerificacao = codigoSistemaExibicao || item.codigoBarras || item.codigoFornecedor;
     return itensPreRequisicao.some(i => String(i.codigo) === String(codVerificacao));
   };
 
   const handleAdicionarAoCarrinho = (e, item) => {
     e.stopPropagation();
+    // 🚀 Hidratação no momento do clique (Manda o dado atualizado do ERP)
+    const produtoBase = baseProdutos?.find(p => p.codigo_barra && String(p.codigo_barra) === String(item.codigoBarras));
+    const descricaoExibicao = produtoBase ? produtoBase.descricao : item.descricaoFornecedor;
+    const codigoSistemaExibicao = produtoBase ? produtoBase.codigo : item.codigoSistema;
+
     const qtdDigitada = qtdsReposicao[item.id] || 1;
-    const codSistemaSeguro = item.codigoSistema && item.codigoSistema !== '-' ? item.codigoSistema : (item.codigoBarras || item.codigoFornecedor);
+    const codSistemaSeguro = codigoSistemaExibicao && codigoSistemaExibicao !== '-' ? codigoSistemaExibicao : (item.codigoBarras || item.codigoFornecedor);
     
     const produtoFormatado = {
       codigo: codSistemaSeguro,
-      descricao: item.descricaoFornecedor,
+      descricao: descricaoExibicao,
       codigoBarra: item.codigoBarras,
       quantidadeDesejada: qtdDigitada,
       origemLoja: 'Recebimento NF' 
@@ -117,6 +126,12 @@ export default function TabelaProdutosRecebimento({
             </thead>
             <tbody>
               {itens.map((item) => {
+                
+                // 🚀 HIDRATAÇÃO DINÂMICA: Puxa o código e nome reais se o código de barras for encontrado na base de dados!
+                const produtoBase = baseProdutos?.find(p => p.codigo_barra && String(p.codigo_barra) === String(item.codigoBarras));
+                const descricaoExibicao = produtoBase ? produtoBase.descricao : item.descricaoFornecedor;
+                const codigoSistemaExibicao = produtoBase ? produtoBase.codigo : item.codigoSistema;
+
                 const chaveItem = String(item.id);
                 const statusBip = isEncarregado ? 'aprovado' : pedidosBip[chaveItem];
                 
@@ -153,16 +168,32 @@ export default function TabelaProdutosRecebimento({
                         )}
                       </td>
 
-                      <td><span style={{ fontWeight: 'bold', color: '#7f8c8d', fontSize: '0.85rem' }}>{item.codigoSistema || '-'}</span></td>
+                      <td>
+                        <span style={{ fontWeight: 'bold', color: '#7f8c8d', fontSize: '0.85rem' }}>{codigoSistemaExibicao || '-'}</span>
+                      </td>
 
                       <td>
                         {estaTravado ? (
-                          <span style={{ fontWeight: item.descricaoFornecedor === 'NOVO CADASTRO' ? 'bold' : '500', color: item.descricaoFornecedor === 'NOVO CADASTRO' ? '#e74c3c' : '#34495e', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            {item.descricaoFornecedor || '-'}
+                          <span style={{ fontWeight: descricaoExibicao === 'NOVO CADASTRO' ? 'bold' : '500', color: descricaoExibicao === 'NOVO CADASTRO' ? '#e74c3c' : '#34495e', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            {descricaoExibicao || '-'}
                             {jaAdicionado && isModoReposicao && <span style={{ fontSize: '0.9rem' }} title="No carrinho">🛒✅</span>}
                           </span>
                         ) : (
-                          <input type="text" placeholder="Descrição" value={item.descricaoFornecedor || ''} onChange={(e) => handleAtualizarItem(item.id, 'descricaoFornecedor', e.target.value)} style={{ minWidth: '200px', color: item.descricaoFornecedor === 'NOVO CADASTRO' ? '#e74c3c' : 'inherit', fontWeight: item.descricaoFornecedor === 'NOVO CADASTRO' ? 'bold' : 'normal' }} />
+                          <input 
+                            type="text" 
+                            placeholder="Descrição" 
+                            value={descricaoExibicao || ''} 
+                            onChange={(e) => handleAtualizarItem(item.id, 'descricaoFornecedor', e.target.value)} 
+                            disabled={!!produtoBase}
+                            style={{ 
+                              minWidth: '200px', 
+                              color: descricaoExibicao === 'NOVO CADASTRO' ? '#e74c3c' : 'inherit', 
+                              fontWeight: descricaoExibicao === 'NOVO CADASTRO' ? 'bold' : 'normal',
+                              backgroundColor: produtoBase ? '#f9fafd' : '#fff',
+                              border: produtoBase ? '1px solid #bdc3c7' : '1px solid #ccc'
+                            }} 
+                            title={produtoBase ? "Descrição preenchida automaticamente pela base de dados" : ""}
+                          />
                         )}
                       </td>
 
@@ -230,7 +261,7 @@ export default function TabelaProdutosRecebimento({
                               {isEncarregado && (
                                 <button type="button" className="btn-bip-rapido no-print" style={{ backgroundColor: '#f39c12', padding: '6px 8px' }} 
                                   onClick={() => {
-                                    const novaQtd = window.prompt(`Qtd manual para:\n${item.descricaoFornecedor}`, item.quantidadeBipada);
+                                    const novaQtd = window.prompt(`Qtd manual para:\n${descricaoExibicao}`, item.quantidadeBipada);
                                     if (novaQtd !== null && novaQtd.trim() !== '') {
                                       const num = parseInt(novaQtd, 10);
                                       if (!isNaN(num) && num >= 0) { handleAtualizarItem(item.id, 'quantidadeBipada', num); }
@@ -251,7 +282,6 @@ export default function TabelaProdutosRecebimento({
                         )}
                       </td>
 
-                      {/* INPUTS DE CUSTO E VENDA LIBERADOS NO MODO CADASTRO */}
                       {mostrarPrecos && (
                         <>
                           <td>
@@ -297,20 +327,20 @@ export default function TabelaProdutosRecebimento({
                                 />
                               </div>
                               {jaAdicionado ? (
-                                <button onClick={(e) => { e.stopPropagation(); aoRemoverPreRequisicao(item.codigoSistema || item.codigoBarras || item.codigoFornecedor); setLinhaExpandida(null); }} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>❌ Remover do Carrinho</button>
+                                <button onClick={(e) => { e.stopPropagation(); aoRemoverPreRequisicao(codigoSistemaExibicao || item.codigoBarras || item.codigoFornecedor); setLinhaExpandida(null); }} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>❌ Remover do Carrinho</button>
                               ) : (
                                 <button onClick={(e) => handleAdicionarAoCarrinho(e, item)} style={{ background: '#27ae60', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>➕ Enviar para Carrinho</button>
                               )}
                             </div>
                           )}
 
-                          {/* 🚀 MODO PRECIFICAÇÃO LIBERADO (Aguardando Precificação OU Cadastro) */}
+                          {/* MODO PRECIFICAÇÃO */}
                           {isModoPrecificacao && (
                             <CalculadoraDiluicao 
                               item={item} 
                               aoAplicar={(valorCalculado, dadosDiluicao) => {
                                 handleAtualizarItem(item.id, 'precoCusto', valorCalculado);
-                                handleAtualizarItem(item.id, 'dadosDiluicao', dadosDiluicao); // 🚀 AUDITORIA SALVA!
+                                handleAtualizarItem(item.id, 'dadosDiluicao', dadosDiluicao); 
                                 setLinhaExpandida(null); 
                               }} 
                             />

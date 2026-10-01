@@ -144,10 +144,43 @@ export default function Historico({ requisicoes, aoVoltar }) {
           historicoDiluicao: r.historico_diluicao 
         }));
 
+        // 🚀 HIDRATAÇÃO DINÂMICA: Buscar códigos na base para permitir a PESQUISA por produtos novos já cadastrados
+        let mapaBasePesquisa = {};
+        if (precisaListaItens) {
+          const barcodesParaBuscar = [];
+          recsFormatados.forEach(req => {
+            if (req.listaItens) {
+              req.listaItens.forEach(i => {
+                const isNovo = i.produtoNovo || !i.codigoSistema || !i.cod || !i.codigo || String(i.descricaoFornecedor || i.descricao || '').toUpperCase() === 'NOVO CADASTRO';
+                if (isNovo) {
+                  const bc = i.codigoBarra || i.codigo_barra || i.codigoBarras;
+                  if (bc) barcodesParaBuscar.push(bc);
+                }
+              });
+            }
+          });
+          const uniqueBarcodes = [...new Set(barcodesParaBuscar.filter(Boolean))];
+          if (uniqueBarcodes.length > 0) {
+            try {
+              const { data: pData } = await supabase.from('base_produtos').select('codigo, codigo_barra, descricao').in('codigo_barra', uniqueBarcodes);
+              if (pData) {
+                pData.forEach(p => { mapaBasePesquisa[p.codigo_barra] = { cod: p.codigo, desc: p.descricao }; });
+                // Alimenta o estado global para a renderização visual também usar
+                setBaseAtualizada(prev => ({ ...prev, ...mapaBasePesquisa }));
+              }
+            } catch (e) {}
+          }
+        }
+
         const resultadosFinais = recsFormatados.filter(req => {
           let passa = true;
           if (filtroCodigo && passa) {
-            const temProduto = req.listaItens && req.listaItens.some(item => (item.codigoSistema || item.cod || item.codigo || '').toUpperCase().includes(filtroCodigo.toUpperCase()));
+            // A pesquisa agora consulta o mapa dinâmico para os produtos hidratados
+            const temProduto = req.listaItens && req.listaItens.some(item => {
+              const codBarras = item.codigoBarra || item.codigo_barra || item.codigoBarras;
+              const codOficial = mapaBasePesquisa[codBarras]?.cod || item.codigoSistema || item.cod || item.codigo || '';
+              return String(codOficial).toUpperCase().includes(filtroCodigo.toUpperCase());
+            });
             if (!temProduto) passa = false;
           }
           return passa;
@@ -332,7 +365,8 @@ export default function Historico({ requisicoes, aoVoltar }) {
         }
       });
     } else {
-      csv = "ID Relatorio;Código;Cód. Barras;Descricao do Produto;Qtd. Conferida;Avarias;Preço Custo;Preço Venda;Produto Novo;Observacao do Produto;Fornecedor;Marca;Nota Fiscal;Volumes;Status Atual;Data do Registro;Loja Destino;Resp. Recebedor;Resp. Cadastro;Tempo Total Conferência\n";
+      // 🚀 CSV ATUALIZADO: Inclusão do "Cód. Fornecedor"
+      csv = "ID Relatorio;Cód. Fornecedor;Código;Cód. Barras;Descricao do Produto;Qtd. Conferida;Avarias;Preço Custo;Preço Venda;Produto Novo;Observacao do Produto;Fornecedor;Marca;Nota Fiscal;Volumes;Status Atual;Data do Registro;Loja Destino;Resp. Recebedor;Resp. Cadastro;Tempo Total Conferência\n";
       listaParaExportar.forEach(req => {
         const id = req.numero_relatorio || '-';
         const fornecedor = req.nome_fornecedor || '-';
@@ -349,6 +383,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
         if (req.listaItens && req.listaItens.length > 0) {
           req.listaItens.forEach(item => {
             const codBarras = item.codigoBarra || item.codigo_barra || item.codigoBarras || '-';
+            const codFornecedor = item.codigoFornecedor || '-'; // 🚀 NOVO CAMPO
             let displayCod = item.codigoSistema || item.codigo || item.cod || '';
             let displayDesc = item.descricaoFornecedor || item.descricaoProduto || item.descricao || item.nome || '-';
             let pCusto = item.precoCusto || item.preco_custo || item.custo || '-';
@@ -357,7 +392,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
             const isNovo = item.produtoNovo || !displayCod || displayDesc.toUpperCase() === 'NOVO CADASTRO';
 
             if (isNovo) {
-              if (req.status === 'Concluída' && mapaBaseExport[codBarras]) {
+              if (mapaBaseExport[codBarras]) {
                 displayCod = mapaBaseExport[codBarras].cod || displayCod;
                 displayDesc = mapaBaseExport[codBarras].desc || displayDesc;
               }
@@ -369,10 +404,12 @@ export default function Historico({ requisicoes, aoVoltar }) {
             const qtdConferida = item.quantidade || item.bipContagem || item.quantidadeRecebida || '0';
             const obs = item.observacao ? item.observacao.replace(/"/g, '""').replace(/\n/g, ' ') : '-';
 
-            csv += `"${id}";"${displayCod}";"${codBarras}";"${displayDesc}";"${qtdConferida}";"${avarias}";"${formatarPrecoLocal(pCusto)}";"${formatarPrecoLocal(pVenda)}";"${isNovo ? 'SIM' : 'NAO'}";"${obs}";"${fornecedor}";"${marca}";"${nf}";"${volumes}";"${status}";"${dataReq}";"${destino}";"${recebedor}";"${cadastrador}";"${tempoSep}"\n`;
+            // 🚀 CSV ATUALIZADO
+            csv += `"${id}";"${codFornecedor}";"${displayCod}";"${codBarras}";"${displayDesc}";"${qtdConferida}";"${avarias}";"${formatarPrecoLocal(pCusto)}";"${formatarPrecoLocal(pVenda)}";"${isNovo ? 'SIM' : 'NAO'}";"${obs}";"${fornecedor}";"${marca}";"${nf}";"${volumes}";"${status}";"${dataReq}";"${destino}";"${recebedor}";"${cadastrador}";"${tempoSep}"\n`;
           });
         } else {
-          csv += `"${id}";"-";"-";"-";"-";"-";"-";"-";"-";"-";"${fornecedor}";"${marca}";"${nf}";"${volumes}";"${status}";"${dataReq}";"${destino}";"${recebedor}";"${cadastrador}";"${tempoSep}"\n`;
+          // 🚀 CSV ATUALIZADO (- extra adicionado no placeholder para bater as colunas)
+          csv += `"${id}";"-";"-";"-";"-";"-";"-";"-";"-";"-";"-";"${fornecedor}";"${marca}";"${nf}";"${volumes}";"${status}";"${dataReq}";"${destino}";"${recebedor}";"${cadastrador}";"${tempoSep}"\n`;
         }
       });
     }
@@ -417,8 +454,8 @@ export default function Historico({ requisicoes, aoVoltar }) {
       } catch (e) {}
     }
 
-    if (tipoHistorico === 'recebimento' && req.status === 'Concluída' && itensDaReq) {
-      const itensNovos = itensDaReq.filter(i => i.produtoNovo || !i.codigoSistema || !i.cod || !i.codigo);
+    if (tipoHistorico === 'recebimento' && itensDaReq) {
+      const itensNovos = itensDaReq.filter(i => i.produtoNovo || !i.codigoSistema || !i.cod || !i.codigo || String(i.descricaoFornecedor || i.descricao || '').toUpperCase() === 'NOVO CADASTRO');
       if (itensNovos.length > 0) {
         const barcodes = itensNovos.map(i => i.codigoBarra || i.codigo_barra || i.codigoBarras).filter(Boolean);
         
@@ -710,17 +747,18 @@ export default function Historico({ requisicoes, aoVoltar }) {
                               </table>
                             )}
 
-                            {/* 🚀 VISÃO RECEBIMENTO (LÊ DA COLUNA NOVA E DA COLUNA ITENS) */}
+                            {/* 🚀 VISÃO RECEBIMENTO */}
                             {tipoHistorico === 'recebimento' && (
                               <table className="subtabela-historico">
                                 <thead>
                                   <tr>
+                                    {/* 🚀 NOVA COLUNA CÓDIGO FORNECEDOR */}
+                                    <th>Cód. Fornecedor</th>
                                     <th>Código</th>
                                     <th>Cód. Barras</th>
                                     <th>Descrição do Produto</th>
                                     <th style={{ textAlign: 'center' }}>Qtd. Conferida</th>
                                     <th style={{ textAlign: 'center' }}>Avarias</th>
-                                    {/* 🚀 TÍTULO RESTAURADO PARA CUSTO ORIGINAL */}
                                     <th>Custo</th>
                                     <th>Venda</th>
                                     <th>Observações</th>
@@ -729,7 +767,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                 <tbody>
                                   {!req.listaItens ? (
                                     <tr>
-                                      <td colSpan="8" style={{ textAlign: 'center', padding: '15px', color: '#999' }}>Carregando itens do recebimento...</td>
+                                      <td colSpan="9" style={{ textAlign: 'center', padding: '15px', color: '#999' }}>Carregando itens do recebimento...</td>
                                     </tr>
                                   ) : req.listaItens.length > 0 ? (
                                     req.listaItens.map((item, idx) => {
@@ -745,7 +783,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                       const isNovo = item.produtoNovo || !displayCod || displayDesc.toUpperCase() === 'NOVO CADASTRO';
 
                                       if (isNovo) {
-                                        if (req.status === 'Concluída' && baseAtualizada[codBarras]) {
+                                        if (baseAtualizada[codBarras]) {
                                           displayCod = baseAtualizada[codBarras].cod || displayCod;
                                           displayDesc = baseAtualizada[codBarras].desc || displayDesc;
                                           seloStatus = <span style={{ fontSize: '0.75rem', backgroundColor: '#27ae60', color: 'white', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>Cadastrado</span>;
@@ -778,6 +816,9 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                             }}
                                             title={temDiluicao ? "Clique para ver a memória de cálculo da diluição deste produto" : ""}
                                           >
+                                            {/* 🚀 DADO DA NOVA COLUNA */}
+                                            <td style={{ color: '#7f8c8d' }}>{item.codigoFornecedor || '-'}</td>
+                                            
                                             <td style={{ color: displayCod !== '-' ? '#2980b9' : 'inherit' }}><strong>{displayCod}</strong></td>
                                             <td style={{ color: '#7f8c8d' }}>{codBarras}</td>
                                             <td>{displayDesc} {seloStatus}</td>
@@ -790,7 +831,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                               {avarias > 0 ? `${avarias} un` : '-'}
                                             </td>
                                             
-                                            {/* 🚀 REMOVIDA A PALAVRA PONDERADO E ADICIONADO APENAS O ÍCONE */}
                                             <td style={{ color: '#e67e22', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                               {formatarPrecoLocal(pCusto)}
                                               {temDiluicao && <span style={{ fontSize: '1rem' }} title="Possui Cálculo Ponderado">🧮</span>}
@@ -801,10 +841,10 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                             <td style={{ fontStyle: 'italic', color: '#7f8c8d' }}>{item.observacao || '-'}</td>
                                           </tr>
 
-                                          {/* 🚀 EXPANSÃO DA DILUIÇÃO - TEXTO SIMPLES LIMPO */}
+                                          {/* EXPANSÃO DA DILUIÇÃO */}
                                           {isProdutoExpandido && temDiluicao && (
                                             <tr style={{ backgroundColor: '#fdfdfd' }}>
-                                              <td colSpan="8" style={{ padding: '0', borderBottom: '2px solid #3498db' }}>
+                                              <td colSpan="9" style={{ padding: '0', borderBottom: '2px solid #3498db' }}>
                                                 <div style={{ padding: '12px 20px', color: '#34495e', fontSize: '0.9rem', borderLeft: '4px solid #3498db', lineHeight: '1.6' }}>
                                                   <div style={{ color: '#2980b9', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.95rem' }}>
                                                     🧮 Memória de Cálculo (Diluição Ponderada)
@@ -832,7 +872,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                     })
                                   ) : (
                                     <tr>
-                                      <td colSpan="8" style={{ textAlign: 'center', padding: '15px' }}>Nenhum produto registrado neste recebimento.</td>
+                                      <td colSpan="9" style={{ textAlign: 'center', padding: '15px' }}>Nenhum produto registrado neste recebimento.</td>
                                     </tr>
                                   )}
                                 </tbody>

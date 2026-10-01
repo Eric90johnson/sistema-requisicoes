@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import '../../styles/components/rodape/rodape.css';
 
 export default function Rodape() {
-  const VERSAO_SISTEMA = "1.6.5"; 
+  const VERSAO_SISTEMA = "1.6.6"; 
   
   // Estado para controlar a sanfona no mobile
   const [expandido, setExpandido] = useState(false);

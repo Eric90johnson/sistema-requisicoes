@@ -18,8 +18,9 @@ import BannersEtapas from './detalhes/BannersEtapas';
 
 export default function DetalhesRecebimento({ 
   recebimento, aoVoltar, usuarioLogado,
-  // 🚀 PROPS INJETADAS DO CARRINHO DE REPOSIÇÃO
-  itensPreRequisicao = [], aoAdicionarPreRequisicao, aoRemoverPreRequisicao
+  // 🚀 PROPS INJETADAS DO CARRINHO DE REPOSIÇÃO E HIDRATAÇÃO
+  itensPreRequisicao = [], aoAdicionarPreRequisicao, aoRemoverPreRequisicao,
+  baseProdutos = [] // 🚀 ADICIONADO PARA REPASSAR À TABELA
 }) {
   // ==========================================
   // 1. ESTADOS GERAIS E CABEÇALHO
@@ -450,6 +451,7 @@ export default function DetalhesRecebimento({
               itensPreRequisicao={itensPreRequisicao}
               aoAdicionarPreRequisicao={aoAdicionarPreRequisicao}
               aoRemoverPreRequisicao={aoRemoverPreRequisicao}
+              baseProdutos={baseProdutos}
             />
           </>
         )}
