@@ -1,1237 +1,532 @@
-# Architecture — Sistema Neta Dantas
+# Arquitetura do Sistema Neta Dantas
 
-> Documento de referência arquitetural para desenvolvedores e ferramentas de IA que trabalham neste repositório.
+> Documento de referência para desenvolvedores e ferramentas de IA que trabalham neste repositório.
 >
-> **Versão de referência:** 1.6.4  
-> **Branch principal:** `main`
+> **Versão exibida no rodapé:** 1.6.7  
+> **Branch analisada:** main  
+> **Commit analisado:** b66c13153e6553ca6e4bf28824a0b62be6081d19  
+> **Data desta revisão:** 19/10/2026
 
----
+Este documento descreve o comportamento identificado no código do repositório. Ele não substitui a inspeção dos arquivos envolvidos em cada mudança nem confirma configurações que vivem exclusivamente no painel do Supabase, como políticas RLS, triggers, índices ou o schema completo do banco.
 
 ## 1. Visão geral
 
-O Sistema Neta Dantas é uma aplicação web voltada para a operação de estoque e logística das lojas.
+O Sistema Neta Dantas é uma aplicação web para apoiar a operação de estoque e logística das lojas. O produto evoluiu de um sistema de requisições entre lojas para uma plataforma que reúne:
 
-O projeto começou como um sistema de requisições entre lojas, mas evoluiu para uma plataforma operacional que integra:
+- requisições internas e transferências entre lojas;
+- separação de produtos com bipagem e cronômetro;
+- reposição interna e carrinho de reposição;
+- recebimento, conferência, precificação, cadastro e liberação para reposição;
+- scanner de código de barras;
+- autorizações de bipagem manual e solicitações de pausa;
+- ranking de produtividade com UPM e pontuação;
+- metas operacionais, filtros de período e metas variáveis;
+- registro e análise de divergências de envio (fluxo de qualidade/OTIF);
+- consulta de estoque e catálogo de produtos;
+- histórico de requisições e recebimentos, com exportação CSV;
+- administração de usuários, permissões e novidades;
+- painel de pedidos de marketplace;
+- alertas e notificações operacionais.
 
-- requisições e transferências entre lojas;
-- separação de produtos;
-- reposição interna;
-- recebimento de mercadorias;
-- conferência por código de barras;
-- precificação e diluição;
-- cadastro de produtos;
-- reposição pós-cadastro;
-- controle de pausas;
-- autorizações de bipagem;
-- ranking de produtividade;
-- UPM;
-- SLA;
-- recordes;
-- metas;
-- histórico operacional;
-- usuários e permissões;
-- notificações;
-- marketplace;
-- cache local;
-- sincronização com Supabase.
+### Stack detectada
 
-A arquitetura atual é predominantemente React no frontend, com Supabase como camada de persistência e autenticação.
+- **Frontend:** React 19, JavaScript/JSX, Vite 8 e CSS.
+- **Dados/autenticação:** Supabase JS v2, Supabase Auth e PostgreSQL gerenciado pelo Supabase.
+- **Scanner:** html5-qrcode.
+- **CSV:** papaparse.
+- **Persistência temporária no navegador:** localStorage.
+- **Qualidade de código:** oxlint.
 
----
+O repositório não apresenta uma API/backend próprio organizado em uma camada de servidor. As telas React e App.jsx executam consultas ao Supabase diretamente.
 
-# 2. Stack tecnológica
+## 2. Estrutura do projeto
 
-## Frontend
+~~~text
+sistema-requisicoes/
+├── ARCHITECTURE.md
+├── README.md
+├── package.json
+├── vite.config.js
+├── public/
+└── src/
+    ├── App.jsx
+    ├── main.jsx
+    ├── services/
+    │   └── supabase.js
+    ├── components/
+    │   ├── menu/Menu.jsx
+    │   ├── novidades/ModalNovidades.jsx
+    │   └── rodape/Rodape.jsx
+    ├── pages/
+    │   ├── login/Login.jsx
+    │   ├── painel/
+    │   │   ├── Painel.jsx
+    │   │   ├── hooks/useRankingData.js
+    │   │   ├── utils/calculadoraRanking.js
+    │   │   ├── nova-requisicao/
+    │   │   ├── detalhes/
+    │   │   │   ├── DetalhesRequisicao.jsx
+    │   │   │   ├── SeparacaoReq.jsx
+    │   │   │   ├── EsteiraInterna.jsx
+    │   │   │   ├── EsteiraExterna.jsx
+    │   │   │   ├── PopupDivergenciaRecebedor.jsx
+    │   │   │   └── PopupAnaliseOrigem.jsx
+    │   │   └── romaneio/Romaneio.jsx
+    │   ├── recebimento/
+    │   │   ├── PainelRecebimento.jsx
+    │   │   ├── RecebimentoProdutos.jsx
+    │   │   ├── DetalhesRecebimento.jsx
+    │   │   └── detalhes/
+    │   ├── base-dados/BaseDados.jsx
+    │   ├── historico/Historico.jsx
+    │   ├── admin/
+    │   │   ├── Admin.jsx
+    │   │   ├── base-dados/AdminBaseDados.jsx
+    │   │   ├── metas/MetasEstoque.jsx
+    │   │   ├── novidades/AdminNovidades.jsx
+    │   │   └── usuarios/AdminUsuarios.jsx
+    │   └── marketplace/
+    │       ├── inserir-pedido/InserirPedido.jsx
+    │       └── painel/PainelMarketplace.jsx
+    └── styles/
+~~~
 
-- React
-- JavaScript / JSX
-- Vite
-- CSS
-- HTML5
+Os estilos ficam principalmente em src/styles/ e acompanham as áreas de páginas e componentes. A tela de Metas também contém estilos locais embutidos em MetasEstoque.jsx, além de src/styles/admin/metas/metasEstoque.css.
 
-## Backend / BaaS
+## 3. Arquitetura de alto nível
 
-- Supabase
-- Supabase Auth
-- Banco de dados PostgreSQL do Supabase
-
-## Recursos complementares
-
-- `html5-qrcode` para leitura de códigos de barras/QR
-- `localStorage` para persistência local e cache
-- APIs do navegador
-- impressão pelo navegador
-- importação/exportação de dados quando aplicável
-
----
-
-# 3. Arquitetura de alto nível
-
-A aplicação pode ser representada da seguinte forma:
-
-```text
-                         USUÁRIO
-                            |
-                            v
-                     +-------------+
-                     |    LOGIN    |
-                     +------+------+
-                            |
-                            v
-                     +-------------+
-                     |   App.jsx   |
-                     |             |
-                     | Orquestrador|
-                     +------+------+
-                            |
-        +-------------------+-------------------+
-        |                   |                   |
-        v                   v                   v
- +-------------+     +-------------+     +-------------+
- | Requisições |     | Recebimento |     |    Admin    |
- +------+------+     +------+------+     +-------------+
-        |                   |
-        |                   +----------------+
-        |                                    |
-        v                                    v
- +-------------+                      +-------------+
- | Separação   |                      | Reposição  |
- | Ranking     |                      | Pós-cadastro|
- | Esteiras    |                      +-------------+
- +-------------+
-        |
-        v
- +---------------------------------------------+
- |              Supabase / PostgreSQL          |
- +---------------------------------------------+
-```
-
----
-
-# 4. `App.jsx` — orquestrador central
-
-O `App.jsx` atualmente concentra uma parte significativa do estado e da coordenação da aplicação.
-
-Entre suas responsabilidades estão:
-
-- controle da sessão;
-- usuário logado;
-- navegação entre telas;
-- carregamento de dados;
-- sincronização periódica;
-- cache de produtos;
-- requisições;
-- recebimentos;
-- autorizações;
-- pausas;
-- notificações;
-- carrinho de reposição;
-- cronômetros compartilhados;
-- integração com módulos administrativos.
-
-### Atenção arquitetural
-
-O `App.jsx` deve ser tratado como ponto de orquestração, não como local preferencial para novas regras de negócio.
-
-Ao adicionar funcionalidades:
-
-1. procurar primeiro por hooks existentes;
-2. procurar services existentes;
-3. procurar utilitários existentes;
-4. criar um módulo específico quando a funcionalidade tiver complexidade própria;
-5. evitar aumentar desnecessariamente o tamanho e a responsabilidade do `App.jsx`.
-
----
-
-# 5. Autenticação e sessão
-
-O fluxo conceitual é:
-
-```text
-Login.jsx
-    |
-    v
-usuarios_sistema
-    |
-    v
-Validação / autenticação
-    |
-    v
-Supabase Auth
-    |
-    v
-App.jsx
-    |
-    v
-Usuário autenticado
-```
-
-O sistema também mantém informações de sessão no armazenamento local quando necessário.
-
-Existe controle de inatividade do usuário.
-
-Eventos monitorados incluem:
-
-- mouse;
-- teclado;
-- clique;
-- toque.
-
-Após o período configurado de inatividade, a sessão é encerrada e o usuário é desconectado.
-
-### Regra para alterações
-
-Qualquer alteração no fluxo de autenticação deve preservar:
-
-- logout correto;
-- limpeza de sessão;
-- permissões;
-- estado do usuário;
-- compatibilidade com as telas dependentes do usuário autenticado.
-
----
-
-# 6. Permissões e hierarquia
-
-O sistema possui usuários com diferentes responsabilidades operacionais.
-
-Exemplos conceituais:
-
-```text
+~~~text
 Usuário
-|
-+-- Vendedor
-+-- Estoquista
-+-- Encarregado
-+-- Administrador
-```
-
-As permissões podem controlar:
-
-- acesso a determinadas telas;
-- visualização de ranking;
-- operações administrativas;
-- autorizações;
-- ações relacionadas à separação;
-- funcionalidades específicas.
-
-### Regra importante
-
-Não assumir que todo usuário possui acesso a todos os dados.
-
-Antes de adicionar uma consulta ou funcionalidade:
-
-1. verificar a permissão necessária;
-2. verificar se a consulta pode retornar dados adicionais;
-3. preservar as restrições existentes.
-
----
-
-# 7. Módulo de Requisições
-
-Localização principal:
-
-```text
-src/pages/painel/
-```
-
-Responsável pelo fluxo de requisições entre lojas e operações relacionadas à separação.
-
-Fluxo principal:
-
-```text
-Nova requisição
-       |
-       v
-Seleção de produtos
-       |
-       v
-Requisição criada
-       |
-       v
-Painel
-       |
-       v
-Detalhes da requisição
-       |
-       v
-Separação
-       |
-       +---- Bipagem
-       |
-       +---- Pausa
-       |
-       +---- Autorização
-       |
-       +---- Esteiras
-       |
-       v
-Conclusão
-       |
-       v
-Métricas / histórico / ranking
-```
-
----
-
-# 8. Criação de requisição
-
-Componentes relevantes incluem:
-
-```text
-NovaRequisicao.jsx
-FormularioCabecalho.jsx
-TabelaProdutosForm.jsx
-CronometroCheckout.jsx
-ModalAlerta.jsx
-requisicaoUtils.js
-```
-
-Responsabilidades:
-
-- identificação da requisição;
-- loja origem;
-- loja destino;
-- solicitante;
-- motivo;
-- prioridade;
-- seleção de produtos;
-- quantidades;
-- observações;
-- controle do cronômetro;
-- validações.
-
-### Regra
-
-Alterações na estrutura de uma requisição devem considerar:
-
-- tela de criação;
-- tela de detalhes;
-- separação;
-- ranking;
-- histórico;
-- persistência no Supabase.
-
----
-
-# 9. Separação de produtos
-
-A separação é uma das áreas mais importantes do sistema.
-
-Fluxo:
-
-```text
-Requisição
-    |
-    v
-Separação
-    |
-    +--> Bipagem
-    |
-    +--> Digitação autorizada
-    |
-    +--> Ajuste de quantidade
-    |
-    +--> Pausa
-    |
-    +--> Cronômetro
-    |
-    v
-Conferência
-    |
-    v
-Conclusão
-```
-
-O sistema possui mecanismos de autorização para operações que não seguem o fluxo normal de bipagem.
-
----
-
-# 10. Autorizações de bipagem
-
-Quando uma operação exige autorização:
-
-```text
-Estoquista
-    |
-    v
-Solicitação
-    |
-    v
-autorizacoes_bip
-    |
-    v
-Encarregado / responsável
-    |
-    +--> Aprovar
-    |
-    +--> Recusar
-```
-
-Alterações nessa lógica devem preservar:
-
-- rastreabilidade;
-- usuário responsável;
-- status da autorização;
-- integração com a separação;
-- notificações.
-
----
-
-# 11. Controle de pausas
-
-O sistema possui fluxo específico para pausas durante a separação.
-
-```text
-Colaborador
-    |
-    v
-Solicita pausa
-    |
-    v
-pausas_separacao
-    |
-    v
-Responsável
-    |
-    +--> Aprova
-    |
-    +--> Recusa
-```
-
-A pausa também possui impacto nas métricas de produtividade e deve ser considerada antes de modificar cálculos relacionados à separação.
-
----
-
-# 12. Ranking e produtividade
-
-O sistema possui uma camada específica para cálculo de produtividade.
-
-Arquivos importantes:
-
-```text
-src/pages/painel/hooks/useRankingData.js
-src/pages/painel/utils/calculadoraRanking.js
-```
-
-Conceito:
-
-```text
-Dados de separação
-        |
-        v
-useRankingData
-        |
-        v
-calculadoraRanking
-        |
-        v
-Ranking
-        |
-        +--> UPM
-        +--> SLA
-        +--> Recordes
-        +--> Metas
-```
-
-### Regra arquitetural
-
-Separar:
-
-```text
-BUSCAR DADOS
-```
-
-de:
-
-```text
-CALCULAR INDICADORES
-```
-
-Regras matemáticas devem preferencialmente permanecer em utilitários ou módulos de domínio, e não dentro dos componentes visuais.
-
----
-
-# 13. Metas, SLA e UPM
-
-A gestão de desempenho possui relação com:
-
-- UPM;
-- SLA;
-- ranking;
-- recordes;
-- metas.
-
-Área administrativa relacionada:
-
-```text
-admin/metas/
-    |
-    +-- MetasEstoque.jsx
-```
-
-Qualquer mudança nas metas deve ser analisada em conjunto com:
-
-- cálculo do ranking;
-- histórico;
-- separação;
-- indicadores exibidos no painel.
-
----
-
-# 14. Módulo de Recebimento
-
-O módulo de recebimento evoluiu para um subsistema operacional próprio.
-
-Estrutura conceitual:
-
-```text
-Recebimento
-    |
-    v
-Conferência
-    |
-    v
-Scanner / Bipagem
-    |
-    v
-FEFO / controle de produtos
-    |
-    v
-Aguardando Precificação
-    |
-    v
-Diluição / Precificação
-    |
-    v
-Cadastro
-    |
-    v
-Reposição pós-cadastro
-    |
-    v
-Finalização
-```
+  |
+  v
+Login.jsx -----> usuarios_sistema / Supabase Auth
+  |
+  v
+App.jsx  (estado global, navegação, sincronização e coordenação)
+  |
+  +--> Painel de requisições
+  |      +--> NovaRequisicao
+  |      +--> DetalhesRequisicao
+  |      |      +--> SeparacaoReq / bipagem / pausa / autorização
+  |      |      +--> EsteiraInterna
+  |      |      +--> EsteiraExterna
+  |      |      +--> fluxo OTIF / divergências
+  |      +--> Ranking (hook + calculadora)
+  |      +--> Romaneio
+  |
+  +--> Recebimento
+  |      +--> PainelRecebimento
+  |      +--> RecebimentoProdutos
+  |      +--> DetalhesRecebimento
+  |             +--> scanner / tabela / cronômetro / diluição
+  |             +--> conferência / precificação / cadastro
+  |             +--> carrinho de reposição pós-cadastro
+  |
+  +--> Base de Dados / Estoque
+  +--> Histórico
+  +--> Administração / Usuários / Novidades
+  +--> Metas Operacionais
+  +--> Marketplace
+  +--> Dashboard (tela atualmente identificada como placeholder)
+  |
+  v
+Supabase client (src/services/supabase.js)
+  |
+  v
+Supabase Auth + tabelas PostgreSQL
+~~~
+
+A navegação é controlada manualmente pelo estado telaAtual em App.jsx; o projeto não usa um roteador dedicado no package.json. O Menu.jsx chama callbacks que alteram essa tela.
+
+## 4. App.jsx: orquestrador central
+
+App.jsx concentra estado e regras de coordenação compartilhadas por vários módulos. Responsabilidades identificadas:
+
+- estado de login e usuário;
+- navegação e seleção de requisição/recebimento;
+- listas globais de requisições, recebimentos, produtos, recordes e pedidos de marketplace;
+- criação/edição/cancelamento de requisições e atualização de status;
+- atualização de histórico, itens e métricas de separação;
+- aprovação/recusa de solicitações de bipagem e pausa;
+- sincronização do Supabase;
+- cache da base de produtos;
+- carrinho persistente de reposição;
+- alerta global de cargas cadastradas;
+- timeout por inatividade.
+
+### Carregamento e sincronização vistos no código
+
+- Requisições: carrega até as **100 mais recentes**, ordenadas por timestamp_criacao.
+- lista_itens é incluída nessa consulta somente para usuários com perm_ver_ranking ou para admin, de acordo com a lógica de App.jsx.
+- Recebimentos: carrega até os **50 mais recentes**.
+- Recordes: consulta recordes_globais quando a sincronização não está no modo rápido.
+- Base de produtos: paginação em blocos de **1.000 registros**, guardada em cache local com TTL de **20 minutos**. Existe função para recarregar o catálogo ignorando o cache.
+- Sincronização silenciosa periódica: tenta executar a cada **20 segundos** quando a página está visível.
+- O fluxo de sessão monitora atividade do usuário e encerra o login após aproximadamente **10 minutos** de inatividade.
+- Autorizações/pausas pendentes são consultadas para o responsável apropriado durante a sincronização.
+
+App.jsx também contém várias escritas diretas no banco. Por isso, modificações em status, historico, metricas_separacao ou lista_itens devem ser analisadas em conjunto com as telas de detalhes, ranking e histórico.
+
+## 5. Autenticação e permissões
 
 Arquivos principais:
 
-```text
-src/pages/recebimento/
-    PainelRecebimento.jsx
-    RecebimentoProdutos.jsx
-    DetalhesRecebimento.jsx
-```
+- src/pages/login/Login.jsx
+- src/components/menu/Menu.jsx
+- src/pages/admin/usuarios/AdminUsuarios.jsx
+- src/App.jsx
 
-E componentes relacionados:
+Login.jsx consulta a tabela usuarios_sistema usando o nome de usuário e a senha informados. Depois, o código tenta autenticar uma identidade derivada no Supabase Auth e entrega os dados do usuário ao App.jsx. O cadastro/edição de usuários também manipula campos como username, senha, hierarquia, encarregado_responsavel e permissões.
 
-```text
-src/pages/recebimento/detalhes/
-    BannersEtapas.jsx
-    CabecalhoRecebimento.jsx
-    CalculadoraDiluicao.jsx
-    CronometroRecebimento.jsx
-    EdicaoRecebimento.jsx
-    ImpressaoRecebimento.jsx
-    ModalPopup.jsx
-    ModalScanner.jsx
-    ObservacoesRecebimento.jsx
-    TabelaProdutosRecebimento.jsx
-```
-
----
-
-# 15. Scanner
-
-O scanner utiliza `html5-qrcode`.
-
-Fluxo:
-
-```text
-ModalScanner
-     |
-     v
-Câmera
-     |
-     v
-html5-qrcode
-     |
-     v
-Código detectado
-     |
-     v
-Identificação do produto
-     |
-     v
-Bipagem / operação correspondente
-```
-
-O controle do scanner deve evitar reinicializações desnecessárias.
-
-A lógica de inicialização da câmera é separada das atualizações frequentes de estado, como cronômetros.
-
-Também existe proteção contra leituras duplicadas em sequência.
-
----
-
-# 16. Controle de estoque fantasma
-
-O recebimento possui mecanismos para evitar inconsistências relacionadas a produtos que ainda estão em processos ativos.
-
-Conceito:
-
-```text
-Produto
-   |
-   v
-Verificação
-   |
-   +--> Normal
-   |
-   +--> Soft Lock
-   |
-   +--> Hard Lock
-```
-
-### Soft Lock
-
-Apresenta alerta ao usuário.
+Permissões reconhecidas no frontend incluem, entre outras:
 
-### Hard Lock
+- acesso_admin e usuário admin;
+- perm_gerenciar_usuarios;
+- perm_atualizar_estoque;
+- perm_ver_relatorios;
+- perm_gerenciar_metas;
+- perm_gerenciar_novidades;
+- perm_bip_livre;
+- perm_consulta_estoque;
+- perm_ver_ranking;
+- perm_dashboard;
+- perm_ocultar_requisicao.
 
-Impede a operação e direciona o usuário para a origem do bloqueio quando aplicável.
+Usuários subordinados podem ter encarregado_responsavel associado a um ou mais encarregados.
 
-Essas regras são importantes para evitar que produtos em transporte ou recebimento sejam tratados como estoque disponível de forma incorreta.
+### Atenção de segurança
 
----
+As verificações de permissão no React controlam a interface, mas **não substituem autorização no banco**. Antes de alterar autenticação ou acesso a dados, verificar as políticas RLS do Supabase. O código atual consulta a coluna senha em usuarios_sistema; convém revisar esse desenho e a forma de armazenamento/autenticação como uma tarefa de segurança separada. Não expor credenciais, chaves privadas ou dados sensíveis em novos arquivos/documentos.
 
-# 17. FEFO / controle de lotes
+Existe ainda uma diferença a revisar: o menu verifica perm_gerenciar_metas para exibir a navegação de Metas, enquanto a aba de configuração dentro de MetasEstoque.jsx usa acesso_admin, admin ou hierarquia === 'Encarregado' para validar a permissão na própria tela.
 
-O recebimento possui lógica relacionada ao controle de validade e priorização dos produtos.
+## 6. Requisições e transferências
 
-Ao modificar essa lógica, considerar:
-
-- lote;
-- validade;
-- quantidade;
-- produtos em recebimento;
-- estoque existente;
-- separação;
-- reposição.
-
-Não substituir regras de estoque sem verificar os efeitos nos demais fluxos.
-
----
-
-# 18. Calculadora de diluição e precificação
-
-A calculadora de diluição participa do workflow de recebimento.
-
-```text
-Recebimento
-    |
-    v
-Conferência
-    |
-    v
-Aguardando Precificação
-    |
-    v
-Calculadora de Diluição
-    |
-    v
-Precificação
-    |
-    v
-Cadastro
-```
-
-Ela deve ser tratada como parte do processo de recebimento, e não apenas como uma calculadora independente.
-
----
-
-# 19. Reposição pós-cadastro
-
-Uma funcionalidade importante é o carrinho de reposição.
-
-Fluxo:
-
-```text
-Produto recebido
-       |
-       v
-Cadastro concluído
-       |
-       v
-Produto selecionado para reposição
-       |
-       v
-Carrinho de reposição
-       |
-       v
-Reposição na loja
-```
-
-Existe persistência local para o carrinho.
-
-O estado pode envolver:
-
-```text
-itensPreRequisicao
-tipoReposicaoGlobal
-inicioCronometroGlobal
-```
-
-e armazenamento local relacionado ao carrinho de reposição.
-
-### Regra
-
-Não remover a persistência local sem avaliar o impacto em:
-
-- perda de dados durante navegação;
-- fechamento/recarga da página;
-- continuidade da operação;
-- sincronização com o fluxo de reposição.
-
----
-
-# 20. Cache de produtos
-
-A base de produtos possui mecanismo de cache local.
-
-Conceito:
-
-```text
-Solicitação de produtos
-       |
-       v
-Cache válido?
-   /          \
- SIM           NÃO
-  |             |
-  v             v
-Cache       Supabase
-  |             |
-  |             v
-  |         Atualização
-  |          do cache
-  |             |
-  +------+------+
-         |
-         v
-    Base de produtos
-```
-
-O cache possui TTL configurado.
-
-### Regra
-
-Ao alterar a estrutura da tabela ou os dados fundamentais de produtos, avaliar:
-
-- invalidação do cache;
-- versão dos dados;
-- consistência;
-- tempo de validade.
+Arquivos principais:
 
----
-
-# 21. Sincronização
-
-O aplicativo realiza sincronização periódica com o Supabase.
-
-Conceito:
-
-```text
-App ativo
-    |
-    v
-Sincronização
-    |
-    +--> Requisições
-    |
-    +--> Recebimentos
-    |
-    +--> Produtos / cache
-    |
-    +--> Notificações
-    |
-    v
-Estado React atualizado
-```
+- src/pages/painel/Painel.jsx
+- src/pages/painel/nova-requisicao/NovaRequisicao.jsx
+- src/pages/painel/detalhes/DetalhesRequisicao.jsx
+- src/pages/painel/detalhes/SeparacaoReq.jsx
+- src/pages/painel/detalhes/EsteiraInterna.jsx
+- src/pages/painel/detalhes/EsteiraExterna.jsx
+- src/pages/painel/romaneio/Romaneio.jsx
 
-A sincronização deve evitar consultas desnecessárias.
+Fluxo conceitual da requisição:
 
-Sempre que possível:
+~~~text
+Criar requisição
+    -> selecionar produtos/quantidades
+    -> Pendente
+    -> Em Separação
+    -> bipagem e validação da quantidade
+    -> Separado
+    -> fluxo interno: recebimento e conclusão
+       ou
+       fluxo externo: Saída de produtos -> Faturamento -> Transporte
+    -> Concluída
+~~~
 
-- usar filtros;
-- usar paginação;
-- respeitar permissões;
-- utilizar cache;
-- carregar dados sob demanda;
-- evitar buscar grandes volumes sem necessidade.
+O fluxo interno também aceita o status legado Recebimento na EsteiraInterna.jsx para não bloquear registros antigos. O fluxo externo exige número da ordem interna para a saída e número de nota fiscal para faturamento. A tela de separação valida a bipagem antes de permitir a saída, com exceções sujeitas a autorização.
 
----
+### Status de qualidade / OTIF
 
-# 22. Notificações
+A esteira externa permite que a loja de destino confirme o recebimento ou registre uma divergência. Quando há divergência:
 
-O `App.jsx` coordena notificações globais relacionadas a eventos operacionais.
+1. PopupDivergenciaRecebedor.jsx pede os itens e uma descrição por item (mínimo de 50 caracteres);
+2. a ocorrência é gravada em registro_divergencias com status Pendente;
+3. a requisição recebe status Divergência, destacado como prioridade alta no painel;
+4. a loja de origem abre PopupAnaliseOrigem.jsx, classifica o caso como procedente/improcedente e informa justificativa (mínimo de 20 caracteres);
+5. a análise é gravada em registro_divergencias, e a requisição é finalizada após a análise.
 
-Exemplos:
+Estados vistos em registro_divergencias: Pendente e Analisado. O status Divergência pertence à requisição; após a análise, o código atualiza a requisição para Concluída.
 
-```text
-autorizacoes_bip
-       |
-       v
-Notificação
+O painel também escuta inserts de alertas_reposicao via Supabase Realtime (postgres_changes, evento INSERT). Esse é um uso explícito de Realtime identificado no código; não assumir que todas as tabelas usam o mesmo mecanismo.
 
-pausas_separacao
-       |
-       v
-Notificação
+## 7. Separação, pausas e autorizações
 
-Nova carga cadastrada
-       |
-       v
-Notificação
-```
+SeparacaoReq.jsx trata a leitura de códigos, contagem bipada, andamento do cronômetro e conclusão. Os dados de autorização e pausa são persistidos em tabelas separadas:
 
-Novas notificações devem ser implementadas sem duplicar mecanismos existentes.
+- autorizacoes_bip: solicitações de digitação/liberação de bip manual, direcionadas ao encarregado e com status operacional;
+- pausas_separacao: pedidos de pausa, tipo, solicitante, encarregado de destino e estado da pausa.
 
----
+A aprovação/recusa de solicitações é coordenada pelo App.jsx. O cronômetro precisa considerar início, tempo pausado e retomada; alterações na estrutura de pausa podem afetar UPM e pontuação.
 
-# 23. Histórico
+## 8. Ranking e cálculo de produtividade
 
-O histórico serve como camada de consulta operacional.
+Arquivos principais:
 
-Conceito:
+- src/pages/painel/hooks/useRankingData.js
+- src/pages/painel/utils/calculadoraRanking.js
+- integração visual em Painel.jsx e PainelRecebimento.jsx
 
-```text
-Requisições
-     |
-     +----------------+
-                      |
-Recebimentos          |
-     |                |
-     +-------+--------+
-             |
-             v
-         Histórico
-             |
-             v
-       Filtros / consulta
-```
+O hook busca sob demanda o histórico de requisições com metricas_separacao e recebimentos com metricas_recebimento, paginando em lotes de 1.000. O cálculo é feito no frontend.
 
-Como o histórico pode envolver grande volume de dados, priorizar carregamento sob demanda e filtros no banco.
+### Regras atuais identificadas
 
----
+- UPM consolidada: totalItens / totalSegundos * 60.
+- Requisições: pontuação por operação calculada a partir de unidades físicas e UPM da requisição.
+- Reposição interna: multiplicador de pontuação **2x**.
+- Recebimento de mercadorias: multiplicador de pontuação **1,5x**; para registros antigos sem pontosGanhos, a pontuação é recalculada no frontend.
+- Quando há mais de um responsável separado por +, a operação é atribuída a cada nome listado.
+- Filtros de período do ranking usam o campo finalizadoEm das métricas.
 
-# 24. Marketplace
+### Limitações a considerar
 
-O projeto também possui módulo de marketplace.
+O cálculo prioriza totalItensFisicos; em registros antigos pode recorrer a listaItens e, depois, ao campo req.itens. Antes de alterar o cálculo retroativo, verificar se req.itens representa quantidade de unidades ou quantidade de linhas/SKUs em todos os registros históricos. O hook de ranking busca o histórico completo de registros que possuem métricas; isso ocorre sob demanda, mas pode gerar tráfego significativo conforme a base cresce.
 
-Estrutura conceitual:
+Não duplicar a fórmula dentro de uma tela nova: reutilizar calcularRanking ou centralizar a regra de negócio se o escopo crescer.
 
-```text
-marketplace/
-|
-+-- inserir-pedido/
-|      |
-|      +-- InserirPedido.jsx
-|
-+-- painel/
-       |
-       +-- PainelMarketplace.jsx
-```
+## 9. Recebimento de mercadorias
 
-O marketplace deve ser tratado como módulo independente, evitando criar dependências desnecessárias com os fluxos de recebimento e requisições.
+Arquivos principais:
 
----
+- src/pages/recebimento/PainelRecebimento.jsx
+- src/pages/recebimento/RecebimentoProdutos.jsx
+- src/pages/recebimento/DetalhesRecebimento.jsx
+- src/pages/recebimento/detalhes/
 
-# 25. Principais entidades de dados
+Componentes de apoio incluem cabeçalho, banners de etapas, tabela de produtos, cronômetro, scanner, calculadora de diluição, edição, observações, popup e impressão.
 
-Entre as entidades/tabelas utilizadas pelo sistema estão:
+Fluxo principal identificado:
 
-```text
-usuarios_sistema
-    -> usuários e informações de acesso/permissões
+~~~text
+Pendente
+  -> Em Conferência
+  -> Aguardando Precificação
+  -> Aguardando Cadastro
+  -> Cadastrado
+  -> Concluída (encerramento definitivo)
+~~~
 
-requisicoes
-    -> requisições e transferências
+Também há suporte a Cancelada e caminhos de criação/edição que precisam ser preservados ao modificar o workflow.
 
-recebimento_mercadorias
-    -> recebimentos / cargas / notas
+Funcionalidades presentes no código:
 
-base_produtos
-    -> catálogo de produtos
+- conferente vinculado à conferência, com modo de visualização para outro usuário quando já existe responsável;
+- leitura via html5-qrcode, incluindo câmera e proteção contra re-renderizações que reiniciem o scanner;
+- trava do Bip Mestre e controle de quantidade bipada;
+- solicitação de bip manual e pausa ao encarregado;
+- salvamento do progresso físico no banco e persistência local de apoio;
+- controle de validade/lote e geração de loteInterno quando ausente;
+- histórico de diluição guardado em historico_diluicao;
+- etapas de precificação, cadastro e encerramento definitivo;
+- carrinho de reposição pós-cadastro integrado ao estado do App.jsx e ao localStorage.
 
-recordes_globais
-    -> recordes de produtividade
+### Bloqueios para evitar estoque fantasma
 
-autorizacoes_bip
-    -> autorizações relacionadas à bipagem
+O fluxo inclui verificações para impedir ou alertar sobre produtos associados a operações de transporte/recebimento ainda ativas, incluindo bloqueio rígido com redirecionamento para a nota relacionada e alerta para duplicidades em notas ativas. Consultar a implementação em DetalhesRecebimento.jsx antes de mudar regras de disponibilidade do produto.
 
-pausas_separacao
-    -> solicitações e controle de pausas
-```
+## 10. Catálogo, estoque e reposição
 
-> Esta lista representa as principais entidades identificadas na arquitetura atual. Antes de alterar o banco, verificar o schema real do Supabase e todas as referências no código.
+src/pages/base-dados/BaseDados.jsx é a tela de consulta/seleção de produtos e fluxo de pré-requisição. Ela interage com o catálogo recebido pelo App.jsx, oferece filtros/ordenação e permite selecionar produtos para reposição interna ou externa.
 
----
-
-# 26. Persistência local
-
-O sistema utiliza `localStorage` para algumas informações de suporte.
-
-Entre os conceitos existentes:
-
-```text
-Sessão
-Usuário
-Cache de produtos
-Timestamp do cache
-Carrinho de reposição
-Dados temporários de operação
-```
-
-### Regra
-
-`localStorage` não deve ser tratado automaticamente como fonte definitiva de verdade.
-
-A regra geral deve ser:
-
-```text
-Supabase = persistência principal
-localStorage = cache / continuidade local / estado temporário
-```
+src/pages/recebimento/detalhes/TabelaProdutosRecebimento.jsx permite incluir no carrinho produtos provenientes de recebimentos em estado Cadastrado. O carrinho é mantido em itensPreRequisicao no App.jsx, salvo em localStorage e usado para iniciar uma nova requisição/reposição.
 
----
+### Hidratação dinâmica de produtos
 
-# 27. Camadas recomendadas
+O histórico e a tabela de recebimento podem procurar produtos por código de barras na base_produtos para exibir o código e a descrição atuais de produtos anteriormente marcados como NOVO CADASTRO. A atualização é visual/de pesquisa e não deve alterar automaticamente o snapshot original salvo no recebimento. O histórico também inclui o código de fornecedor e exporta relatório CSV com os dados de recebimento.
 
-A arquitetura atual ainda possui responsabilidades concentradas em páginas e no `App.jsx`.
+## 11. Histórico e relatórios
 
-Para novas funcionalidades, preferir gradualmente uma estrutura como:
+src/pages/historico/Historico.jsx alterna entre histórico de transferências/requisições e histórico de recebimento. Possui filtros de data, status e dados de produto; carrega detalhes sob demanda e pode buscar itens que não vieram na consulta inicial.
 
-```text
-src/
-|
-+-- pages/
-|     -> telas e composição visual
-|
-+-- components/
-|     -> componentes reutilizáveis
-|
-+-- hooks/
-|     -> lógica React reutilizável
-|
-+-- services/
-|     -> acesso ao Supabase / APIs
-|
-+-- utils/
-|     -> funções puras e cálculos
-|
-+-- contexts/
-|     -> estados globais quando realmente necessários
-|
-+-- domain/
-|     -> regras de negócio complexas
-|
-+-- styles/
-|     -> estilos
-```
-
-Isso não significa reescrever o projeto imediatamente.
-
-A migração deve ser incremental.
-
----
-
-# 28. Regra para novas funcionalidades
-
-Antes de criar uma nova funcionalidade:
-
-1. Identificar o módulo responsável.
-2. Procurar funcionalidades semelhantes já existentes.
-3. Procurar hooks reutilizáveis.
-4. Procurar componentes reutilizáveis.
-5. Procurar utilitários existentes.
-6. Verificar as tabelas Supabase envolvidas.
-7. Verificar permissões.
-8. Verificar efeitos sobre ranking/métricas.
-9. Verificar efeitos sobre cache.
-10. Verificar efeitos sobre sincronização.
-11. Verificar impactos em outros módulos.
-
----
-
-# 29. Regra para alterações no banco
-
-Antes de alterar uma tabela:
-
-```text
-Tabela
-   |
-   +--> Procurar todas as consultas
-   |
-   +--> Procurar inserts
-   |
-   +--> Procurar updates
-   |
-   +--> Procurar deletes
-   |
-   +--> Procurar filtros
-   |
-   +--> Procurar relacionamentos
-   |
-   +--> Procurar impactos no frontend
-```
-
-Não assumir que uma coluna pertence a apenas um módulo.
-
-Uma mudança no schema pode afetar:
-
-- requisições;
-- recebimento;
-- ranking;
-- histórico;
-- reposição;
-- administração.
-
----
-
-# 30. Regras para inteligência artificial
-
-Este arquivo deve ser utilizado como contexto arquitetural antes de modificar o projeto.
-
-## Antes de alterar
-
-A IA deve:
-
-1. Ler este `ARCHITECTURE.md`.
-2. Examinar os arquivos diretamente relacionados à tarefa.
-3. Procurar implementações existentes da mesma funcionalidade.
-4. Identificar dependências.
-5. Identificar tabelas Supabase envolvidas.
-6. Identificar estados globais envolvidos.
-7. Verificar permissões.
-8. Verificar impactos nos fluxos existentes.
-
-## Durante a implementação
-
-A IA deve:
-
-- reutilizar código existente quando apropriado;
-- evitar duplicação;
-- evitar aumentar desnecessariamente o `App.jsx`;
-- preservar regras de negócio existentes;
-- preservar compatibilidade;
-- manter nomes e convenções existentes quando possível;
-- separar lógica de negócio de apresentação;
-- evitar consultas Supabase desnecessárias;
-- preservar cache e sincronização;
-- não remover funcionalidades existentes sem solicitação explícita.
-
-## Depois da implementação
-
-A IA deve verificar:
-
-```text
-Build
-  |
-  +--> Imports
-  |
-  +--> Rotas
-  |
-  +--> Hooks
-  |
-  +--> Supabase
-  |
-  +--> Estados
-  |
-  +--> Permissões
-  |
-  +--> Fluxos relacionados
-  |
-  +--> Regressões
-```
-
----
+A exportação do relatório gerencial é CSV (separador ;). Para recebimentos inclui dados como código do fornecedor, código, código de barras, descrição, quantidade, avarias, preços, informações da nota, status, responsáveis e duração da conferência.
 
-# 31. Regra especial para o App.jsx
+Não confundir o histórico operacional das requisições/recebimentos com histórico auditável de alteração das metas: este último ainda não está implementado integralmente na tela Metas.
 
-Antes de adicionar lógica ao `App.jsx`, perguntar:
+## 12. Metas Operacionais
 
-> Esta lógica precisa realmente ser global?
+Arquivo principal: src/pages/admin/metas/MetasEstoque.jsx, com estilos em src/styles/admin/metas/metasEstoque.css. A tela tem duas abas principais: visão geral e configuração.
 
-Se a resposta for não, preferir:
+### Visão geral atual
 
-```text
-Hook
-Service
-Util
-Component
-Domain module
-```
-
-dependendo da responsabilidade.
-
-O objetivo é impedir que o `App.jsx` se transforme progressivamente em um "arquivo monolítico".
-
----
-
-# 32. Fluxo operacional integrado
-
-A visão mais importante do sistema atualmente é:
-
-```text
-                         ESTOQUE / OPERAÇÃO
-                                |
-             +------------------+------------------+
-             |                                     |
-             v                                     v
-       RECEBIMENTO                            REQUISIÇÕES
-             |                                     |
-             v                                     v
-       CONFERÊNCIA                            SOLICITAÇÃO
-             |                                     |
-             v                                     v
-        SCANNER                               SEPARAÇÃO
-             |                                     |
-             v                                     |
-        PRECIFICAÇÃO                               |
-             |                                     |
-             v                                     v
-          CADASTRO                              BIPAGEM
-             |                                     |
-             v                                     v
-      REPOSIÇÃO LOJA                          CONCLUSÃO
-             |                                     |
-             +------------------+------------------+
-                                |
-                                v
-                         INDICADORES
-                                |
-                +---------------+---------------+
-                |               |               |
-                v               v               v
-               UPM             SLA           RANKING
-                |               |               |
-                +---------------+---------------+
-                                |
-                                v
-                              METAS
-```
-
----
-
-# 33. Princípios arquiteturais
-
-Os princípios desejados para a evolução do projeto são:
-
-### 1. Não duplicar funcionalidades
-
-Antes de criar algo novo, verificar se já existe implementação equivalente.
-
-### 2. Separar responsabilidades
-
-Interface, regras de negócio, acesso a dados e cálculos devem ser progressivamente separados.
-
-### 3. Preservar os fluxos operacionais
-
-Recebimento, separação, reposição e ranking possuem dependências entre si.
-
-### 4. Evitar estado global desnecessário
-
-Somente dados realmente compartilhados devem permanecer no `App.jsx` ou em Contexts globais.
-
-### 5. Minimizar consultas
-
-Utilizar filtros, cache, paginação e carregamento sob demanda.
-
-### 6. Preservar rastreabilidade
-
-Operações de estoque e produtividade devem manter informações suficientes para auditoria e histórico.
-
-### 7. Evoluir incrementalmente
-
-Não reescrever módulos estáveis apenas por preferência arquitetural.
-
----
-
-# 34. Direção arquitetural futura
-
-A evolução desejada pode ser:
-
-```text
-                  App.jsx
-                     |
-                Contexts/Hooks
-                     |
-       +-------------+-------------+
-       |             |             |
-       v             v             v
- Requisições    Recebimento     Estoque
-       |             |             |
-       v             v             v
-   Services      Services       Services
-       |             |             |
-       +-------------+-------------+
-                     |
-                     v
-                  Supabase
-```
-
-Com regras de negócio complexas migrando gradualmente para módulos próprios:
-
-```text
-domain/
-|
-+-- requisicoes/
-+-- recebimento/
-+-- estoque/
-+-- produtividade/
-+-- reposicao/
-```
-
-A adoção deve ocorrer somente quando houver benefício real.
-
----
-
-# 35. Resumo para ferramentas de IA
-
-Ao trabalhar neste projeto, considere que:
-
-```text
-O sistema NÃO é mais apenas um sistema de requisições.
-
-É uma plataforma operacional de estoque/logística
-com múltiplos fluxos integrados.
-```
-
-Os principais domínios são:
-
-```text
-REQUISIÇÕES
+A tela consulta metas_operacionais, usuarios_sistema, requisicoes, registro_divergencias, recebimento_mercadorias, autorizacoes_bip e relatorios_mensais (esta última apenas ao tentar gravar um relatório). Exibe:
+
+- indicadores de produtividade, SLA de atendimento, qualidade e operação;
+- desempenho geral e cards de gestão (faturamento, saída e cadastro);
+- saúde da operação: requisições pendentes/vencidas, reposições pendentes, recebimentos pendentes, divergências pendentes e autorizações pendentes;
+- ranking calculado para separadores;
+- metas variáveis/desafios, com progresso lançado manualmente;
+- filtro por datas, ciclo oficial e usuário/equipe.
+
+A lista de usuários relaciona nome_completo a encarregado_responsavel para compor o filtro de equipe. A área de saúde operacional é atualizada a cada 30 segundos enquanto o componente estiver ativo.
+
+### Metas fixas configuráveis
+
+Os valores padrão presentes no código são:
+
+| Indicador | Valor padrão | Unidade/conceito |
+|---|---:|---|
+| upm_minima | 8,0 | UPM |
+| tempo_separacao | 15 | minutos |
+| volume_diario | 300 | peças |
+| sla_atendimento | 5 | minutos |
+| sla_total | 20 | minutos |
+| sla_percentual | 90 | % |
+| erro_separacao | 1,0 | % |
+| divergencia_conferencia | 1,0 | % |
+| retrabalho | 1,0 | % |
+| reposicao_atendimento | 5 | minutos |
+| reposicao_total | 30 | minutos |
+| recebimento_total | 60 | minutos |
+| sla_faturamento | 30 | minutos |
+| sla_saida | 30 | minutos |
+| tempo_cadastro | 120 | minutos |
+
+As metas fixas e o ciclo oficial são gravados por upsert na tabela metas_operacionais, usando indicador como chave de conflito. O ciclo oficial é representado pelos indicadores periodo_vigente_inicio e periodo_vigente_fim, com as datas guardadas no campo unidade no código atual.
+
+### Metas variáveis
+
+Metas variáveis usam categoria = 'Variável' e campos como indicador, nome_exibicao, valor_meta, valor_atual, unidade e atualizado_por. Podem ser criadas/excluídas por gestores autorizados e o progresso atual é atualizado manualmente (valor incremental positivo ou negativo). Esse mecanismo não é, atualmente, um motor que detecta automaticamente a conclusão de tarefas como limpeza ou reciclagem.
+
+### Fórmulas reais atualmente implementadas — importante
+
+- **Produtividade:** calcula a média de UPM dos separadores identificados no período e a compara com upm_minima, limitada a 100% no card.
+- **SLA operacional:** conta requisições válidas concluídas cujo tempo de timestamp_criacao até metricas_separacao.finalizadoEm é menor ou igual a sla_total; mostra percentual dentro do prazo.
+- **Qualidade:** conta registros de registro_divergencias com analise_procedente = true no período e calcula uma taxa em relação ao total de requisições consideradas; o card é zerado quando não há volume válido.
+- **Operação/recebimento:** considera recebimentos com status Concluída e metricas_recebimento.tempoTotalSegundos, compara a duração com recebimento_total e calcula percentual no prazo.
+- **Desempenho geral:** é a média aritmética dos sete percentuais exibidos no código (produtividade, SLA, qualidade, operação e três indicadores de gestão).
+- **Saúde operacional:** conta status operacionais nas tabelas correspondentes; a regra de requisição vencida atualmente usa mais de duas horas desde timestamp_criacao.
+
+### Lacunas conhecidas da tela de Metas
+
+1. Embora existam alvos configuráveis sla_faturamento, sla_saida e tempo_cadastro, os cards de gestão atualmente recebem **100% quando existe algum volume válido**, em vez de calcularem a duração real dessas etapas. Não tratar esses três indicadores como SLAs temporais já implementados.
+2. sla_atendimento, sla_percentual, erro_separacao, divergencia_conferencia e retrabalho são configuráveis, mas nem todos são aplicados em cálculos distintos na visão geral atual. Hoje o cálculo de SLA principal usa sla_total; qualidade usa divergências procedentes.
+3. A seção visual “Histórico de Metas” contém linhas de exemplo fixas no JSX e está marcada como “Módulo Fase 2”. Ela **não é um log dinâmico de alterações**.
+4. Como as metas fixas são atualizadas com upsert pelo campo indicador, o valor anterior não é preservado automaticamente como versão histórica.
+5. O código tenta inserir snapshots em relatorios_mensais, mas o próprio tratamento de erro prevê que essa tabela pode não existir. A existência e o schema no ambiente Supabase devem ser confirmados antes de depender desse recurso.
+6. A lógica de filtro de período usa timestamp_criacao para requisições, enquanto finalizadoEm define o intervalo do ranking. Avaliações que precisem atribuir resultados ao mês de conclusão devem alinhar explicitamente esses critérios.
+7. A contagem de divergências procedentes é por registro de divergência, não necessariamente por unidade/item divergente; validar o denominador e a regra de qualidade antes de usar esse percentual como KPI definitivo.
+
+## 13. Administração, novidades e marketplace
+
+- src/pages/admin/Admin.jsx organiza as áreas administrativas de base de dados, usuários e novidades.
+- src/pages/admin/usuarios/AdminUsuarios.jsx gerencia usuários, hierarquia, vínculo com encarregados e permissões.
+- src/pages/admin/base-dados/AdminBaseDados.jsx importa/processa dados de novidades e registra alertas de reposição em alertas_reposicao.
+- src/pages/admin/novidades/AdminNovidades.jsx usa notificacoes_sistema para administrar/consultar novidades.
+- src/pages/marketplace/inserir-pedido/InserirPedido.jsx importa e processa pedidos/itens com base no catálogo; PainelMarketplace.jsx exibe o painel.
+- A navegação dashboard está conectada no App.jsx, mas o conteúdo encontrado no estado analisado ainda é um placeholder “Em Breve”. Não descrever o dashboard separado como funcional sem verificar alterações futuras.
+
+## 14. Tabelas Supabase identificadas no código
+
+A lista abaixo reúne tabelas referenciadas por consultas from(...) no frontend analisado. Ela não é substituto do schema do banco.
+
+| Tabela | Papel identificado no frontend |
+|---|---|
+| usuarios_sistema | Usuários, hierarquia, encarregados e permissões |
+| requisicoes | Requisições/transferências, itens, status, histórico e métricas de separação |
+| recebimento_mercadorias | Cabeçalhos, itens, status, responsáveis, métricas de conferência e histórico de diluição |
+| base_produtos | Catálogo, código, código de barras, descrição e informações de preço |
+| recordes_globais | Recordes por quantidade de itens/tempo/responsável |
+| autorizacoes_bip | Solicitações de liberação de bipagem manual |
+| pausas_separacao | Solicitações e estado das pausas operacionais |
+| alertas_reposicao | Alertas do processo de reposição; há escuta Realtime de inserts no Painel |
+| registro_divergencias | Registro e análise de divergências/OTIF da transferência |
+| metas_operacionais | Metas fixas, ciclo oficial e metas variáveis |
+| notificacoes_sistema | Novidades/notificações administrativas |
+| relatorios_mensais | Destino opcional usado pela tela Metas para salvar snapshots; precisa confirmar se existe no ambiente |
+
+Os nomes de colunas, tipos, constraints, índices, chaves estrangeiras, funções SQL, triggers e políticas RLS não estão documentados por migrations neste repositório analisado. Antes de alterar o banco, consultar o schema real do Supabase.
+
+## 15. localStorage e estado temporário
+
+Entre as chaves identificadas no código:
+
+- netadantas_logado e netadantas_usuario: estado local do usuário logado;
+- netadantas_cache_base_produtos e netadantas_cache_base_produtos_ts: cache do catálogo e timestamp;
+- netadantas_carrinho_reposicao: carrinho persistente de reposição;
+- chaves alerta_...: controle local de alertas já ignorados;
+- sessao_expirada: sinal de expiração da sessão.
+
+O Supabase é a persistência operacional principal; o armazenamento local apoia cache, preferências e continuidade temporária. Não remover ou renomear chaves sem verificar todos os pontos em que são lidas.
+
+## 16. Camada de serviços e dívida arquitetural
+
+src/services/supabase.js é essencialmente a inicialização/exportação do cliente Supabase. A lógica de consulta, transformação e gravação está distribuída entre App.jsx e as próprias páginas.
+
+Principais riscos arquiteturais observados:
+
+- App.jsx coordena muitos fluxos diferentes;
+- componentes de tela executam consultas e atualizações diretamente no Supabase;
+- regras de negócio e transformação de dados estão divididas entre a camada global, páginas, hooks e utilitários;
+- parte da sincronização ocorre por polling e outra parte usa Supabase Realtime;
+- o ranking busca histórico completo sob demanda;
+- metas configuráveis e métricas calculadas ainda não estão totalmente alinhadas;
+- o histórico de mudanças das metas ainda é estático, não auditável.
+
+### Direção recomendada
+
+Não reescrever a aplicação de uma vez. Evoluir incrementalmente, quando houver benefício, para uma organização por responsabilidade:
+
+~~~text
+pages/        composição de telas
+components/   UI reutilizável
+hooks/        estado e lógica React reutilizável
+services/     consultas e comandos Supabase
+utils/        cálculos puros e formatação
+domain/       regras de negócio que cruzam módulos
+contexts/     estado global somente quando necessário
+~~~
+
+Ao extrair consultas para serviços, manter nomes, formatos dos objetos e regras de negócio compatíveis com as telas existentes. Migrar um fluxo por vez e validar regressões.
+
+## 17. Regras para ferramentas de IA
+
+Antes de modificar o sistema, a IA deve:
+
+1. Ler este arquivo e conferir os arquivos atuais na branch de trabalho; o documento pode ficar desatualizado.
+2. Examinar o fluxo completo relacionado à solicitação, não somente o componente visual.
+3. Procurar implementações, hooks e utilitários já existentes antes de criar outros.
+4. Identificar tabelas, colunas, formatos JSON e status do Supabase que serão afetados.
+5. Verificar as permissões no menu, no componente e no banco, sem assumir que controle visual equivale a segurança.
+6. Avaliar os efeitos sobre requisições, recebimento, reposição, ranking, metas, histórico, cache e sincronização.
+7. Não inventar colunas nem presumir a existência de tabelas ou políticas; confirmar no projeto/Supabase.
+8. Não alterar regras de negócio, pontuação, multiplicadores ou estados sem pedido explícito.
+9. Evitar concentrar novas regras no App.jsx; preferir serviços/hooks/utilitários específicos quando apropriado.
+10. Preservar estados antigos necessários à compatibilidade, como o status legado Recebimento na esteira interna.
+11. Não retirar cache, salvamento parcial, persistência do carrinho ou mecanismos de proteção do scanner sem analisar o impacto operacional.
+12. Informar quais arquivos serão alterados, quais regras mudam e quais dependências podem ser afetadas.
+13. Após alterar, verificar imports, estados, consultas, permissões, status e build/lint disponíveis no projeto.
+14. Atualizar este ARCHITECTURE.md quando uma mudança alterar responsabilidades, fluxos, tabelas ou regras de negócio estruturais.
+
+## 18. Fluxo operacional integrado
+
+~~~text
 RECEBIMENTO
-ESTOQUE
-REPOSIÇÃO
-SEPARAÇÃO
-PRODUTIVIDADE
-ADMINISTRAÇÃO
-MARKETPLACE
-```
+  -> conferência / scanner / validade / lote
+  -> precificação e diluição
+  -> cadastro
+  -> reposição pós-cadastro
 
-E os principais pontos de integração são:
+REQUISIÇÃO / TRANSFERÊNCIA
+  -> solicitação
+  -> separação / bipagem / pausas / autorizações
+  -> saída / faturamento / transporte (fluxo externo)
+  -> recebimento no destino
+  -> conclusão ou divergência OTIF
 
-```text
-App.jsx
-Supabase
-Usuários/Permissões
-Produtos
-Requisições
-Recebimentos
-Ranking
-Reposição
-Notificações
-```
+DADOS OPERACIONAIS
+  -> ranking / UPM / pontuação
+  -> Metas Operacionais / SLA / qualidade
+  -> histórico e relatórios
+~~~
 
-Qualquer alteração significativa deve considerar os efeitos nos fluxos relacionados, e não somente na tela em que a alteração será implementada.
+O sistema deve ser tratado como uma plataforma operacional com fluxos integrados, e não somente como um painel de requisições. Mudanças num módulo podem alterar a consistência de dados e indicadores em outros.
+
+## 19. Histórico recente que motivou esta revisão
+
+- **25/09/2026:** inclusão do fluxo de divergência/OTIF e dos modais de relato e análise; status de divergência com prioridade visual no painel.
+- **01/10/2026:** correção da animação de destaque no painel para usar snapshot em memória e reduzir conflitos com atualizações Realtime.
+- **01/10/2026:** hidratação dinâmica de produtos no recebimento e histórico para exibir código/descrição oficiais após cadastro, melhoria da pesquisa histórica e inclusão de código do fornecedor na exportação CSV.
+- **01/10/2026:** reformulação do módulo Metas com ciclo oficial de avaliação, metas fixas operacionais e de gestão, filtro por usuário/equipe, metas variáveis e ajuste para evitar percentuais NaN sem produção.
+
+Commits de referência:
+
+- [Fluxo de qualidade OTIF](https://github.com/Eric90johnson/sistema-requisicoes/commit/1201137d5ed8990bc100772b056322d72e34ae99)
+- [Hidratação dinâmica de produtos e histórico](https://github.com/Eric90johnson/sistema-requisicoes/commit/17def99aa64e2d9c0793e5b9efee80e9c2a25983)
+- [Atualização do módulo Metas](https://github.com/Eric90johnson/sistema-requisicoes/commit/b66c13153e6553ca6e4bf28824a0b62be6081d19)
+
+---
+
+**Regra final:** use este arquivo como mapa inicial, mas confirme o código e o schema reais antes de toda mudança relevante. A fonte da verdade para implementação é o código atual e o banco Supabase configurado no ambiente.
