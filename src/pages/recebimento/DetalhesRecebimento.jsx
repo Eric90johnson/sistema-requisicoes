@@ -270,7 +270,6 @@ export default function DetalhesRecebimento({
     handleAtualizarItem(itemId, 'codigoBarras', codigoBarras);
     if (!codigoBarras || codigoBarras.trim() === '') return;
     try {
-      // 🚀 CORREÇÃO DO ERRO 406: Usar maybeSingle() em vez de single()
       const { data, error } = await supabase.from('base_produtos').select('codigo, descricao').eq('codigo_barra', codigoBarras.trim()).maybeSingle();
       if (error) throw error;
       if (data) {
@@ -310,7 +309,6 @@ export default function DetalhesRecebimento({
     if (!nomeFornecedor.trim() || !numeroNF.trim() || !volumes) return exibirPopup('aviso', 'Incompleto', "Preencha Fornecedor, NF e Volumes."); 
     setProcessando(true); 
     try { 
-      // 🚀 SALVA NO BANCO JUNTO COM O HISTÓRICO DE DILUIÇÃO
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
       await supabase.from('recebimento_mercadorias').update({ loja_recebedora: lojaRecebedora, nome_fornecedor: nomeFornecedor, marca: marca, numero_nf: numeroNF, volumes: Number(volumes), numero_pedido: numeroPedido || null, observacoes: observacoes, itens: itens, historico_diluicao: historicoDiluicaoArray }).eq('id', recebimento.id); 
       setIsEditing(false); exibirPopup('sucesso', 'Salvo', 'Atualizado.'); 
@@ -336,20 +334,68 @@ export default function DetalhesRecebimento({
     if (itens.some(i => !i.descricaoFornecedor.trim() || !i.quantidade || !i.validade.trim())) { return exibirPopup('aviso', 'Dados dos Produtos', "Todos os produtos precisam ter Descrição, Validade e Qtd."); }
     setProcessando(true);
     try {
-      const totalItens = itens.reduce((acc, item) => acc + Number(item.quantidade), 0); const upm = tempoDecorrido > 0 ? (totalItens / tempoDecorrido) * 60 : 0; const pts = Math.round(totalItens * Number(upm.toFixed(1)) * 1.5); const metricasFinais = { inicioConferencia: inicioConferencia, id_conferente: meuId, tempoTotalSegundos: tempoDecorrido, totalItensFisicos: totalItens, upm: Number(upm.toFixed(1)), pontosGanhos: pts, responsavel: responsavelRecebedor, finalizadoEm: new Date().toISOString() }; const itensComLote = itens.map((item, index) => ({ ...item, loteInterno: item.loteInterno || `LT-${numeroRelatorio}-${String(index + 1).padStart(2, '0')}` }));
+      const totalItens = itens.reduce((acc, item) => acc + Number(item.quantidade), 0); 
+      const upm = tempoDecorrido > 0 ? (totalItens / tempoDecorrido) * 60 : 0; 
+      const pts = Math.round(totalItens * Number(upm.toFixed(1)) * 1.5); 
+      
+      const metricasFinais = { 
+        inicioConferencia: inicioConferencia, 
+        id_conferente: meuId, 
+        tempoTotalSegundos: tempoDecorrido, 
+        totalItensFisicos: totalItens, 
+        upm: Number(upm.toFixed(1)), 
+        pontosGanhos: pts, 
+        responsavel: responsavelRecebedor, 
+        finalizadoEm: new Date().toISOString() 
+      }; 
+      
+      const itensComLote = itens.map((item, index) => ({ ...item, loteInterno: item.loteInterno || `LT-${numeroRelatorio}-${String(index + 1).padStart(2, '0')}` }));
       const historicoDiluicaoArray = itensComLote.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
-      await supabase.from('recebimento_mercadorias').update({ responsavel_recebedor: responsavelRecebedor, observacoes: observacoes, itens: itensComLote, metricas_recebimento: metricasFinais, historico_diluicao: historicoDiluicaoArray, status: 'Aguardando Precificação' }).eq('id', recebimento.id);
-      setStatus('Aguardando Precificação'); exibirPopup('sucesso', 'Conferência Finalizada! 📦', `A nota aguarda a precificação.`);
-    } catch (error) { exibirPopup('erro', 'Falha', error.message); } finally { setProcessando(false); }
+      
+      // 🚀 ATUALIZAÇÃO GESTÃO: Adicionamos timestamp_cadastro como timestamp base de quando a nota foi liberada para cadastro
+      const metricasAtualizadas = { ...metricasFinais, timestamp_cadastro: Date.now() };
+
+      await supabase.from('recebimento_mercadorias').update({ 
+        responsavel_recebedor: responsavelRecebedor, 
+        observacoes: observacoes, 
+        itens: itensComLote, 
+        metricas_recebimento: metricasAtualizadas, 
+        historico_diluicao: historicoDiluicaoArray, 
+        status: 'Aguardando Precificação' 
+      }).eq('id', recebimento.id);
+      
+      setStatus('Aguardando Precificação'); 
+      exibirPopup('sucesso', 'Conferência Finalizada! 📦', `A nota aguarda a precificação.`);
+    } catch (error) { 
+      exibirPopup('erro', 'Falha', error.message); 
+    } finally { 
+      setProcessando(false); 
+    }
   };
 
   const handleAprovarPrecificacao = async () => {
     setProcessando(true);
     try { 
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
-      await supabase.from('recebimento_mercadorias').update({ status: 'Aguardando Cadastro', itens: itens, historico_diluicao: historicoDiluicaoArray }).eq('id', recebimento.id); 
-      setStatus('Aguardando Cadastro'); exibirPopup('sucesso', 'Precificação Concluída! 💲', `Aguarda o lançamento final.`); 
-    } catch (error) { exibirPopup('erro', 'Erro', error.message); } finally { setProcessando(false); }
+      
+      // 🚀 ATUALIZAÇÃO GESTÃO: Reafirmamos o timestamp de cadastro na precificação
+      const metricasAtualizadas = { ...metricasRecebimento, timestamp_cadastro: Date.now() };
+      
+      await supabase.from('recebimento_mercadorias').update({ 
+        status: 'Aguardando Cadastro', 
+        itens: itens, 
+        historico_diluicao: historicoDiluicaoArray, 
+        metricas_recebimento: metricasAtualizadas 
+      }).eq('id', recebimento.id); 
+      
+      setMetricasRecebimento(metricasAtualizadas);
+      setStatus('Aguardando Cadastro'); 
+      exibirPopup('sucesso', 'Precificação Concluída! 💲', `Aguarda o lançamento final.`); 
+    } catch (error) { 
+      exibirPopup('erro', 'Erro', error.message); 
+    } finally { 
+      setProcessando(false); 
+    }
   };
 
   const handleConcluirCadastro = async () => {
@@ -357,9 +403,25 @@ export default function DetalhesRecebimento({
     setProcessando(true);
     try {
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
-      await supabase.from('recebimento_mercadorias').update({ status: 'Cadastrado', responsavel_cadastro: responsavelCadastro.trim(), itens: itens, historico_diluicao: historicoDiluicaoArray }).eq('id', recebimento.id);
-      setStatus('Cadastrado'); exibirPopup('sucesso', 'Cadastro Finalizado! 🏆', `A nota foi cadastrada com sucesso!`, () => { if (aoVoltar) aoVoltar(); });
-    } catch (error) { exibirPopup('erro', 'Erro', error.message); } finally { setProcessando(false); }
+      
+      // 🚀 ATUALIZAÇÃO GESTÃO: Finaliza o tempo do cadastro do recebimento, injetando o finalizadoEm oficial
+      const metricasAtualizadas = { ...metricasRecebimento, finalizadoEm: new Date().toISOString() };
+
+      await supabase.from('recebimento_mercadorias').update({ 
+        status: 'Cadastrado', 
+        responsavel_cadastro: responsavelCadastro.trim(), 
+        itens: itens, 
+        historico_diluicao: historicoDiluicaoArray, 
+        metricas_recebimento: metricasAtualizadas 
+      }).eq('id', recebimento.id);
+      
+      setStatus('Cadastrado'); 
+      exibirPopup('sucesso', 'Cadastro Finalizado! 🏆', `A nota foi cadastrada com sucesso!`, () => { if (aoVoltar) aoVoltar(); });
+    } catch (error) { 
+      exibirPopup('erro', 'Erro', error.message); 
+    } finally { 
+      setProcessando(false); 
+    }
   };
 
   const handleFinalizarRecebimentoDefinitivo = async () => {

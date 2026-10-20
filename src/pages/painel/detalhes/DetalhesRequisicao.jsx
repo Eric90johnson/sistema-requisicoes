@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import '../../../styles/pages/painel/detalhes/detalhes.css';
 import Romaneio from '../romaneio/Romaneio';
-import { supabase } from '../../../services/supabase'; // 🚀 Conexão injetada para as metas/OTIF
+import { supabase } from '../../../services/supabase'; 
 
 import ObservacoesReq from './ObservacoesReq';
 import EdicaoReq from './EdicaoReq';
@@ -9,7 +9,6 @@ import SeparacaoReq from './SeparacaoReq';
 import EsteiraInterna from './EsteiraInterna';
 import EsteiraExterna from './EsteiraExterna';
 
-// 🚀 Nossos novos módulos isolados de OTIF
 import PopupDivergenciaRecebedor from './PopupDivergenciaRecebedor';
 import PopupAnaliseOrigem from './PopupAnaliseOrigem';
 
@@ -25,7 +24,6 @@ export default function DetalhesRequisicao({
   const [tempoDecorrido, setTempoDecorrido] = useState(0);
   const [cronometroRodando, setCronometroRodando] = useState(false);
 
-  // 🚀 ESTADOS DO MOTOR DE QUALIDADE (OTIF)
   const [divergenciaAtiva, setDivergenciaAtiva] = useState(false);
   const [recebedorAtual, setRecebedorAtual] = useState('');
   const [analiseAtiva, setAnaliseAtiva] = useState(false);
@@ -41,7 +39,6 @@ export default function DetalhesRequisicao({
   
   const fecharPopupCustom = () => setPopupCustom({ ...popupCustom, visivel: false });
 
-  // 🚀 BUSCADOR AUTOMÁTICO DE DIVERGÊNCIA PENDENTE (Para a Loja de Origem)
   useEffect(() => {
     if (req?.status === 'Divergência') {
       const fetchDivergencia = async () => {
@@ -57,7 +54,6 @@ export default function DetalhesRequisicao({
     }
   }, [req?.status, req?.id]);
 
-  // TRAVA DE SEGURANÇA: Garante que req.listaItens é um array antes de usar o .every()
   const isGamificada = req.metricasSeparacao && Array.isArray(req.listaItens) && req.listaItens.length > 0 && req.listaItens.every(i => i.bipContagem === undefined);
   
   const todosBipadosStatus = isGamificada || (Array.isArray(req.listaItens) && req.listaItens.length > 0 && req.listaItens.every(item => {
@@ -132,7 +128,6 @@ export default function DetalhesRequisicao({
 
   const isReposicaoInterna = req.motivo === 'Reposição Interna' || (req.origem && req.destino && req.origem === req.destino);
 
-  // 🚀 LÓGICA DE DIVERGÊNCIA E ANÁLISE
   const handleAbrirDivergencia = (nomeRecebedor) => {
     setRecebedorAtual(nomeRecebedor);
     setDivergenciaAtiva(true);
@@ -152,7 +147,6 @@ export default function DetalhesRequisicao({
       
       if (error) throw error;
       
-      // Crava no histórico a falha de qualidade
       if (aoAtualizarObservacoes) {
         const obsErro = `\n\n[ALERTA DE QUALIDADE] O recebedor ${recebedorAtual} relatou divergências e bloqueou o recebimento. Analisar via Painel de Transferência.`;
         aoAtualizarObservacoes(req.id, obsErro);
@@ -229,6 +223,12 @@ export default function DetalhesRequisicao({
       }
       dadosExtras.numeroRequisicaoExterna = dadosDaEsteira.numReqExterna;
     }
+    
+    // 🚀 INJEÇÃO DE TIMESTAMPS DE GESTÃO PARA O PAINEL DE METAS
+    if (proximoStatus === 'Faturamento') {
+      dadosExtras.timestamp_faturamento = Date.now();
+    }
+    
     if (req.status === 'Saída de produtos' && !isReposicaoInterna) {
       if (!dadosDaEsteira.notaFiscal?.trim()) { 
         exibirPopup('aviso', 'Atenção', 'Por favor, insira o Número da Nota Fiscal de transferência!'); 
@@ -236,6 +236,12 @@ export default function DetalhesRequisicao({
       }
       dadosExtras.notaFiscal = dadosDaEsteira.notaFiscal;
     }
+    
+    // O status real na esteira é 'Transporte', mas equivale à "Saída" final da loja
+    if (proximoStatus === 'Transporte') {
+      dadosExtras.timestamp_saida = Date.now();
+    }
+    // ----------------------------------------------------
     
     aoMudarStatus(req.id, proximoStatus, responsavelDigitado, dadosExtras);
 
@@ -262,7 +268,7 @@ export default function DetalhesRequisicao({
       case 'Transporte': return 'status-enviado'; 
       case 'Recebimento': return 'status-recebido'; 
       case 'Concluída': return 'status-recebido'; 
-      case 'Divergência': return 'status-divergencia'; // 🚀 Nova tag visual para alertas
+      case 'Divergência': return 'status-divergencia'; 
       case 'Cancelada': return 'status-pendente'; 
       default: return 'status-pendente'; 
     }
@@ -338,7 +344,6 @@ export default function DetalhesRequisicao({
           </div>
         )}
 
-        {/* 🚀 CAIXA DE ALERTA PARA A EQUIPE DA ORIGEM RESPONDER À DIVERGÊNCIA */}
         {req.status === 'Divergência' && (
           <div style={{ backgroundColor: '#fdf2f1', border: '2px solid #e74c3c', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
             <h3 style={{ color: '#c0392b', margin: '0 0 10px 0' }}>🚨 ATENÇÃO: DIVERGÊNCIA NO RECEBIMENTO (OTIF REPROVADO)</h3>
@@ -426,7 +431,6 @@ export default function DetalhesRequisicao({
         </div>
       )}
 
-      {/* 🚀 INJEÇÃO DOS MODAIS ISOLADOS */}
       {divergenciaAtiva && (
         <PopupDivergenciaRecebedor 
           req={req} 

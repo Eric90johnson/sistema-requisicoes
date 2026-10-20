@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../services/supabase';
 import '../../../styles/admin/metas/metasEstoque.css'; 
 
+// 🚀 IMPORTAMOS O CALCULADOR GLOBAL PARA UNIFICAR A LÓGICA E EVITAR ERROS!
+import { calcularRanking } from '../../painel/utils/calculadoraRanking';
+
 export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
   const [abaAtiva, setAbaAtiva] = useState('geral');
   const [metas, setMetas] = useState([]);
@@ -24,6 +27,8 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
   const [novaMetaTitulo, setNovaMetaTitulo] = useState('');
   const [novaMetaDesc, setNovaMetaDesc] = useState('');
   const [novaMetaValor, setNovaMetaValor] = useState('');
+
+  const [historicoMetasDb, setHistoricoMetasDb] = useState([]);
 
   // Valores Padrão (Fixas Operacionais + Fixas de Gestão)
   const valoresPadrao = {
@@ -58,6 +63,7 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
   useEffect(() => {
     carregarUsuariosLista();
     carregarMetasE_CalcularReais();
+    carregarHistoricoMetas();
     carregarSaudeOperacao();
     const intervaloSaude = setInterval(carregarSaudeOperacao, 30000);
     return () => clearInterval(intervaloSaude);
@@ -67,6 +73,13 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
     const { data } = await supabase.from('usuarios_sistema').select('nome_completo, encarregado_responsavel').order('nome_completo');
     if (data) {
       setUsuariosLista(data);
+    }
+  };
+
+  const carregarHistoricoMetas = async () => {
+    const { data, error } = await supabase.from('historico_metas').select('*').order('data_alteracao', { ascending: false }).limit(10);
+    if (!error && data) {
+      setHistoricoMetasDb(data);
     }
   };
 
@@ -114,6 +127,7 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
     setDataFim('');
     setUsuarioFiltro('');
     calcularMetricasReais(valoresEditados, periodoInicio, periodoFim, '');
+    setAbaAtiva('geral'); // 🚀 Volta para a aba geral para ver o resultado limpo
   };
 
   const calcularMetricasReais = async (metasConfig, dInicio, dFim, uFiltro = '') => {
@@ -122,6 +136,7 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
       const metaUpm = metasConfig.upm_minima || 8;
       const metaRecMin = metasConfig.recebimento_total || 60;
 
+      // 1. Identificar quem pertence à equipe filtrada
       let usuariosValidos = [];
       if (uFiltro) {
         usuariosValidos.push(uFiltro.trim().toLowerCase());
@@ -132,18 +147,58 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
         });
       }
 
+      // ==========================================
+      // BUSCA OTIMIZADA DE REQUISIÇÕES E RECEBIMENTOS
+      // ==========================================
       let queryReqs = supabase.from('requisicoes')
-        .select('status, timestamp_criacao, metricas_separacao, historico')
-        .neq('status', 'Cancelada');
+        .select('id, status, motivo, origem, destino, timestamp_criacao, metricas_separacao, historico, itens, listaItens')
+        .neq('status', 'Cancelada')
+        .not('metricas_separacao', 'is', null);
 
       if (dInicio) queryReqs = queryReqs.gte('timestamp_criacao', new Date(`${dInicio}T00:00:00`).getTime());
       if (dFim) queryReqs = queryReqs.lte('timestamp_criacao', new Date(`${dFim}T23:59:59`).getTime());
 
       const { data: reqs } = await queryReqs;
 
+      let queryRecs = supabase.from('recebimento_mercadorias')
+        .select('id, status, numero_relatorio, metricas_recebimento, responsavel_cadastro, responsavel_recebedor')
+        .eq('status', 'Concluída'); 
+
+      if (dInicio) queryRecs = queryRecs.gte('data_criacao', `${dInicio}T00:00:00`);
+      if (dFim) queryRecs = queryRecs.lte('data_criacao', `${dFim}T23:59:59`);
+
+      const { data: recs } = await queryRecs;
+
+
+      // ==========================================
+      // 🚀 1. DELEGAR O CÁLCULO DE RANKING PARA A CALCULADORA GLOBAL!
+      // ==========================================
+      const reqsValidasRanking = reqs || [];
+      const recsValidosRanking = recs || [];
+      
+      const rankingCompletoGlobal = calcularRanking(reqsValidasRanking, recsValidosRanking, dInicio, dFim, uFiltro, usuariosLista);
+      
+      setRankingGeralReal(rankingCompletoGlobal);
+
+      const upmMedia = rankingCompletoGlobal.length > 0 
+        ? (rankingCompletoGlobal.reduce((acc, curr) => acc + curr.upm, 0) / rankingCompletoGlobal.length) 
+        : 0;
+      
+      let prodPerc = 0;
+      if (rankingCompletoGlobal.length > 0) {
+        prodPerc = metaUpm > 0 ? (upmMedia / metaUpm) * 100 : 100;
+      }
+      if (isNaN(prodPerc)) prodPerc = 0;
+
+
+      // ==========================================
+      // 🚀 2. PROCESSAR MÉTRICAS DE SLA E GESTÃO (OPERACIONAL)
+      // ==========================================
       let reqsNoPrazo = 0;
       let totalReqsValidas = 0;
-      let mapSeparadores = {};
+      
+      let fatNoPrazo = 0; let totalFat = 0;
+      let saiNoPrazo = 0; let totalSai = 0;
 
       if (reqs) {
         reqs.forEach(r => {
@@ -155,19 +210,12 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
           const nomeNormalizado = nomeResponsavel ? nomeResponsavel.toLowerCase() : '';
 
           let atuouNestaNota = true;
-          if (usuariosValidos.length > 0) {
-            const fat = historico['Faturamento']?.trim().toLowerCase();
-            const sai = historico['Saída de produtos']?.trim().toLowerCase();
-            const con = historico['Concluída']?.trim().toLowerCase();
-            atuouNestaNota = usuariosValidos.includes(nomeNormalizado) || usuariosValidos.includes(fat) || usuariosValidos.includes(sai) || usuariosValidos.includes(con);
-          }
+          const fatName = historico['Faturamento']?.trim().toLowerCase();
+          const saiName = historico['Saída de produtos']?.trim().toLowerCase();
+          const conName = historico['Concluída']?.trim().toLowerCase();
 
-          if (nomeResponsavel && nomeResponsavel.length > 0) {
-            if (!mapSeparadores[nomeResponsavel]) {
-              mapSeparadores[nomeResponsavel] = { nome: nomeResponsavel, totalItens: 0, tempoTotalSegundos: 0 };
-            }
-            mapSeparadores[nomeResponsavel].totalItens += (Number(metricas.totalItensFisicos) || 0);
-            mapSeparadores[nomeResponsavel].tempoTotalSegundos += (Number(metricas.tempoTotalSegundos) || 0);
+          if (usuariosValidos.length > 0) {
+            atuouNestaNota = usuariosValidos.includes(nomeNormalizado) || usuariosValidos.includes(fatName) || usuariosValidos.includes(saiName) || usuariosValidos.includes(conName);
           }
 
           if (atuouNestaNota && metricas.finalizadoEm && r.timestamp_criacao) {
@@ -177,36 +225,34 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
             const diffMinutos = (fim - inicio) / 60000;
             if (diffMinutos <= metaSlaTotalMin) reqsNoPrazo++;
           }
+
+          const isFatUser = uFiltro ? usuariosValidos.includes(fatName) : true;
+          if (isFatUser && historico.timestamp_faturamento && metricas.finalizadoEm) {
+            totalFat++;
+            const fimSeparacao = new Date(metricas.finalizadoEm).getTime();
+            const tempoFaturamento = Number(historico.timestamp_faturamento);
+            if ((tempoFaturamento - fimSeparacao) / 60000 <= (metasConfig.sla_faturamento || 30)) fatNoPrazo++;
+          }
+
+          const isSaiUser = uFiltro ? usuariosValidos.includes(saiName) : true;
+          if (isSaiUser && historico.timestamp_saida) {
+            const tempoBaseSaida = historico.timestamp_faturamento ? Number(historico.timestamp_faturamento) : (metricas.finalizadoEm ? new Date(metricas.finalizadoEm).getTime() : 0);
+            if (tempoBaseSaida > 0) {
+              totalSai++;
+              const tempoSaida = Number(historico.timestamp_saida);
+              if ((tempoSaida - tempoBaseSaida) / 60000 <= (metasConfig.sla_saida || 30)) saiNoPrazo++;
+            }
+          }
         });
       }
 
-      const rankingCalculado = Object.values(mapSeparadores).map(colab => {
-        const upm = colab.tempoTotalSegundos > 0 ? (colab.totalItens / colab.tempoTotalSegundos) * 60 : 0;
-        return { ...colab, upm: Number(upm.toFixed(1)) };
-      }).sort((a, b) => b.upm - a.upm);
-
-      setRankingGeralReal(rankingCalculado);
-
-      let rankingParaMedia = rankingCalculado;
-      if (usuariosValidos.length > 0) {
-        rankingParaMedia = rankingCalculado.filter(c => usuariosValidos.includes(c.nome.toLowerCase()));
-      }
-
-      const upmMedia = rankingParaMedia.length > 0 
-        ? (rankingParaMedia.reduce((acc, curr) => acc + curr.upm, 0) / rankingParaMedia.length) 
-        : 0;
-      
-      // 🚀 CORREÇÃO 1: Evita "falso 100%" se não há nenhuma produtividade
-      let prodPerc = 0;
-      if (rankingParaMedia.length > 0) {
-        prodPerc = metaUpm > 0 ? (upmMedia / metaUpm) * 100 : 100;
-      }
-      if (isNaN(prodPerc)) prodPerc = 0;
-
-      // 🚀 CORREÇÃO 2: Se totalReqsValidas for 0, SLA foi 0 (não trabalhou)
       let slaPerc = totalReqsValidas > 0 ? (reqsNoPrazo / totalReqsValidas) * 100 : 0;
       if (isNaN(slaPerc)) slaPerc = 0;
 
+
+      // ==========================================
+      // 🚀 3. QUALIDADE (OTIF)
+      // ==========================================
       let queryDivs = supabase.from('registro_divergencias')
         .select('*', { count: 'exact', head: true })
         .eq('analise_procedente', true);
@@ -218,29 +264,26 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
       const totalErros = divergenciasConferidas || 0;
       const taxaErro = totalReqsValidas > 0 ? (totalErros / totalReqsValidas) * 100 : 0;
       
-      // 🚀 CORREÇÃO 3: Qualidade zera se não tem nenhuma validação
       const qualidadePerc = totalReqsValidas > 0 ? Math.max(0, 100 - taxaErro) : 0;
 
-      let queryRecs = supabase.from('recebimento_mercadorias')
-        .select('metricas_recebimento, responsavel_cadastro, responsavel_recebedor')
-        .eq('status', 'Concluída');
 
-      if (dInicio) queryRecs = queryRecs.gte('data_criacao', `${dInicio}T00:00:00`);
-      if (dFim) queryRecs = queryRecs.lte('data_criacao', `${dFim}T23:59:59`);
-
-      const { data: recs } = await queryRecs;
-
+      // ==========================================
+      // 🚀 4. TEMPO DE RECEBIMENTO & CADASTRO
+      // ==========================================
       let recsNoPrazo = 0;
       let totalRecs = 0;
       let recTempoMedioMin = 0;
 
+      let cadNoPrazo = 0; let totalCad = 0;
+
       if (recs) {
         let tempoTotalRec = 0;
         recs.forEach(r => {
+          const respCad = r.responsavel_cadastro?.trim().toLowerCase();
+          const respRec = r.responsavel_recebedor?.trim().toLowerCase();
+          
           let atuouNoRecebimento = true;
           if (usuariosValidos.length > 0) {
-            const respCad = r.responsavel_cadastro?.trim().toLowerCase();
-            const respRec = r.responsavel_recebedor?.trim().toLowerCase();
             atuouNoRecebimento = usuariosValidos.includes(respCad) || usuariosValidos.includes(respRec);
           }
 
@@ -250,18 +293,29 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
             tempoTotalRec += min;
             if (min <= metaRecMin) recsNoPrazo++;
           }
+
+          // SLA Cadastro (Gestão)
+          const isCadUser = uFiltro ? usuariosValidos.includes(respCad) : true;
+          if (isCadUser && r.metricas_recebimento?.timestamp_cadastro && r.metricas_recebimento?.finalizadoEm) {
+            totalCad++;
+            const fimConferencia = new Date(r.metricas_recebimento.finalizadoEm).getTime();
+            const tempoCadastro = Number(r.metricas_recebimento.timestamp_cadastro);
+            if ((tempoCadastro - fimConferencia) / 60000 <= (metasConfig.tempo_cadastro || 120)) cadNoPrazo++;
+          }
         });
         if (totalRecs > 0) recTempoMedioMin = tempoTotalRec / totalRecs;
       }
       
-      // 🚀 CORREÇÃO 4: Operação zera se não houve trabalho
       let operacaoPerc = totalRecs > 0 ? (recsNoPrazo / totalRecs) * 100 : 0;
       if (isNaN(operacaoPerc)) operacaoPerc = 0;
 
-      // 🚀 CORREÇÃO 5: Metas de Gestão também precisam avaliar se houve volume para ganhar nota 100
-      const gestaoFatPerc = totalReqsValidas > 0 ? 100 : 0; 
-      const gestaoSaiPerc = totalReqsValidas > 0 ? 100 : 0; 
-      const gestaoCadPerc = totalRecs > 0 ? 100 : 0; 
+
+      // ==========================================
+      // 🚀 5. CÁLCULOS FINAIS
+      // ==========================================
+      const gestaoFatPerc = totalFat > 0 ? Math.round((fatNoPrazo / totalFat) * 100) : (totalReqsValidas > 0 ? 100 : 0);
+      const gestaoSaiPerc = totalSai > 0 ? Math.round((saiNoPrazo / totalSai) * 100) : (totalReqsValidas > 0 ? 100 : 0);
+      const gestaoCadPerc = totalCad > 0 ? Math.round((cadNoPrazo / totalCad) * 100) : (totalRecs > 0 ? 100 : 0);
 
       let geralPerc = (
         Math.min(100, prodPerc) + Math.min(100, slaPerc) + qualidadePerc + Math.min(100, operacaoPerc) +
@@ -352,21 +406,51 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
   const handleSalvarMetas = async () => {
     setSalvando(true);
     try {
-      const updates = Object.keys(valoresEditados).map(chave => ({
-        categoria: determinarCategoria(chave),
-        indicador: chave,
-        nome_exibicao: formatarNomeExibicao(chave),
-        valor_meta: valoresEditados[chave],
-        atualizado_por: usuarioLogado?.nome_completo
-      }));
+      const updates = [];
+      const historicoLogs = [];
 
-      const { error } = await supabase.from('metas_operacionais').upsert(updates, { onConflict: 'indicador' });
-      if (error) throw error;
+      Object.keys(valoresEditados).forEach(chave => {
+        const valorNovo = valoresEditados[chave];
+        const metaOriginal = metas.find(m => m.indicador === chave);
+        const valorAntigo = metaOriginal ? metaOriginal.valor_meta : valoresPadrao[chave];
 
-      alert('Metas fixas atualizadas com sucesso!');
+        if (Number(valorNovo) !== Number(valorAntigo)) {
+          const categoria = determinarCategoria(chave);
+          const nomeExibicao = formatarNomeExibicao(chave);
+
+          updates.push({
+            categoria,
+            indicador: chave,
+            nome_exibicao: nomeExibicao,
+            valor_meta: valorNovo,
+            atualizado_por: usuarioLogado?.nome_completo
+          });
+
+          historicoLogs.push({
+            categoria,
+            indicador: nomeExibicao,
+            valor_antigo: valorAntigo,
+            valor_novo: valorNovo,
+            unidade: ['upm_minima'].includes(chave) ? 'UPM' : (['erro_separacao', 'divergencia_conferencia', 'retrabalho', 'sla_percentual'].includes(chave) ? '%' : 'min'),
+            alterado_por: usuarioLogado?.nome_completo || 'Sistema'
+          });
+        }
+      });
+
+      if (updates.length > 0) {
+        const { error } = await supabase.from('metas_operacionais').upsert(updates, { onConflict: 'indicador' });
+        if (error) throw error;
+
+        if (historicoLogs.length > 0) {
+          await supabase.from('historico_metas').insert(historicoLogs);
+        }
+      }
+
+      alert('Metas atualizadas e salvas no histórico com sucesso!');
       carregarMetasE_CalcularReais();
+      carregarHistoricoMetas(); 
     } catch (error) {
-      alert('Erro ao salvar as metas no banco de dados.');
+      alert('Erro ao salvar as metas no banco de dados. Você já criou a tabela historico_metas?');
     } finally {
       setSalvando(false);
     }
@@ -701,7 +785,7 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
           <div className="painel-card" style={{ marginBottom: '30px', borderLeft: '4px solid #3b82f6', padding: '20px' }}>
             <div className="card-header" style={{ marginBottom: '15px' }}>
               <h3 style={{ margin: 0, color: '#1e293b' }}>📅 Filtros de Visão e Período Oficial</h3>
-              <span className="secao-sub">Defina o ciclo de avaliação oficial (que salva no banco) ou aplique um filtro temporário de equipe para a aba de Visão Geral.</span>
+              <span className="secao-sub">Defina o ciclo de avaliação oficial (que salva no banco) ou aplique um filtro temporário de equipe.</span>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '15px', flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: '20px', marginBottom: '20px' }}>
@@ -722,7 +806,7 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
               </button>
             </div>
 
-            {/* FILTROS LOCAIS (Temporários para analisar a operação) */}
+            {/* 🚀 FILTROS LOCAIS MOVIDOS EXCLUSIVAMENTE PARA CÁ */}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '15px', flexWrap: 'wrap' }}>
               <div className="input-row" style={{ flex: '1 1 200px' }}>
                 <label>👤 Analisar Desempenho de Equipe (Liderança):</label>
@@ -901,18 +985,28 @@ export default function MetasEstoque({ aoVoltar, usuarioLogado }) {
           <div className="footer-grid" style={{ marginTop: '30px' }}>
             <div className="painel-card" style={{ flex: 2 }}>
               <div className="card-header">
-                <h4>⚙️ Histórico de Metas</h4>
-                <span>Acompanhe as alterações e evolução das metas ao longo do tempo. (Módulo Fase 2)</span>
+                <h4>⚙️ Histórico de Alterações de Metas</h4>
+                <span>Auditoria de ajustes feitos nos indicadores de operação e gestão.</span>
               </div>
               <table className="tabela-historico-metas">
                 <thead>
-                  <tr><th>Data</th><th>Categoria</th><th>Indicador</th><th>Valor</th><th>Unidade</th><th>Alterado por</th></tr>
+                  <tr><th>Data</th><th>Categoria</th><th>Indicador</th><th>Alteração</th><th>Unidade</th><th>Alterado por</th></tr>
                 </thead>
                 <tbody>
-                  <tr><td>01/09/2026</td><td>Produtividade</td><td>UPM mínima</td><td>8.00</td><td>UPM</td><td>Admin</td></tr>
-                  <tr><td>01/09/2026</td><td>Qualidade</td><td>Erro de separação</td><td>1.00</td><td>%</td><td>Admin</td></tr>
-                  <tr><td>15/08/2026</td><td>SLA</td><td>Tempo total da requisição</td><td>20.00</td><td>min</td><td>Admin</td></tr>
-                  <tr><td>01/08/2026</td><td>Operação</td><td>Reposição (total)</td><td>30.00</td><td>min</td><td>Admin</td></tr>
+                  {historicoMetasDb.length > 0 ? (
+                    historicoMetasDb.map(h => (
+                      <tr key={h.id}>
+                        <td>{new Date(h.data_alteracao).toLocaleDateString('pt-BR')}</td>
+                        <td>{h.categoria}</td>
+                        <td>{h.indicador}</td>
+                        <td>{h.valor_antigo} ➔ <strong style={{color: '#2980b9'}}>{h.valor_novo}</strong></td>
+                        <td>{h.unidade}</td>
+                        <td>{h.alterado_por}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr><td colSpan="6" style={{textAlign: 'center', padding: '20px', color: '#95a5a6'}}>Nenhum histórico de alteração encontrado no banco de dados.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

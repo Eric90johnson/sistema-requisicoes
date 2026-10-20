@@ -31,6 +31,13 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
   const ultimoBipTexto = useRef("");
   const pedidosBipAntigoRef = useRef({});
 
+  // 🚀 NOVO ESTADO: Controle da aba e lista de leitura
+  const isMobile = window.innerWidth <= 768;
+  const [modoLeitura, setModoLeitura] = useState(isMobile ? 'camera' : 'laser');
+  const bufferLeitor = useRef("");
+  const timeoutLeitor = useRef(null);
+  const [listaCodigosLidos, setListaCodigosLidos] = useState([]);
+
   const exibirCodigoMatriz = req.origem === 'Conjunto Ceará';
 
   const todosBipados = itens.length > 0 && itens.every(item => {
@@ -171,11 +178,14 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     }
   };
 
+  // ==============================================================
+  // 📸 LÓGICA DA CÂMERA DO CELULAR (SeparacaoReq)
+  // ==============================================================
   useEffect(() => {
     let scanner = null;
     let isComponentMounted = true;
 
-    if (itemCameraAtiva !== null && !isPausado) { 
+    if (itemCameraAtiva !== null && !isPausado && modoLeitura === 'camera') { 
       setTimeout(() => {
         if (!isComponentMounted) return;
         scanner = new Html5Qrcode('leitor-camera-modal', {
@@ -195,7 +205,7 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
         ).catch(err => {
           console.error("Erro ao iniciar câmera:", err);
           exibirPopup('erro', 'Erro de Câmera', 'Não foi possível iniciar a câmera. Verifique as permissões.');
-          setItemCameraAtiva(null);
+          setModoLeitura('laser');
         });
       }, 150);
     }
@@ -204,7 +214,47 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
       isComponentMounted = false;
       if (scanner) { scanner.stop().then(() => { scanner.clear(); }).catch(err => console.error(err)); }
     };
-  }, [itemCameraAtiva, isPausado]); 
+  }, [itemCameraAtiva, isPausado, modoLeitura]); 
+
+  // ==============================================================
+  // 🔫 LÓGICA DO LEITOR A LASER / BLUETOOTH (Listener Global)
+  // ==============================================================
+  useEffect(() => {
+    if (itemCameraAtiva === null || isPausado || modoLeitura !== 'laser') return;
+
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const codigoLido = bufferLeitor.current.trim();
+        bufferLeitor.current = ""; 
+
+        if (codigoLido.length > 2) {
+          const agora = Date.now();
+          if (codigoLido === ultimoBipTexto.current && (agora - ultimoBipTempo.current < 1000)) return; 
+          
+          ultimoBipTexto.current = codigoLido;
+          ultimoBipTempo.current = agora;
+          
+          processarBipagem(itemCameraAtiva, codigoLido);
+        }
+        return;
+      }
+
+      if (e.key.length === 1 && /^[a-zA-Z0-9-]$/.test(e.key)) {
+        bufferLeitor.current += e.key;
+        if (timeoutLeitor.current) clearTimeout(timeoutLeitor.current);
+        timeoutLeitor.current = setTimeout(() => { bufferLeitor.current = ""; }, 100); 
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (timeoutLeitor.current) clearTimeout(timeoutLeitor.current);
+    };
+  }, [itemCameraAtiva, isPausado, modoLeitura, itensRef]);
 
   const processarBipagem = (index, decodedText) => {
     if (!decodedText || !decodedText.trim() || isPausado) return;
@@ -232,12 +282,16 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
       const novosItens = [...itensAtuais];
       novosItens[index] = { ...itemAtual, bipContagem: 1, bipReferencia: decodedText };
       aoAtualizarItens(req.id, novosItens); 
+      // 🚀 Atualiza a lista visual de códigos
+      setListaCodigosLidos(prev => [decodedText, ...prev]);
     } else {
       if (refBipada === decodedText) {
         tocarBipSucesso();
         const novosItens = [...itensAtuais];
         novosItens[index] = { ...itemAtual, bipContagem: qtdBipada + 1 };
         aoAtualizarItens(req.id, novosItens); 
+        // 🚀 Atualiza a lista visual de códigos
+        setListaCodigosLidos(prev => [decodedText, ...prev]);
       } else {
         tocarBipErro();
         exibirPopup('erro', 'Produto Incorreto!', `Você escaneou o código: ${decodedText}\nMas a referência esperada é: ${refBipada}`);
@@ -252,6 +306,7 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
         novosItens[index] = { ...novosItens[index], bipContagem: 0, bipReferencia: null };
         aoAtualizarItens(req.id, novosItens); 
         ultimoBipTexto.current = ""; 
+        setListaCodigosLidos([]); // 🚀 Limpa a lista visual também
         fecharPopupCustom();
       }, () => fecharPopupCustom()
     );
@@ -387,8 +442,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
               const estaExpandido = linhaExpandida === index;
               const statusBip = isEncarregado ? 'aprovado' : pedidosBip[item.cod];
 
-              // 🚀 NOVO: Busca de Código de Barras retroativa! Se o item não tiver o código salvo, o sistema 
-              // busca automaticamente na baseProdutos, garantindo que as notas antigas também funcionem.
               const produtoCatalogo = baseProdutos ? baseProdutos.find(p => String(p.codigo) === String(item.cod)) : null;
               const codigoBarrasExibicao = item.codigoBarra || item.codigo_barra || item.codigoBarras || produtoCatalogo?.codigoBarra || produtoCatalogo?.codigo_barra || '-';
 
@@ -405,7 +458,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
                     )}
 
                     <td className="td-tabela-itens"><strong>{item.cod}</strong></td>
-                    {/* 🚀 AQUI UTILIZAMOS O CÓDIGO DE BARRAS INTELIGENTE */}
                     <td className="td-tabela-itens">{codigoBarrasExibicao}</td>
                     <td className="td-tabela-itens">{item.descricao}</td>
                     <td className={`td-tabela-itens td-tabela-itens-centro ${completo ? 'texto-verde-sucesso' : ''}`}>
@@ -432,11 +484,11 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
                               
                               {req.status === 'Em Separação' && !req.metricasSeparacao && !completo && (
                                 <div className="acoes-linha-expandida">
-                                  <button className="btn-acao-expandida btn-acao-camera" onClick={() => setItemCameraAtiva(index)}>📷 Bipar Código</button>
+                                  <button className="btn-acao-expandida btn-acao-camera" onClick={() => { setItemCameraAtiva(index); setListaCodigosLidos([]); }}>📷 Bipar Código</button>
                                   {statusBip === 'aprovado' ? (
                                     <div className="container-bip-manual">
                                       <input type="text" className="input-bip-manual" placeholder="Digite o cód. barras..." value={codigoManual[item.cod] || ''} onChange={(e) => setCodigoManual({...codigoManual, [item.cod]: e.target.value})} />
-                                      <button className="btn-confirmar-bip-manual" onClick={() => { processarBipagem(index, codigoManual[item.cod]); setCodigoManual({...codigoManual, [item.cod]: ''}); }}>Validar</button>
+                                      <button className="btn-confirmar-bip-manual" onClick={() => { processarBipagem(index, codigoManual[item.cod]); setListaCodigosLidos(prev => [codigoManual[item.cod], ...prev]); setCodigoManual({...codigoManual, [item.cod]: ''}); }}>Validar</button>
                                     </div>
                                   ) : statusBip === 'pendente' ? (
                                     <span className="badge-status-bip pendente">⏳ Aguardando Encarregado...</span>
@@ -495,19 +547,72 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
 
         return (
           <div className="camera-modal-overlay">
-            <div className="camera-modal-content">
-              <div className="camera-modal-header">
-                Lendo: {itemAtivo?.cod} {itemAtivo?.codigoMatriz ? `(Cód. Araturi: ${itemAtivo.codigoMatriz})` : ''} - {itemAtivo?.descricao}
+            <div className="camera-modal-content" style={{ maxWidth: '450px', width: '100%', borderRadius: '12px', overflow: 'hidden', padding: 0 }}>
+              
+              <div className="camera-modal-header" style={{ padding: '15px', backgroundColor: '#2c3e50', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1rem' }}>Bipar: {itemAtivo?.cod} {itemAtivo?.codigoMatriz ? `(Araturi: ${itemAtivo.codigoMatriz})` : ''}</h3>
+                  <span style={{ fontSize: '0.85rem', color: '#bdc3c7' }}>{itemAtivo?.descricao}</span>
+                </div>
+                <button onClick={() => setItemCameraAtiva(null)} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.4rem', cursor: 'pointer' }}>✖</button>
               </div>
-              <div className="camera-modal-body">
-                <div id="leitor-camera-modal" className="camera-box-modal"></div>
-                <div className="info-bipagem">
-                  <div className="progresso-texto">Bipados: {contagemBipada} de {metaCamera}</div>
-                  <div className="barra-progresso-bg"><div className="barra-progresso-fill" style={{ width: `${porcentagemAtiva}%` }}></div></div>
-                  {itemAtivo?.bipReferencia && (<span className="codigo-referencia">Cód. Referência: <strong>{itemAtivo.bipReferencia}</strong></span>)}
-                  <div className="botoes-camera">
-                    <button className="btn-resetar-bip" onClick={() => resetarBipagem(itemCameraAtiva)}>Zerar Leitura</button>
-                    <button className="btn-fechar-camera" onClick={() => setItemCameraAtiva(null)}>Fechar Câmera</button>
+
+              {/* 🚀 ABAS DE SELEÇÃO: CÂMERA vs LASER */}
+              <div style={{ display: 'flex', borderBottom: '1px solid #bdc3c7', backgroundColor: '#f8f9fa' }}>
+                <button 
+                  type="button" onClick={() => setModoLeitura('laser')}
+                  style={{ flex: 1, padding: '12px', border: 'none', background: modoLeitura === 'laser' ? 'white' : 'transparent', fontWeight: 'bold', color: modoLeitura === 'laser' ? '#2980b9' : '#7f8c8d', borderBottom: modoLeitura === 'laser' ? '3px solid #2980b9' : '3px solid transparent', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  🔫 Leitor a Laser
+                </button>
+                <button 
+                  type="button" onClick={() => setModoLeitura('camera')}
+                  style={{ flex: 1, padding: '12px', border: 'none', background: modoLeitura === 'camera' ? 'white' : 'transparent', fontWeight: 'bold', color: modoLeitura === 'camera' ? '#2980b9' : '#7f8c8d', borderBottom: modoLeitura === 'camera' ? '3px solid #2980b9' : '3px solid transparent', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  📷 Câmera do Celular
+                </button>
+              </div>
+
+              <div className="camera-modal-body" style={{ padding: '20px', backgroundColor: 'white' }}>
+                
+                {/* MODO CÂMERA */}
+                {modoLeitura === 'camera' && (
+                  <>
+                    <div id="leitor-camera-modal" className="camera-box-modal" style={{ width: '100%', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000', minHeight: '220px', border: '2px solid #bdc3c7' }}></div>
+                    <p style={{ marginTop: '10px', fontSize: '0.9rem', color: '#7f8c8d', textAlign: 'center' }}>Aponte a câmera para os traços do código de barras.</p>
+                  </>
+                )}
+
+                {/* MODO LASER BLUETOOTH */}
+                {modoLeitura === 'laser' && (
+                  <div style={{ width: '100%', minHeight: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f2f6', borderRadius: '8px', border: '2px dashed #95a5a6', padding: '20px' }}>
+                    {listaCodigosLidos.length > 0 ? (
+                      <div style={{ width: '100%', maxHeight: '180px', overflowY: 'auto', textAlign: 'left' }}>
+                        <p style={{ margin: '0 0 10px 0', color: '#7f8c8d', fontSize: '0.9rem', fontWeight: 'bold', borderBottom: '1px solid #bdc3c7', paddingBottom: '5px' }}>Últimos códigos lidos:</p>
+                        {listaCodigosLidos.map((codigo, idx) => (
+                          <div key={idx} style={{ padding: '5px 0', color: '#2c3e50', fontSize: '1.1rem', borderBottom: '1px solid #ecf0f1', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#27ae60' }}>✔️</span> {codigo}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: '4rem', marginBottom: '10px' }}>🔫</span>
+                        <h4 style={{ color: '#2c3e50', margin: '0 0 10px 0', fontSize: '1.2rem', textAlign: 'center' }}>Aguardando Leitor Bluetooth...</h4>
+                        <p style={{ color: '#7f8c8d', fontSize: '0.95rem', margin: 0, lineHeight: '1.4', textAlign: 'center' }}>Não é necessário clicar em nada.<br/>Apenas aponte o leitor e aperte o gatilho.</p>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="info-bipagem" style={{ marginTop: '20px' }}>
+                  <div className="progresso-texto" style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2c3e50' }}>Bipados: <span style={{ color: '#27ae60' }}>{contagemBipada}</span> de {metaCamera}</div>
+                  <div className="barra-progresso-bg" style={{ marginTop: '10px', height: '10px', backgroundColor: '#ecf0f1', borderRadius: '5px', overflow: 'hidden' }}><div className="barra-progresso-fill" style={{ width: `${porcentagemAtiva}%`, backgroundColor: '#27ae60', height: '100%', transition: 'width 0.3s ease' }}></div></div>
+                  {itemAtivo?.bipReferencia && (<span className="codigo-referencia" style={{ display: 'block', marginTop: '10px', fontSize: '0.85rem', color: '#7f8c8d' }}>Cód. Referência: <strong>{itemAtivo.bipReferencia}</strong></span>)}
+                  
+                  <div className="botoes-camera" style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                    <button className="btn-resetar-bip" onClick={() => resetarBipagem(itemCameraAtiva)} style={{ flex: 1, padding: '12px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>Zerar Leitura</button>
+                    <button className="btn-fechar-camera" onClick={() => setItemCameraAtiva(null)} style={{ flex: 1, padding: '12px', backgroundColor: '#95a5a6', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>Fechar</button>
                   </div>
                 </div>
               </div>
