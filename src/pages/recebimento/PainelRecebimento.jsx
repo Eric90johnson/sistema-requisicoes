@@ -1,14 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import '../../styles/pages/painel/painel.css';
 import '../../styles/pages/painel/ranking/ranking.css';
 import { calcularRanking } from '../painel/utils/calculadoraRanking';
 import { useRankingData } from '../painel/hooks/useRankingData'; 
+import { supabase } from '../../services/supabase'; // 🚀 Adicionado para a busca dinâmica
 
 // 🚀 ADICIONADAS AS PROPS DO CARRINHO (itensPreRequisicao, aoIrParaPreRequisicao)
 export default function PainelRecebimento({ recebimentos = [], requisicoes = [], aoClicarNovoRecebimento, aoAbrirDetalhesRecebimento, usuarioLogado, itensPreRequisicao = [], aoIrParaPreRequisicao }) {
   
   // ==========================================
-  // ESTADOS DO RANKING
+  // ESTADOS DO RANKING E HIDRATAÇÃO
   // ==========================================
   const [mostrarRanking, setMostrarRanking] = useState(false);
   const [dataInicioRanking, setDataInicioRanking] = useState('');
@@ -16,6 +17,9 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   const [colaboradorExpandido, setColaboradorExpandido] = useState(null);
   const [mostrarAvisoData, setMostrarAvisoData] = useState(false); 
   const [mostrarModalAcessoNegado, setMostrarModalAcessoNegado] = useState(false);
+
+  // 🚀 NOVO ESTADO: Guarda os recebimentos já "hidratados" (atualizados com dados novos da base de produtos)
+  const [recebimentosHidratados, setRecebimentosHidratados] = useState([]);
 
   // ==========================================
   // ESTADOS DOS FILTROS (MIGRADOS DO PAINEL PRINCIPAL)
@@ -32,6 +36,79 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
     rankingCarregado,
     buscarDadosRankingCompleto
   } = useRankingData();
+
+  // 🚀 HIDRATAÇÃO DINÂMICA: Sempre que a prop `recebimentos` mudar, tentamos buscar a descrição real
+  // para os itens que estão com 'NOVO CADASTRO' ou '-'
+  useEffect(() => {
+    const hidratarRecebimentos = async () => {
+      // Cria uma cópia profunda (deep copy) para não mutar a prop original que veio do App.jsx
+      const recsAtualizados = JSON.parse(JSON.stringify(recebimentos));
+
+      // Extrai todos os códigos de barras que precisam ser consultados no banco
+      const codigosParaBuscar = new Set();
+      recsAtualizados.forEach(rec => {
+        if (rec.itens && rec.itens.length > 0) {
+          rec.itens.forEach(item => {
+            const codBarra = item.codigoBarra || item.codigo_barra || item.codigoBarras;
+            if (codBarra && (!item.codigoSistema || item.codigoSistema === '-' || item.descricaoFornecedor === 'NOVO CADASTRO')) {
+              codigosParaBuscar.add(codBarra.trim());
+            }
+          });
+        }
+      });
+
+      // Se achou algum código precisando de atualização
+      if (codigosParaBuscar.size > 0) {
+        const codigosArray = Array.from(codigosParaBuscar);
+        try {
+          const { data } = await supabase
+            .from('base_produtos')
+            .select('codigo, codigo_barra, descricao')
+            .in('codigo_barra', codigosArray);
+
+          if (data && data.length > 0) {
+            // Cria um dicionário para busca rápida: { "789123": { codigo: "12", descricao: "Produto X" } }
+            const dicionarioProdutos = {};
+            data.forEach(prod => {
+              if (prod.codigo_barra) {
+                dicionarioProdutos[prod.codigo_barra.trim()] = prod;
+              }
+            });
+
+            // Percorre a cópia dos recebimentos e injeta o nome e o código real
+            recsAtualizados.forEach(rec => {
+              if (rec.itens) {
+                rec.itens = rec.itens.map(item => {
+                  const codBarra = item.codigoBarra || item.codigo_barra || item.codigoBarras;
+                  if (codBarra) {
+                    const infoBanco = dicionarioProdutos[codBarra.trim()];
+                    if (infoBanco) {
+                      return {
+                        ...item,
+                        codigoSistema: infoBanco.codigo,
+                        descricaoFornecedor: infoBanco.descricao
+                      };
+                    }
+                  }
+                  return item;
+                });
+              }
+            });
+          }
+        } catch (error) {
+          console.error("Erro ao hidratar recebimentos:", error);
+        }
+      }
+      // Salva no state a lista pronta para ser exibida na tela e repassada pros detalhes
+      setRecebimentosHidratados(recsAtualizados);
+    };
+
+    if (recebimentos && recebimentos.length > 0) {
+      hidratarRecebimentos();
+    } else {
+      setRecebimentosHidratados([]);
+    }
+  }, [recebimentos]);
 
   const handleAbrirRanking = () => {
     if (canViewRanking) {
@@ -70,7 +147,8 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
   // ==========================================
   // LÓGICA DA TABELA DE RECEBIMENTOS E FILTROS
   // ==========================================
-  const recebimentosAtivos = recebimentos.filter(rec => rec.status !== 'Concluída' && rec.status !== 'Cancelada');
+  // 🚀 Passamos a usar a lista hidratada em vez da prop original 'recebimentos'
+  const recebimentosAtivos = recebimentosHidratados.filter(rec => rec.status !== 'Concluída' && rec.status !== 'Cancelada');
 
   const opcoesStatus = [...new Set(recebimentosAtivos.map(r => r.status))].filter(Boolean);
   const opcoesData = [...new Set(recebimentosAtivos.map(r => new Date(r.data_criacao).toLocaleDateString('pt-BR')))].filter(Boolean);
@@ -94,7 +172,7 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
       case 'Em Conferência': return 'status-separacao';
       case 'Aguardando Precificação': return 'status-separado'; 
       case 'Aguardando Cadastro': return 'status-faturado'; 
-      case 'Cadastrado': return 'status-recebido'; // 🚀 NOVO STATUS DE REPOSIÇÃO (Muda a cor para verde)
+      case 'Cadastrado': return 'status-recebido'; 
       case 'Concluída': return 'status-recebido';
       default: return 'status-pendente';
     }
@@ -165,13 +243,12 @@ export default function PainelRecebimento({ recebimentos = [], requisicoes = [],
           <span>cargas exibidas na tabela</span>
         </div>
 
-        {/* 🚀 BOTÕES DE AÇÃO COM O CARRINHO COMPARTILHADO INJETADO */}
         <div style={{ display: 'flex', gap: '10px' }}>
           {itensPreRequisicao.length > 0 && (
             <button 
               className="btn-nova-req" 
               onClick={aoIrParaPreRequisicao}
-              style={{ backgroundColor: '#e67e22', display: 'flex', alignItems: 'center', gap: '8px' }} // Laranja destacando o carrinho
+              style={{ backgroundColor: '#e67e22', display: 'flex', alignItems: 'center', gap: '8px' }} 
             >
               <span>🛒</span> Fazer Requisição ({itensPreRequisicao.length})
             </button>

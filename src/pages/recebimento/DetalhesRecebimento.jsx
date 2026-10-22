@@ -98,10 +98,12 @@ export default function DetalhesRecebimento({
   const tocarBipErro = () => { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, ctx.currentTime); osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.5); } catch(e) {} };
 
   // ==========================================
-  // 5. SINCRONIZAÇÃO COMPLETA DAS PROPS
+  // 5. SINCRONIZAÇÃO COMPLETA DAS PROPS E HIDRATAÇÃO DINÂMICA DIRETO DA BASE DE PRODUTOS
   // ==========================================
   useEffect(() => {
-    if (recebimento) {
+    const carregarE_HidratarRecebimento = async () => {
+      if (!recebimento) return;
+
       setLojaRecebedora(recebimento.loja_recebedora || 'Matriz');
       setNumeroRelatorio(recebimento.numero_relatorio || 'REC.X.000');
       setNomeFornecedor(recebimento.nome_fornecedor || '');
@@ -130,13 +132,60 @@ export default function DetalhesRecebimento({
         }
       }
 
+      // Se a nota tem itens e precisamos mostrá-los
       if (isViewer || !['Em Conferência', 'Aguardando Precificação', 'Aguardando Cadastro'].includes(recebimento.status)) {
         if (recebimento.itens && recebimento.itens.length > 0) {
+          
+          // 🚀 PASSO 1: Descobrir quais produtos estão como 'NOVO CADASTRO' ou '-' 
+          const codigosParaBuscar = new Set();
+          recebimento.itens.forEach(item => {
+            const codBarra = item.codigoBarra || item.codigo_barra || item.codigoBarras;
+            if (codBarra && (!item.codigoSistema || item.codigoSistema === '-' || item.descricaoFornecedor === 'NOVO CADASTRO')) {
+              codigosParaBuscar.add(codBarra.trim());
+            }
+          });
+
+          // Se achou alguém, vai bater no banco
+          if (codigosParaBuscar.size > 0) {
+            try {
+              const { data, error } = await supabase
+                .from('base_produtos')
+                .select('codigo, codigo_barra, descricao')
+                .in('codigo_barra', Array.from(codigosParaBuscar));
+
+              if (data && data.length > 0 && !error) {
+                const dict = {};
+                data.forEach(p => { if (p.codigo_barra) dict[p.codigo_barra.trim()] = p; });
+
+                const itensHidratados = recebimento.itens.map(item => {
+                  const codBarra = item.codigoBarra || item.codigo_barra || item.codigoBarras;
+                  if (codBarra && dict[codBarra.trim()]) {
+                    const infoBanco = dict[codBarra.trim()];
+                    return { 
+                      ...item, 
+                      codigoSistema: infoBanco.codigo, 
+                      descricaoFornecedor: infoBanco.descricao 
+                    };
+                  }
+                  return item;
+                });
+                
+                setItens(itensHidratados);
+                return; // Sai cedo porque já carregou os itens
+              }
+            } catch (e) {
+              console.error("Erro na hidratação de itens do recebimento:", e);
+            }
+          }
+
+          // Se não precisava buscar nada ou a busca falhou, seta os itens normais
           setItens(recebimento.itens);
         }
       }
-    }
-  }, [recebimento, isViewer, tempoPausadoTotal, usuarioLogado]);
+    };
+
+    carregarE_HidratarRecebimento();
+  }, [recebimento?.id, isViewer, tempoPausadoTotal, usuarioLogado]);
 
   useEffect(() => {
     let intervalo;
@@ -234,15 +283,11 @@ export default function DetalhesRecebimento({
     exibirPopup('sucesso', 'Conferência Retomada', 'O cronômetro voltou a correr.');
   };
 
-  // ==========================================
-  // 🚀 FUNÇÕES DE AUTO-SAVE E ATUALIZAÇÃO PARA O SUPABASE
-  // ==========================================
   const atualizarItensE_SalvarGlobal = (novoEstadoOuFuncao) => {
     setItens(prev => {
       const novaLista = typeof novoEstadoOuFuncao === 'function' ? novoEstadoOuFuncao(prev) : novoEstadoOuFuncao;
       if (souOConferente || ['Aguardando Precificação', 'Aguardando Cadastro'].includes(status)) {
         
-        // 🚀 FILTRA E SALVA OS DADOS DE DILUIÇÃO NA COLUNA DEDICADA
         const historicoDiluicaoArray = novaLista
           .filter(item => item.dadosDiluicao)
           .map(item => ({
@@ -321,7 +366,10 @@ export default function DetalhesRecebimento({
     setProcessando(true); 
     try { 
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
+      
+      // Quando salva o progresso, as descrições "hidratadas" também são cravadas no banco!
       await supabase.from('recebimento_mercadorias').update({ itens: itens, historico_diluicao: historicoDiluicaoArray }).eq('id', recebimento.id); 
+      
       exibirPopup('sucesso', 'Progresso Salvo', 'A contagem dos produtos foi gravada com segurança.'); 
     } catch (error) { exibirPopup('erro', 'Erro ao Salvar', error.message); } finally { setProcessando(false); } 
   };
@@ -352,7 +400,6 @@ export default function DetalhesRecebimento({
       const itensComLote = itens.map((item, index) => ({ ...item, loteInterno: item.loteInterno || `LT-${numeroRelatorio}-${String(index + 1).padStart(2, '0')}` }));
       const historicoDiluicaoArray = itensComLote.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
       
-      // 🚀 ATUALIZAÇÃO GESTÃO: Adicionamos timestamp_cadastro como timestamp base de quando a nota foi liberada para cadastro
       const metricasAtualizadas = { ...metricasFinais, timestamp_cadastro: Date.now() };
 
       await supabase.from('recebimento_mercadorias').update({ 
@@ -378,7 +425,6 @@ export default function DetalhesRecebimento({
     try { 
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
       
-      // 🚀 ATUALIZAÇÃO GESTÃO: Reafirmamos o timestamp de cadastro na precificação
       const metricasAtualizadas = { ...metricasRecebimento, timestamp_cadastro: Date.now() };
       
       await supabase.from('recebimento_mercadorias').update({ 
@@ -404,7 +450,6 @@ export default function DetalhesRecebimento({
     try {
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
       
-      // 🚀 ATUALIZAÇÃO GESTÃO: Finaliza o tempo do cadastro do recebimento, injetando o finalizadoEm oficial
       const metricasAtualizadas = { ...metricasRecebimento, finalizadoEm: new Date().toISOString() };
 
       await supabase.from('recebimento_mercadorias').update({ 
@@ -437,7 +482,6 @@ export default function DetalhesRecebimento({
   return (
     <div className="recebimento-container" style={{ position: 'relative' }}>
       
-      {/* COMPONENTES EXTRAÍDOS E MODAIS INVISÍVEIS NA IMPRESSÃO */}
       <ModalPopup popup={popup} setPopup={setPopup} />
 
       {!isViewer && (
