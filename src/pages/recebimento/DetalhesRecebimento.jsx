@@ -400,7 +400,8 @@ export default function DetalhesRecebimento({
       const itensComLote = itens.map((item, index) => ({ ...item, loteInterno: item.loteInterno || `LT-${numeroRelatorio}-${String(index + 1).padStart(2, '0')}` }));
       const historicoDiluicaoArray = itensComLote.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
       
-      const metricasAtualizadas = { ...metricasFinais, timestamp_cadastro: Date.now() };
+      // 🚀 ATUALIZAÇÃO ESTRATÉGICA: Agora no momento da conferência só garantimos os dados de operação
+      const metricasAtualizadas = { ...metricasFinais };
 
       await supabase.from('recebimento_mercadorias').update({ 
         responsavel_recebedor: responsavelRecebedor, 
@@ -425,7 +426,7 @@ export default function DetalhesRecebimento({
     try { 
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
       
-      const metricasAtualizadas = { ...metricasRecebimento, timestamp_cadastro: Date.now() };
+      const metricasAtualizadas = { ...metricasRecebimento };
       
       await supabase.from('recebimento_mercadorias').update({ 
         status: 'Aguardando Cadastro', 
@@ -444,13 +445,15 @@ export default function DetalhesRecebimento({
     }
   };
 
+  // 🚀 CORREÇÃO APLICADA AQUI NO GATILHO DE CADASTRO!
   const handleConcluirCadastro = async () => {
     if (!responsavelCadastro.trim()) return exibirPopup('aviso', 'Responsável do Cadastro', 'Informe quem lançou a nota.');
     setProcessando(true);
     try {
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
       
-      const metricasAtualizadas = { ...metricasRecebimento, finalizadoEm: new Date().toISOString() };
+      // 🚀 Quando o gestor clica no botão, o timestamp_cadastro é cravado na nota e enviado para o painel de metas
+      const metricasAtualizadas = { ...metricasRecebimento, timestamp_cadastro: Date.now() };
 
       await supabase.from('recebimento_mercadorias').update({ 
         status: 'Cadastrado', 

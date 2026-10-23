@@ -468,10 +468,27 @@ function App() {
     await handleAtualizarHistorico(id, historicoAtualizado);
   };
 
+  // 🚀 CORREÇÃO DO SALVAMENTO DO TIMESTAMP DA GESTÃO
   const handleAlterarStatus = async (id, novoStatus, responsavel, dadosExtras = {}) => {
     const req = requisicoes.find(r => r.id === id);
+    
+    // Atualiza o responsável pelo status no histórico
     const historicoAtualizado = { ...req.historico, [novoStatus]: responsavel };
-    if (novoStatus === 'Em Separação' && req.status !== 'Em Separação') { historicoAtualizado.inicio_separacao = Date.now(); }
+    
+    if (novoStatus === 'Em Separação' && req.status !== 'Em Separação') { 
+      historicoAtualizado.inicio_separacao = Date.now(); 
+    }
+    
+    // 🚀 INJEÇÃO DOS TIMESTAMPS QUANDO A GESTÃO CLICA NOS BOTÕES DE SAÍDA E FATURAMENTO
+    if (novoStatus === 'Faturamento') {
+      historicoAtualizado.timestamp_faturamento = Date.now();
+    }
+    if (novoStatus === 'Saída de produtos') {
+      historicoAtualizado.timestamp_saida = Date.now();
+    }
+    if (novoStatus === 'Concluída') {
+      historicoAtualizado.timestamp_conclusao = Date.now();
+    }
     
     const listaPreservada = reqSelecionada?.id === id ? reqSelecionada.listaItens : req.listaItens;
 
@@ -483,6 +500,7 @@ function App() {
     const payloadBanco = { status: novoStatus, historico: historicoAtualizado };
     if (dadosExtras.numeroRequisicaoExterna) payloadBanco.numero_requisicao_externa = dadosExtras.numeroRequisicaoExterna;
     if (dadosExtras.notaFiscal) payloadBanco.nota_fiscal = dadosExtras.notaFiscal;
+    
     await supabase.from('requisicoes').update(payloadBanco).eq('id', id);
   };
 
