@@ -263,13 +263,27 @@ export default function DetalhesRecebimento({
     if (error) exibirPopup('erro', 'Erro ao Solicitar', error.message); else exibirPopup('info', 'Solicitação Enviada', 'Aguarde a aprovação.');
   };
 
+  // ==========================================
+  // RASTREAMENTO: Início Conferência
+  // ==========================================
   const handleIniciarConferencia = async () => {
     const nomeFinal = responsavelRecebedor.trim() || usuarioLogado?.nome_completo || 'Colaborador';
     if (!nomeFinal) return exibirPopup('aviso', 'Atenção', "Digite o seu nome para iniciar a conferência!");
     setProcessando(true);
     try {
-      const tempoInicio = Date.now(); const metricasIniciais = { ...(recebimento.metricas_recebimento || {}), inicioConferencia: tempoInicio, id_conferente: meuId };
-      const { error } = await supabase.from('recebimento_mercadorias').update({ status: 'Em Conferência', responsavel_recebedor: nomeFinal, metricas_recebimento: metricasIniciais }).eq('id', recebimento.id);
+      const tempoInicio = Date.now(); 
+      // 🚀 RASTREAMENTO: Guardar a entrada em 'Em Conferência'
+      const metricasIniciais = { 
+        ...(recebimento.metricas_recebimento || {}), 
+        inicioConferencia: tempoInicio, 
+        id_conferente: meuId 
+      };
+      const { error } = await supabase.from('recebimento_mercadorias').update({ 
+        status: 'Em Conferência', 
+        responsavel_recebedor: nomeFinal, 
+        metricas_recebimento: metricasIniciais 
+      }).eq('id', recebimento.id);
+      
       if (error) throw error;
       setStatus('Em Conferência'); setResponsavelRecebedor(nomeFinal); setInicioConferencia(tempoInicio); setMetricasRecebimento(metricasIniciais);
     } catch (e) { exibirPopup('erro', 'Falha de Conexão', e.message); } finally { setProcessando(false); }
@@ -376,6 +390,9 @@ export default function DetalhesRecebimento({
   
   const solicitarPausaAoLider = async (tipoPausa) => { if (!usuarioLogado?.encarregado_responsavel) { exibirPopup('erro', 'Ação Negada', 'Você não tem um Encarregado vinculado.'); return; } setPausaPendente(true); const { error } = await supabase.from('pausas_separacao').insert([{ requisicao_id: numeroRelatorio, solicitante_nome: usuarioLogado.nome_completo, encarregado_destino: usuarioLogado.encarregado_responsavel, tipo_pausa: tipoPausa, timestamp_criacao: Date.now() }]); if (error) { setPausaPendente(false); exibirPopup('erro', 'Erro', error.message); } else exibirPopup('sucesso', 'Pausa Solicitada!', `Enviada ao encarregado.`); };
 
+  // ==========================================
+  // RASTREAMENTO: Saída de Conferência
+  // ==========================================
   const handleSalvarRecebimentoFinal = async (e) => {
     e.preventDefault(); if (isViewer) return; 
     if (!responsavelRecebedor.trim()) return exibirPopup('aviso', 'Responsável', "Digite o nome de quem conferiu.");
@@ -385,6 +402,7 @@ export default function DetalhesRecebimento({
       const totalItens = itens.reduce((acc, item) => acc + Number(item.quantidade), 0); 
       const upm = tempoDecorrido > 0 ? (totalItens / tempoDecorrido) * 60 : 0; 
       const pts = Math.round(totalItens * Number(upm.toFixed(1)) * 1.5); 
+      const agora = Date.now();
       
       const metricasFinais = { 
         inicioConferencia: inicioConferencia, 
@@ -393,21 +411,21 @@ export default function DetalhesRecebimento({
         totalItensFisicos: totalItens, 
         upm: Number(upm.toFixed(1)), 
         pontosGanhos: pts, 
-        responsavel: responsavelRecebedor, 
-        finalizadoEm: new Date().toISOString() 
+        responsavel: responsavelRecebedor,
+        // 🚀 RASTREAMENTO: Registrar fim da conferência e entrada na precificação
+        finalizadoEm: new Date(agora).toISOString(),
+        timestamp_saida_conferencia: agora,
+        timestamp_entrada_precificacao: agora
       }; 
       
       const itensComLote = itens.map((item, index) => ({ ...item, loteInterno: item.loteInterno || `LT-${numeroRelatorio}-${String(index + 1).padStart(2, '0')}` }));
       const historicoDiluicaoArray = itensComLote.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
-      
-      // 🚀 ATUALIZAÇÃO ESTRATÉGICA: Agora no momento da conferência só garantimos os dados de operação
-      const metricasAtualizadas = { ...metricasFinais };
 
       await supabase.from('recebimento_mercadorias').update({ 
         responsavel_recebedor: responsavelRecebedor, 
         observacoes: observacoes, 
         itens: itensComLote, 
-        metricas_recebimento: metricasAtualizadas, 
+        metricas_recebimento: metricasFinais, 
         historico_diluicao: historicoDiluicaoArray, 
         status: 'Aguardando Precificação' 
       }).eq('id', recebimento.id);
@@ -421,12 +439,21 @@ export default function DetalhesRecebimento({
     }
   };
 
+  // ==========================================
+  // RASTREAMENTO: Saída Precificação e Entrada Cadastro
+  // ==========================================
   const handleAprovarPrecificacao = async () => {
     setProcessando(true);
     try { 
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
       
-      const metricasAtualizadas = { ...metricasRecebimento };
+      const agora = Date.now();
+      // 🚀 RASTREAMENTO: Fim precificação, Início Cadastro
+      const metricasAtualizadas = { 
+        ...metricasRecebimento, 
+        timestamp_saida_precificacao: agora,
+        timestamp_entrada_cadastro: agora
+      };
       
       await supabase.from('recebimento_mercadorias').update({ 
         status: 'Aguardando Cadastro', 
@@ -445,15 +472,22 @@ export default function DetalhesRecebimento({
     }
   };
 
-  // 🚀 CORREÇÃO APLICADA AQUI NO GATILHO DE CADASTRO!
+  // ==========================================
+  // RASTREAMENTO: Saída Cadastro (Final)
+  // ==========================================
   const handleConcluirCadastro = async () => {
     if (!responsavelCadastro.trim()) return exibirPopup('aviso', 'Responsável do Cadastro', 'Informe quem lançou a nota.');
     setProcessando(true);
     try {
       const historicoDiluicaoArray = itens.filter(item => item.dadosDiluicao).map(item => ({ id_item: item.id, codigo: item.codigoSistema || item.codigoBarras, descricao: item.descricaoFornecedor, dados_diluicao: item.dadosDiluicao }));
       
-      // 🚀 Quando o gestor clica no botão, o timestamp_cadastro é cravado na nota e enviado para o painel de metas
-      const metricasAtualizadas = { ...metricasRecebimento, timestamp_cadastro: Date.now() };
+      const agora = Date.now();
+      // 🚀 RASTREAMENTO: O `timestamp_cadastro` é a saída do processo
+      const metricasAtualizadas = { 
+        ...metricasRecebimento, 
+        timestamp_saida_cadastro: agora,
+        timestamp_cadastro: agora 
+      };
 
       await supabase.from('recebimento_mercadorias').update({ 
         status: 'Cadastrado', 

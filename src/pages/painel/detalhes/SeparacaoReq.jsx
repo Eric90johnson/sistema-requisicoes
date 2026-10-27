@@ -3,7 +3,6 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { supabase } from '../../../services/supabase';
 import '../../../styles/pages/painel/detalhes/separacaoReq.css';
 
-// 🚀 AQUI: Adicionei a prop baseProdutos na assinatura da função
 export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoFinalizarSeparacao, tempoDecorrido, exibirPopup, fecharPopupCustom, aoAtualizarHistorico, baseProdutos }) {
   const [itens, setItens] = useState(req.listaItens || []);
   const itensRef = useRef(itens);
@@ -31,7 +30,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
   const ultimoBipTexto = useRef("");
   const pedidosBipAntigoRef = useRef({});
 
-  // 🚀 NOVO ESTADO: Controle da aba e lista de leitura
   const isMobile = window.innerWidth <= 768;
   const [modoLeitura, setModoLeitura] = useState(isMobile ? 'camera' : 'laser');
   const bufferLeitor = useRef("");
@@ -178,9 +176,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     }
   };
 
-  // ==============================================================
-  // 📸 LÓGICA DA CÂMERA DO CELULAR (SeparacaoReq)
-  // ==============================================================
   useEffect(() => {
     let scanner = null;
     let isComponentMounted = true;
@@ -216,9 +211,6 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     };
   }, [itemCameraAtiva, isPausado, modoLeitura]); 
 
-  // ==============================================================
-  // 🔫 LÓGICA DO LEITOR A LASER / BLUETOOTH (Listener Global)
-  // ==============================================================
   useEffect(() => {
     if (itemCameraAtiva === null || isPausado || modoLeitura !== 'laser') return;
 
@@ -256,57 +248,82 @@ export default function SeparacaoReq({ req, usuarioLogado, aoAtualizarItens, aoF
     };
   }, [itemCameraAtiva, isPausado, modoLeitura, itensRef]);
 
+  // 🚀 AQUI: O coração da validação e do Diário de Bips
   const processarBipagem = (index, decodedText) => {
     if (!decodedText || !decodedText.trim() || isPausado) return;
     const itensAtuais = itensRef.current; 
     const itemAtual = itensAtuais[index];
     
     const qtdBipada = itemAtual.bipContagem || 0;
-    const refBipada = itemAtual.bipReferencia || null;
     const qtdDesejada = itemAtual.quantidadeEditada !== undefined ? Number(itemAtual.quantidadeEditada) : Number(itemAtual.quantidade);
     
+    // 🚀 NOVA TRAVA DE SEGURANÇA (Cruza com o Banco de Dados)
+    const produtoCatalogo = baseProdutos ? baseProdutos.find(p => String(p.codigo) === String(itemAtual.cod)) : null;
+    const codigoBarrasEsperado = String(itemAtual.codigoBarra || itemAtual.codigo_barra || itemAtual.codigoBarras || produtoCatalogo?.codigoBarra || produtoCatalogo?.codigo_barra || '').trim();
+
+    // Valida se o código lido é igual ao código que consta no sistema
+    if (codigoBarrasEsperado && codigoBarrasEsperado !== '-' && codigoBarrasEsperado !== 'undefined' && codigoBarrasEsperado !== 'null') {
+      if (codigoBarrasEsperado !== String(decodedText).trim()) {
+        tocarBipErro();
+        exibirPopup('erro', 'PRODUTO INCORRETO (Trava de Segurança)', `Você bipou o código:\n❌ ${decodedText}\n\nO sistema exige o código do produto solicitado:\n✅ ${codigoBarrasEsperado}\n👉 (${itemAtual.descricao})\n\nVocê pegou o produto errado na prateleira!`);
+        return;
+      }
+    } else {
+      // Fallback seguro: se não tiver cadastro no banco, ele checa se já existe uma leitura anterior travada
+      const refBipadaFallback = itemAtual.bipReferencia || null;
+      if (refBipadaFallback && refBipadaFallback !== decodedText) {
+        tocarBipErro();
+        exibirPopup('erro', 'Produto Diferente!', `Você escaneou o código: ${decodedText}\nMas a referência anterior bipada era: ${refBipadaFallback}`);
+        return;
+      }
+    }
+
+    // Trava de segurança para impedir bipagem no card errado (quando tem 2 itens parecidos na lista)
     const itemConflitoIndex = itensAtuais.findIndex((it, i) => it.bipReferencia === decodedText && i !== index);
-    
     if (itemConflitoIndex !== -1) {
       tocarBipErro();
-      exibirPopup('erro', 'Trava de Segurança', `Este código de barras já pertence a outro item:\n\n👉 ${itensAtuais[itemConflitoIndex].descricao}\n\nVocê está tentando bipar no produto errado!`);
+      exibirPopup('erro', 'Trava de Segurança', `Este código de barras já pertence a outro item nesta mesma nota:\n\n👉 ${itensAtuais[itemConflitoIndex].descricao}\n\nVocê está bipando na linha errada!`);
       return; 
     }
+    
+    // Trava de limite de contagem
     if (qtdBipada >= qtdDesejada) {
       tocarBipErro();
       exibirPopup('aviso', 'Limite Atingido!', `Você já separou a quantidade meta (${qtdDesejada} un) para este produto.`);
       return;
     }
-    if (qtdBipada === 0) {
-      tocarBipSucesso();
-      const novosItens = [...itensAtuais];
-      novosItens[index] = { ...itemAtual, bipContagem: 1, bipReferencia: decodedText };
-      aoAtualizarItens(req.id, novosItens); 
-      // 🚀 Atualiza a lista visual de códigos
-      setListaCodigosLidos(prev => [decodedText, ...prev]);
-    } else {
-      if (refBipada === decodedText) {
-        tocarBipSucesso();
-        const novosItens = [...itensAtuais];
-        novosItens[index] = { ...itemAtual, bipContagem: qtdBipada + 1 };
-        aoAtualizarItens(req.id, novosItens); 
-        // 🚀 Atualiza a lista visual de códigos
-        setListaCodigosLidos(prev => [decodedText, ...prev]);
-      } else {
-        tocarBipErro();
-        exibirPopup('erro', 'Produto Incorreto!', `Você escaneou o código: ${decodedText}\nMas a referência esperada é: ${refBipada}`);
-      }
-    }
+
+    // 🚀 Cria o objeto do bip atual
+    const novoBip = { codigo: decodedText, timestamp: Date.now() };
+
+    tocarBipSucesso();
+    const novosItens = [...itensAtuais];
+    const historicoAntigo = itemAtual.historicoBips || [];
+    
+    novosItens[index] = { 
+      ...itemAtual, 
+      bipContagem: qtdBipada + 1,
+      bipReferencia: decodedText, // Sempre crava o lido, mesmo que venha do banco
+      historicoBips: [...historicoAntigo, novoBip] // 🚀 Adiciona à lista de histórico no diário
+    };
+    
+    aoAtualizarItens(req.id, novosItens); 
+    setListaCodigosLidos(prev => [decodedText, ...prev]);
   };
 
   const resetarBipagem = (index) => {
-    exibirPopup('aviso', 'Zerar Leitura?', 'Tem certeza que deseja ZERAR a leitura deste item?\nO código de referência atual será apagado.',
+    exibirPopup('aviso', 'Zerar Leitura?', 'Tem certeza que deseja ZERAR a leitura deste item?\nO histórico de bipagem será apagado.',
       () => {
         const novosItens = [...itensRef.current];
-        novosItens[index] = { ...novosItens[index], bipContagem: 0, bipReferencia: null };
+        novosItens[index] = { 
+          ...novosItens[index], 
+          bipContagem: 0, 
+          bipReferencia: null,
+          historicoBips: [] // 🚀 Limpa o diário também
+        };
         aoAtualizarItens(req.id, novosItens); 
         ultimoBipTexto.current = ""; 
-        setListaCodigosLidos([]); // 🚀 Limpa a lista visual também
+        setListaCodigosLidos([]); 
         fecharPopupCustom();
       }, () => fecharPopupCustom()
     );

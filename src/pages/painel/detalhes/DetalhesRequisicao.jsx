@@ -198,16 +198,20 @@ export default function DetalhesRequisicao({
     }
   };
 
+  // 🚀 ATUALIZADO: Processamento universal dos Timestamps
   const processarEsteira = (proximoStatus, responsavelDigitado, dadosDaEsteira = {}) => {
     if (!responsavelDigitado.trim()) { 
       exibirPopup('aviso', 'Atenção', 'Por favor, insira o nome do responsável pela etapa!'); 
       return; 
     }
     const dadosExtras = {};
+    const agora = Date.now();
+
     if (proximoStatus === 'Em Separação' && req.status !== 'Em Separação') {
        dispararDesafioDeProdutividade();
-       dadosExtras.inicio_separacao = Date.now(); 
+       dadosExtras.inicio_separacao = agora; 
     }
+    
     if (req.status === 'Separado' && !isReposicaoInterna) {
       if (!todosBipadosStatus) { 
         exibirPopup('erro', 'Trava de Segurança', 'Você não pode dar saída sem bipar a quantidade exata de TODOS os produtos solicitados (ou ajustar a quantidade)!'); 
@@ -224,9 +228,9 @@ export default function DetalhesRequisicao({
       dadosExtras.numeroRequisicaoExterna = dadosDaEsteira.numReqExterna;
     }
     
-    // 🚀 INJEÇÃO DE TIMESTAMPS DE GESTÃO PARA O PAINEL DE METAS
+    // Injeção de relógio para Gestão e Logística
     if (proximoStatus === 'Faturamento') {
-      dadosExtras.timestamp_faturamento = Date.now();
+      dadosExtras.timestamp_faturamento = agora;
     }
     
     if (req.status === 'Saída de produtos' && !isReposicaoInterna) {
@@ -239,7 +243,11 @@ export default function DetalhesRequisicao({
     
     // O status real na esteira é 'Transporte', mas equivale à "Saída" final da loja
     if (proximoStatus === 'Transporte') {
-      dadosExtras.timestamp_saida = Date.now();
+      dadosExtras.timestamp_saida = agora;
+    }
+
+    if (proximoStatus === 'Recebimento') {
+      dadosExtras.timestamp_recebimento = agora;
     }
     // ----------------------------------------------------
     

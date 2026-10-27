@@ -53,7 +53,8 @@ export default function ObservacoesReq({ req, usuarioLogado, aoAtualizarObservac
         )}
       </div>
 
-      {(req.status === 'Pendente' || req.status === 'Em Separação') && (
+      {/* 🚀 ATUALIZAÇÃO: Exibe o campo de nova observação enquanto não estiver Concluída nem Cancelada */}
+      {(req.status !== 'Concluída' && req.status !== 'Cancelada') && (
         <div className="obs-add-mode">
           <textarea 
             className="obs-textarea-nova" 

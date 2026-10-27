@@ -468,26 +468,41 @@ function App() {
     await handleAtualizarHistorico(id, historicoAtualizado);
   };
 
-  // 🚀 CORREÇÃO DO SALVAMENTO DO TIMESTAMP DA GESTÃO
+  // 🚀 RASTREAMENTO UNIVERSAL DE TEMPOS EM CADA ETAPA
   const handleAlterarStatus = async (id, novoStatus, responsavel, dadosExtras = {}) => {
     const req = requisicoes.find(r => r.id === id);
-    
-    // Atualiza o responsável pelo status no histórico
     const historicoAtualizado = { ...req.historico, [novoStatus]: responsavel };
-    
+    const agora = Date.now();
+
+    // 1. Marca ENTRADA no novo status
     if (novoStatus === 'Em Separação' && req.status !== 'Em Separação') { 
-      historicoAtualizado.inicio_separacao = Date.now(); 
+      historicoAtualizado.inicio_separacao = agora; 
     }
-    
-    // 🚀 INJEÇÃO DOS TIMESTAMPS QUANDO A GESTÃO CLICA NOS BOTÕES DE SAÍDA E FATURAMENTO
-    if (novoStatus === 'Faturamento') {
-      historicoAtualizado.timestamp_faturamento = Date.now();
+    if (novoStatus === 'Faturamento' && req.status !== 'Faturamento') {
+      historicoAtualizado.timestamp_faturamento = agora;
     }
-    if (novoStatus === 'Saída de produtos') {
-      historicoAtualizado.timestamp_saida = Date.now();
+    if (novoStatus === 'Saída de produtos' && req.status !== 'Saída de produtos') {
+      historicoAtualizado.timestamp_saida = agora;
     }
-    if (novoStatus === 'Concluída') {
-      historicoAtualizado.timestamp_conclusao = Date.now();
+    if (novoStatus === 'Concluída' && req.status !== 'Concluída') {
+      historicoAtualizado.timestamp_conclusao = agora;
+    }
+    if (novoStatus === 'Transporte' && req.status !== 'Transporte') {
+      historicoAtualizado.timestamp_transporte = agora;
+    }
+    if (novoStatus === 'Recebimento' && req.status !== 'Recebimento') {
+      historicoAtualizado.timestamp_recebimento = agora;
+    }
+
+    // 2. Marca SAÍDA do status anterior
+    if (req.status === 'Faturamento') {
+      historicoAtualizado.timestamp_saida_faturamento = agora;
+    } else if (req.status === 'Saída de produtos') {
+      historicoAtualizado.timestamp_saida_despacho = agora;
+    } else if (req.status === 'Transporte') {
+      historicoAtualizado.timestamp_saida_transporte = agora;
+    } else if (req.status === 'Recebimento') {
+      historicoAtualizado.timestamp_saida_recebimento = agora;
     }
     
     const listaPreservada = reqSelecionada?.id === id ? reqSelecionada.listaItens : req.listaItens;
@@ -535,7 +550,11 @@ function App() {
     }
 
     const novoStatusAutomatico = 'Separado';
-    const historicoAtualizado = { ...req.historico, [novoStatusAutomatico]: responsavelSeparacao };
+    const historicoAtualizado = { 
+      ...req.historico, 
+      [novoStatusAutomatico]: responsavelSeparacao,
+      timestamp_saida_separacao: Date.now() 
+    };
 
     const reqAtualizada = { ...req, metricasSeparacao: novasMetricas, status: novoStatusAutomatico, historico: historicoAtualizado, listaItens: itensDaReq };
     
