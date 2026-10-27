@@ -3,7 +3,6 @@ import { supabase } from '../../services/supabase';
 import '../../styles/pages/historico/historico.css';
 
 export default function Historico({ requisicoes, aoVoltar }) {
-  // 🚀 AQUI: O estado que alterna as "duas telas" em uma só!
   const [tipoHistorico, setTipoHistorico] = useState('transferencia'); 
 
   // Filtros de Pesquisa
@@ -144,7 +143,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
           historicoDiluicao: r.historico_diluicao 
         }));
 
-        // 🚀 HIDRATAÇÃO DINÂMICA: Buscar códigos na base para permitir a PESQUISA por produtos novos já cadastrados
         let mapaBasePesquisa = {};
         if (precisaListaItens) {
           const barcodesParaBuscar = [];
@@ -165,7 +163,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
               const { data: pData } = await supabase.from('base_produtos').select('codigo, codigo_barra, descricao').in('codigo_barra', uniqueBarcodes);
               if (pData) {
                 pData.forEach(p => { mapaBasePesquisa[p.codigo_barra] = { cod: p.codigo, desc: p.descricao }; });
-                // Alimenta o estado global para a renderização visual também usar
                 setBaseAtualizada(prev => ({ ...prev, ...mapaBasePesquisa }));
               }
             } catch (e) {}
@@ -175,7 +172,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
         const resultadosFinais = recsFormatados.filter(req => {
           let passa = true;
           if (filtroCodigo && passa) {
-            // A pesquisa agora consulta o mapa dinâmico para os produtos hidratados
             const temProduto = req.listaItens && req.listaItens.some(item => {
               const codBarras = item.codigoBarra || item.codigo_barra || item.codigoBarras;
               const codOficial = mapaBasePesquisa[codBarras]?.cod || item.codigoSistema || item.cod || item.codigo || '';
@@ -251,11 +247,20 @@ export default function Historico({ requisicoes, aoVoltar }) {
     return `R$ ${strVal}`;
   };
 
+  // Extrai apenas Hora
   const extrairHora = (timestampOuData) => {
     if (!timestampOuData) return '-';
     const data = new Date(Number(timestampOuData) || timestampOuData);
     if (isNaN(data.getTime())) return '-';
     return data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+  
+  // 🚀 NOVO: Extrai Data E Hora juntos para o Relatório CSV
+  const extrairDataHoraCompleta = (timestampOuData) => {
+    if (!timestampOuData) return '-';
+    const data = new Date(Number(timestampOuData) || timestampOuData);
+    if (isNaN(data.getTime())) return '-';
+    return data.toLocaleString('pt-BR');
   };
 
   const getTempoTotalReq = (req) => {
@@ -337,20 +342,31 @@ export default function Historico({ requisicoes, aoVoltar }) {
 
     let csv = "";
     if (tipoHistorico === 'transferencia') {
-      csv = "ID da Requisicao;Cod. do Produto;Descricao do Produto;Qtd. Solicitada;Qtd. Bipada;Motivo (Tipo);Status Atual;Data da Requisicao;Solicitante;Destino;Criado as;Finalizado as;Tempo Total Estimado;Tempo Separacao;Tempo Bip Medio;Separador;N do Sistema;Nota Fiscal;Observacoes do Produto\n";
+      // 🚀 CSV ATUALIZADO: Colunas detalhadas e rastreamento completo de etapas
+      csv = "ID da Requisicao;Cod. do Produto;Descricao do Produto;Cód. Barras Escaneado;Horário do Bip;Loja de Origem;Loja Destino;Motivo (Tipo);Status Atual;Solicitante;Editor;Responsável Separação;Resp. Transporte/Saida;Recebedor (Chegada);Criado as;Início Separação;Fim Separação;Horário Faturamento;Horário Transporte;Finalizado as;N do Sistema;Nota Fiscal;Observacoes do Produto\n";
+      
       listaParaExportar.forEach(req => {
         const id = req.id || '-';
+        const origem = req.origem || 'Matriz';
+        const destino = req.destino || '-';
         const motivo = req.motivo || '-';
         const status = req.status || '-';
-        const dataReq = req.data || '-';
         const solicitante = req.solicitante || '-';
-        const destino = req.destino || '-';
-        const horaCriacao = extrairHora(req.timestampCriacao);
-        const horaFim = req.metricasSeparacao?.finalizadoEm ? extrairHora(req.metricasSeparacao.finalizadoEm) : '-';
-        const tempoTotal = getTempoTotalReq(req);
-        const tempoSep = req.metricasSeparacao ? formatarTempo(req.metricasSeparacao.tempoTotalSegundos) : '-';
-        const tempoBip = getTempoBipProduto(req);
-        const separador = req.historico?.['Em Separação'] || req.metricasSeparacao?.responsavel || '-';
+        const editor = req.editorTemporario || req.historico?.['Última Edição'] || '-';
+        
+        // Responsáveis pelas etapas
+        const respSeparacao = req.historico?.['Em Separação'] || req.metricasSeparacao?.responsavel || '-';
+        const respTransporte = req.historico?.['Transporte'] || req.historico?.['Saída de produtos'] || '-';
+        const respRecebedor = req.historico?.['Recebimento'] || req.historico?.['Concluída'] || '-';
+
+        // 🚀 Rastreamento de tempo
+        const horaCriacao = extrairDataHoraCompleta(req.timestampCriacao);
+        const inicioSep = extrairDataHoraCompleta(req.historico?.inicio_separacao);
+        const fimSep = extrairDataHoraCompleta(req.historico?.timestamp_saida_separacao || req.metricasSeparacao?.finalizadoEm);
+        const horaFat = extrairDataHoraCompleta(req.historico?.timestamp_faturamento);
+        const horaTransp = extrairDataHoraCompleta(req.historico?.timestamp_transporte || req.historico?.timestamp_saida);
+        const horaFim = extrairDataHoraCompleta(req.historico?.timestamp_conclusao || req.historico?.timestamp_recebimento);
+
         const ordemInterna = req.numeroRequisicaoExterna || '-';
         const nf = req.notaFiscal || '-';
 
@@ -358,15 +374,30 @@ export default function Historico({ requisicoes, aoVoltar }) {
           req.listaItens.forEach(item => {
             const displayCod = item.codigo || item.cod || '-';
             const displayDesc = item.descricao || item.nome || '-';
-            csv += `"${id}";"${displayCod}";"${displayDesc}";"${item.quantidade || '0'}";"${item.bipContagem || '0'}";"${motivo}";"${status}";"${dataReq}";"${solicitante}";"${destino}";"${horaCriacao}";"${horaFim}";"${tempoTotal}";"${tempoSep}";"${tempoBip}";"${separador}";"${ordemInterna}";"${nf}";"${item.observacao ? item.observacao.replace(/"/g, '""').replace(/\n/g, ' ') : '-'}"\n`;
+            const obsSegura = item.observacao ? item.observacao.replace(/"/g, '""').replace(/\n/g, ' ') : '-';
+            
+            // 🚀 EXPLODE AS LINHAS PELO DIÁRIO DE BIPS, SE EXISTIR
+            if (item.historicoBips && item.historicoBips.length > 0) {
+              item.historicoBips.forEach(bip => {
+                const bipCod = bip.codigo || '-';
+                const bipHora = extrairDataHoraCompleta(bip.timestamp);
+                csv += `"${id}";"${displayCod}";"${displayDesc}";"${bipCod}";"${bipHora}";"${origem}";"${destino}";"${motivo}";"${status}";"${solicitante}";"${editor}";"${respSeparacao}";"${respTransporte}";"${respRecebedor}";"${horaCriacao}";"${inicioSep}";"${fimSep}";"${horaFat}";"${horaTransp}";"${horaFim}";"${ordemInterna}";"${nf}";"${obsSegura}"\n`;
+              });
+            } else {
+              // Produto com qtd > 0, mas sem histórico de bips (foi feito pelo sistema antigo ou editado)
+              const codBarrasFallback = item.bipReferencia || item.codigoBarra || '-';
+              csv += `"${id}";"${displayCod}";"${displayDesc}";"${codBarrasFallback}";"-";"${origem}";"${destino}";"${motivo}";"${status}";"${solicitante}";"${editor}";"${respSeparacao}";"${respTransporte}";"${respRecebedor}";"${horaCriacao}";"${inicioSep}";"${fimSep}";"${horaFat}";"${horaTransp}";"${horaFim}";"${ordemInterna}";"${nf}";"${obsSegura}"\n`;
+            }
           });
         } else {
-          csv += `"${id}";"-";"-";"-";"-";"${motivo}";"${status}";"${dataReq}";"${solicitante}";"${destino}";"${horaCriacao}";"${horaFim}";"${tempoTotal}";"${tempoSep}";"${tempoBip}";"${separador}";"${ordemInterna}";"${nf}";"-"\n`;
+          // Nota sem nenhum item
+          csv += `"${id}";"-";"-";"-";"-";"${origem}";"${destino}";"${motivo}";"${status}";"${solicitante}";"${editor}";"${respSeparacao}";"${respTransporte}";"${respRecebedor}";"${horaCriacao}";"${inicioSep}";"${fimSep}";"${horaFat}";"${horaTransp}";"${horaFim}";"${ordemInterna}";"${nf}";"-"\n`;
         }
       });
     } else {
-      // 🚀 CSV ATUALIZADO: Inclusão do "Cód. Fornecedor"
-      csv = "ID Relatorio;Cód. Fornecedor;Código;Cód. Barras;Descricao do Produto;Qtd. Conferida;Avarias;Preço Custo;Preço Venda;Produto Novo;Observacao do Produto;Fornecedor;Marca;Nota Fiscal;Volumes;Status Atual;Data do Registro;Loja Destino;Resp. Recebedor;Resp. Cadastro;Tempo Total Conferência\n";
+      // CSV DO RECEBIMENTO
+      csv = "ID Relatorio;Cód. Fornecedor;Código;Cód. Barras Escaneado;Horário do Bip;Descricao do Produto;Preço Custo;Preço Venda;Produto Novo;Observacao do Produto;Fornecedor;Marca;Nota Fiscal;Volumes;Status Atual;Loja Destino;Resp. Recebedor;Resp. Cadastro;Início Conferência;Fim Conferência;Início Cadastro;Fim Cadastro\n";
+      
       listaParaExportar.forEach(req => {
         const id = req.numero_relatorio || '-';
         const fornecedor = req.nome_fornecedor || '-';
@@ -374,42 +405,50 @@ export default function Historico({ requisicoes, aoVoltar }) {
         const nf = req.numero_nf || '-';
         const volumes = req.volumes || '-';
         const status = req.status || '-';
-        const dataReq = new Date(req.data_criacao).toLocaleDateString('pt-BR');
         const destino = req.destino || '-';
         const recebedor = req.responsavel_recebedor || '-';
         const cadastrador = req.responsavel_cadastro || '-';
-        const tempoSep = req.metricasSeparacao ? formatarTempo(req.metricasSeparacao.tempoTotalSegundos) : '-';
+        
+        // 🚀 Rastreamento de tempo
+        const inicioConf = extrairDataHoraCompleta(req.metricasSeparacao?.inicioConferencia);
+        const fimConf = extrairDataHoraCompleta(req.metricasSeparacao?.timestamp_saida_conferencia || req.metricasSeparacao?.finalizadoEm);
+        const inicioCad = extrairDataHoraCompleta(req.metricasSeparacao?.timestamp_entrada_cadastro);
+        const fimCad = extrairDataHoraCompleta(req.metricasSeparacao?.timestamp_cadastro);
 
         if (req.listaItens && req.listaItens.length > 0) {
           req.listaItens.forEach(item => {
-            const codBarras = item.codigoBarra || item.codigo_barra || item.codigoBarras || '-';
-            const codFornecedor = item.codigoFornecedor || '-'; // 🚀 NOVO CAMPO
+            const codFornecedor = item.codigoFornecedor || '-'; 
             let displayCod = item.codigoSistema || item.codigo || item.cod || '';
             let displayDesc = item.descricaoFornecedor || item.descricaoProduto || item.descricao || item.nome || '-';
             let pCusto = item.precoCusto || item.preco_custo || item.custo || '-';
             let pVenda = item.precoVenda || item.preco_venda || item.venda || '-';
             
+            const codBarrasFallback = item.codigoBarra || item.codigo_barra || item.codigoBarras || '-';
             const isNovo = item.produtoNovo || !displayCod || displayDesc.toUpperCase() === 'NOVO CADASTRO';
 
             if (isNovo) {
-              if (mapaBaseExport[codBarras]) {
-                displayCod = mapaBaseExport[codBarras].cod || displayCod;
-                displayDesc = mapaBaseExport[codBarras].desc || displayDesc;
+              if (mapaBaseExport[codBarrasFallback]) {
+                displayCod = mapaBaseExport[codBarrasFallback].cod || displayCod;
+                displayDesc = mapaBaseExport[codBarrasFallback].desc || displayDesc;
               }
               if (displayDesc.toUpperCase() === 'NOVO CADASTRO') displayDesc = '-';
             }
-            
             displayCod = displayCod || '-';
-            const avarias = item.avarias || item.qtdAvarias || '0';
-            const qtdConferida = item.quantidade || item.bipContagem || item.quantidadeRecebida || '0';
-            const obs = item.observacao ? item.observacao.replace(/"/g, '""').replace(/\n/g, ' ') : '-';
+            const obsSegura = item.observacao ? item.observacao.replace(/"/g, '""').replace(/\n/g, ' ') : '-';
 
-            // 🚀 CSV ATUALIZADO
-            csv += `"${id}";"${codFornecedor}";"${displayCod}";"${codBarras}";"${displayDesc}";"${qtdConferida}";"${avarias}";"${formatarPrecoLocal(pCusto)}";"${formatarPrecoLocal(pVenda)}";"${isNovo ? 'SIM' : 'NAO'}";"${obs}";"${fornecedor}";"${marca}";"${nf}";"${volumes}";"${status}";"${dataReq}";"${destino}";"${recebedor}";"${cadastrador}";"${tempoSep}"\n`;
+            // 🚀 EXPLODE AS LINHAS PELO DIÁRIO DE BIPS
+            if (item.historicoBips && item.historicoBips.length > 0) {
+              item.historicoBips.forEach(bip => {
+                const bipCod = bip.codigo || '-';
+                const bipHora = extrairDataHoraCompleta(bip.timestamp);
+                csv += `"${id}";"${codFornecedor}";"${displayCod}";"${bipCod}";"${bipHora}";"${displayDesc}";"${formatarPrecoLocal(pCusto)}";"${formatarPrecoLocal(pVenda)}";"${isNovo ? 'SIM' : 'NAO'}";"${obsSegura}";"${fornecedor}";"${marca}";"${nf}";"${volumes}";"${status}";"${destino}";"${recebedor}";"${cadastrador}";"${inicioConf}";"${fimConf}";"${inicioCad}";"${fimCad}"\n`;
+              });
+            } else {
+              csv += `"${id}";"${codFornecedor}";"${displayCod}";"${codBarrasFallback}";"-";"${displayDesc}";"${formatarPrecoLocal(pCusto)}";"${formatarPrecoLocal(pVenda)}";"${isNovo ? 'SIM' : 'NAO'}";"${obsSegura}";"${fornecedor}";"${marca}";"${nf}";"${volumes}";"${status}";"${destino}";"${recebedor}";"${cadastrador}";"${inicioConf}";"${fimConf}";"${inicioCad}";"${fimCad}"\n`;
+            }
           });
         } else {
-          // 🚀 CSV ATUALIZADO (- extra adicionado no placeholder para bater as colunas)
-          csv += `"${id}";"-";"-";"-";"-";"-";"-";"-";"-";"-";"-";"${fornecedor}";"${marca}";"${nf}";"${volumes}";"${status}";"${dataReq}";"${destino}";"${recebedor}";"${cadastrador}";"${tempoSep}"\n`;
+          csv += `"${id}";"-";"-";"-";"-";"-";"-";"-";"-";"-";"${fornecedor}";"${marca}";"${nf}";"${volumes}";"${status}";"${destino}";"${recebedor}";"${cadastrador}";"${inicioConf}";"${fimConf}";"${inicioCad}";"${fimCad}"\n`;
         }
       });
     }
@@ -608,6 +647,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                 <RenderHeaderSort titulo="Motivo (Tipo)" coluna="motivo" isReqOnly />
                 <RenderHeaderSort titulo="Fornecedor" coluna="fornecedor" isRecOnly />
                 <RenderHeaderSort titulo="Data" coluna="data" />
+                <RenderHeaderSort titulo="Origem" coluna="origem" isReqOnly />
                 <RenderHeaderSort titulo="Destino" coluna="destino" />
                 <RenderHeaderSort titulo="Separador" coluna="separador" isReqOnly />
                 <RenderHeaderSort titulo="Recebedor" coluna="separador" isRecOnly />
@@ -618,14 +658,13 @@ export default function Historico({ requisicoes, aoVoltar }) {
                 <RenderHeaderSort titulo="T. Conferência" coluna="tempoSeparacao" isRecOnly />
                 <RenderHeaderSort titulo="T. Bip Médio" coluna="tempoBip" isReqOnly />
                 <RenderHeaderSort titulo="Finalizado às" coluna="horaFim" />
-                <RenderHeaderSort titulo="T. Total Estimado" coluna="tempoTotal" isReqOnly />
                 <RenderHeaderSort titulo="Status Atual" coluna="status" />
               </tr>
             </thead>
             <tbody>
               {!pesquisaRealizada ? (
                 <tr>
-                  <td colSpan="12" style={{ textAlign: 'center', padding: '50px 20px', color: '#666' }}>
+                  <td colSpan="13" style={{ textAlign: 'center', padding: '50px 20px', color: '#666' }}>
                     <span style={{ fontSize: '2rem', display: 'block', margin: '0 auto 10px' }}>🔍</span>
                     <strong>Selecione o Módulo, preencha os filtros e clique em "Pesquisar" para gerar o relatório.</strong>
                     <p style={{ fontSize: '0.9rem', color: '#999', marginTop: '5px' }}>
@@ -651,6 +690,10 @@ export default function Historico({ requisicoes, aoVoltar }) {
                       )}
 
                       <td>{tipoHistorico === 'transferencia' ? req.data : new Date(req.timestampCriacao).toLocaleDateString('pt-BR')}</td>
+                      
+                      {tipoHistorico === 'transferencia' && (
+                        <td>{req.origem || 'Matriz'}</td>
+                      )}
                       
                       <td>{req.destino}</td>
                       
@@ -680,10 +723,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
                         {req.metricasSeparacao?.finalizadoEm ? extrairHora(req.metricasSeparacao.finalizadoEm) : '-'}
                       </td>
 
-                      {tipoHistorico === 'transferencia' && (
-                        <td style={{ color: '#7f8c8d' }}>{getTempoTotalReq(req)}</td>
-                      )}
-
                       <td>
                         <span className={`status-badge ${getStatusClass(req.status)}`}>
                           {req.status}
@@ -694,7 +733,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                     {/* ACORDEÃO COM OS PRODUTOS ADAPTATIVO */}
                     {linhaExpandida === req.id && (
                       <tr className="linha-expandida-historico">
-                        <td colSpan="12">
+                        <td colSpan="13">
                           <div className="conteudo-expandido-historico">
                             
                             <div style={{ marginBottom: '15px' }}>
@@ -752,7 +791,6 @@ export default function Historico({ requisicoes, aoVoltar }) {
                               <table className="subtabela-historico">
                                 <thead>
                                   <tr>
-                                    {/* 🚀 NOVA COLUNA CÓDIGO FORNECEDOR */}
                                     <th>Cód. Fornecedor</th>
                                     <th>Código</th>
                                     <th>Cód. Barras</th>
@@ -816,9 +854,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                                             }}
                                             title={temDiluicao ? "Clique para ver a memória de cálculo da diluição deste produto" : ""}
                                           >
-                                            {/* 🚀 DADO DA NOVA COLUNA */}
                                             <td style={{ color: '#7f8c8d' }}>{item.codigoFornecedor || '-'}</td>
-                                            
                                             <td style={{ color: displayCod !== '-' ? '#2980b9' : 'inherit' }}><strong>{displayCod}</strong></td>
                                             <td style={{ color: '#7f8c8d' }}>{codBarras}</td>
                                             <td>{displayDesc} {seloStatus}</td>
@@ -887,7 +923,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="12" style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}>
+                  <td colSpan="13" style={{ textAlign: 'center', padding: '40px', color: '#888', fontStyle: 'italic' }}>
                     Nenhuma operação encontrada com os filtros selecionados no banco de dados.
                   </td>
                 </tr>
