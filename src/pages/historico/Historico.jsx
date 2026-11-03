@@ -10,6 +10,8 @@ export default function Historico({ requisicoes, aoVoltar }) {
   const [dataFim, setDataFim] = useState('');
   const [filtroId, setFiltroId] = useState(''); 
   const [filtroCodigo, setFiltroCodigo] = useState('');
+  const [filtroDescricao, setFiltroDescricao] = useState('');
+  const [filtroCodigoBarras, setFiltroCodigoBarras] = useState('');
   const [filtroOrdem, setFiltroOrdem] = useState('');
   const [filtroNotaFiscal, setFiltroNotaFiscal] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
@@ -49,7 +51,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
   };
 
   const handlePesquisar = async () => {
-    if (!dataInicio && !dataFim && !filtroId && !filtroOrdem && !filtroNotaFiscal && !filtroCodigo && !filtroMarca && !filtroStatus) {
+    if (!dataInicio && !dataFim && !filtroId && !filtroOrdem && !filtroNotaFiscal && !filtroCodigo && !filtroDescricao && !filtroCodigoBarras && !filtroMarca && !filtroStatus) {
       alert("Por favor, preencha pelo menos um campo de filtro para pesquisar.");
       return;
     }
@@ -60,7 +62,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
     
     try {
       if (tipoHistorico === 'transferencia') {
-        const precisaListaItens = !!(filtroCodigo || filtroMarca);
+        const precisaListaItens = !!(filtroCodigo || filtroDescricao || filtroCodigoBarras || filtroMarca);
         const colunasBase = 'id, data, timestamp_criacao, origem, destino, solicitante, motivo, prioridade, itens, status, historico, metricas_separacao, numero_requisicao_externa, nota_fiscal, oculto';
         const colunasQuery = precisaListaItens ? `${colunasBase}, lista_itens` : colunasBase;
 
@@ -79,7 +81,23 @@ export default function Historico({ requisicoes, aoVoltar }) {
         if (error) throw error;
 
         if (precisaListaItens && data.length === limiteResultados) {
-          alert(`Atenção: a busca por código/marca retornou o limite máximo de ${limiteResultados} resultados.`);
+          alert(`Atenção: a busca por produto/marca retornou o limite máximo de ${limiteResultados} resultados.`);
+        }
+
+        // Busca códigos equivalentes na base_produtos caso o filtro de Código de Barras seja usado
+        let codigosPorBarra = new Set();
+        if (filtroCodigoBarras.trim()) {
+          try {
+            const { data: prodBar } = await supabase
+              .from('base_produtos')
+              .select('codigo')
+              .ilike('codigo_barra', `%${filtroCodigoBarras.trim()}%`);
+            if (prodBar) {
+              prodBar.forEach(p => {
+                if (p.codigo) codigosPorBarra.add(String(p.codigo).trim().toUpperCase());
+              });
+            }
+          } catch (e) {}
         }
 
         const reqsFormatadas = data.map(r => ({
@@ -98,6 +116,22 @@ export default function Historico({ requisicoes, aoVoltar }) {
             const temProduto = req.listaItens && req.listaItens.some(item => (item.cod || item.codigo || '').toUpperCase().includes(filtroCodigo.toUpperCase()));
             if (!temProduto) passa = false;
           }
+          if (filtroDescricao && passa) {
+            const temProdutoDesc = req.listaItens && req.listaItens.some(item => 
+              (item.descricao || item.nome || '').toUpperCase().includes(filtroDescricao.toUpperCase())
+            );
+            if (!temProdutoDesc) passa = false;
+          }
+          if (filtroCodigoBarras && passa) {
+            const termoBarra = filtroCodigoBarras.trim().toUpperCase();
+            const temProdutoBarra = req.listaItens && req.listaItens.some(item => {
+              const codItem = String(item.cod || item.codigo || '').trim().toUpperCase();
+              const barraDireta = String(item.bipReferencia || item.codigoBarra || item.codigo_barra || item.codigoBarras || '').toUpperCase();
+              const temNoDiario = Array.isArray(item.historicoBips) && item.historicoBips.some(b => String(b.codigo || '').toUpperCase().includes(termoBarra));
+              return barraDireta.includes(termoBarra) || temNoDiario || codigosPorBarra.has(codItem);
+            });
+            if (!temProdutoBarra) passa = false;
+          }
           if (filtroMarca && passa) {
             const temProdutoMarca = req.listaItens && req.listaItens.some(item => 
               (item.marca || '').toUpperCase().includes(filtroMarca.toUpperCase()) || 
@@ -111,7 +145,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
         setDadosHistorico(resultadosFinais);
 
       } else {
-        const precisaListaItens = !!filtroCodigo; 
+        const precisaListaItens = !!(filtroCodigo || filtroDescricao || filtroCodigoBarras); 
         const colunasBase = 'id, data_criacao, loja_recebedora, numero_relatorio, nome_fornecedor, marca, numero_nf, volumes, numero_pedido, responsavel_recebedor, responsavel_cadastro, observacoes, status, metricas_recebimento, historico_diluicao';
         const colunasQuery = precisaListaItens ? `${colunasBase}, itens` : colunasBase;
 
@@ -179,6 +213,23 @@ export default function Historico({ requisicoes, aoVoltar }) {
             });
             if (!temProduto) passa = false;
           }
+          if (filtroDescricao && passa) {
+            const temProdutoDesc = req.listaItens && req.listaItens.some(item => {
+              const codBarras = item.codigoBarra || item.codigo_barra || item.codigoBarras;
+              const descOficial = mapaBasePesquisa[codBarras]?.desc || item.descricaoFornecedor || item.descricaoProduto || item.descricao || item.nome || '';
+              return String(descOficial).toUpperCase().includes(filtroDescricao.toUpperCase());
+            });
+            if (!temProdutoDesc) passa = false;
+          }
+          if (filtroCodigoBarras && passa) {
+            const termoBarra = filtroCodigoBarras.trim().toUpperCase();
+            const temProdutoBarra = req.listaItens && req.listaItens.some(item => {
+              const codBarras = String(item.codigoBarra || item.codigo_barra || item.codigoBarras || '').toUpperCase();
+              const temNoDiario = Array.isArray(item.historicoBips) && item.historicoBips.some(b => String(b.codigo || '').toUpperCase().includes(termoBarra));
+              return codBarras.includes(termoBarra) || temNoDiario;
+            });
+            if (!temProdutoBarra) passa = false;
+          }
           return passa;
         });
 
@@ -230,7 +281,7 @@ export default function Historico({ requisicoes, aoVoltar }) {
   }, [dadosHistorico, ordenacao, tipoHistorico]);
 
   const limparFiltros = (forcarTipo = null) => {
-    setDataInicio(''); setDataFim(''); setFiltroId(''); setFiltroCodigo(''); setFiltroOrdem(''); setFiltroNotaFiscal(''); setFiltroStatus(''); setFiltroMarca(''); setLinhaExpandida(null); setProdutoExpandido(null); setDadosHistorico([]); setPesquisaRealizada(false);
+    setDataInicio(''); setDataFim(''); setFiltroId(''); setFiltroCodigo(''); setFiltroDescricao(''); setFiltroCodigoBarras(''); setFiltroOrdem(''); setFiltroNotaFiscal(''); setFiltroStatus(''); setFiltroMarca(''); setLinhaExpandida(null); setProdutoExpandido(null); setDadosHistorico([]); setPesquisaRealizada(false);
   };
 
   const formatarTempo = (segundos) => {
@@ -609,6 +660,16 @@ export default function Historico({ requisicoes, aoVoltar }) {
           <div className="filtro-item">
             <label>Cód. Produto</label>
             <input type="text" className="input-filtro" placeholder="Ex: 1001" value={filtroCodigo} onChange={(e) => setFiltroCodigo(e.target.value)} />
+          </div>
+
+          <div className="filtro-item">
+            <label>Descrição</label>
+            <input type="text" className="input-filtro" placeholder="Nome do produto..." value={filtroDescricao} onChange={(e) => setFiltroDescricao(e.target.value)} />
+          </div>
+
+          <div className="filtro-item">
+            <label>Código de Barras</label>
+            <input type="text" className="input-filtro" placeholder="Bipe ou digite..." value={filtroCodigoBarras} onChange={(e) => setFiltroCodigoBarras(e.target.value)} />
           </div>
 
           <div className="filtro-item">
